@@ -12,10 +12,19 @@ export const closes = (c: Candle[]): Series => Float64Array.from(c, (x) => x.c);
 export function sma(xs: Series, n: number): Series {
   const out = nan(xs.length);
   let sum = 0;
+  let valid = 0;
   for (let i = 0; i < xs.length; i++) {
-    sum += xs[i]!;
-    if (i >= n) sum -= xs[i - n]!;
-    if (i >= n - 1) out[i] = sum / n;
+    const x = xs[i]!;
+    if (Number.isNaN(x)) {
+      // Leading NaNs (another indicator warming up): start the window after them.
+      sum = 0;
+      valid = 0;
+      continue;
+    }
+    sum += x;
+    valid++;
+    if (valid > n) sum -= xs[i - n]!;
+    if (valid >= n) out[i] = sum / n;
   }
   return out;
 }
@@ -182,3 +191,88 @@ export function barsPerYear(c: Candle[]): number {
   const g = gaps[Math.floor(gaps.length / 2)]!;
   return g > 0 ? (365 * 86_400_000) / g : 365 * 24;
 }
+
+// ---------- indicators common in Freqtrade / Backtrader strategies ----------
+
+/** Wilder ADX with +DI / -DI. */
+export function adx(c: Candle[], n = 14): { adx: Series; plusDi: Series; minusDi: Series } {
+  const len = c.length;
+  const adxOut = nan(len);
+  const pOut = nan(len);
+  const mOut = nan(len);
+  let tr = 0;
+  let pdm = 0;
+  let mdm = 0;
+  let dxSum = 0;
+  let a = NaN;
+  for (let i = 1; i < len; i++) {
+    const up = c[i]!.h - c[i - 1]!.h;
+    const down = c[i - 1]!.l - c[i]!.l;
+    const p = up > down && up > 0 ? up : 0;
+    const m = down > up && down > 0 ? down : 0;
+    const t = Math.max(c[i]!.h - c[i]!.l, Math.abs(c[i]!.h - c[i - 1]!.c), Math.abs(c[i]!.l - c[i - 1]!.c));
+    if (i <= n) {
+      tr += t;
+      pdm += p;
+      mdm += m;
+    } else {
+      tr = tr - tr / n + t;
+      pdm = pdm - pdm / n + p;
+      mdm = mdm - mdm / n + m;
+    }
+    if (i < n) continue;
+    const pdi = tr > 0 ? (100 * pdm) / tr : 0;
+    const mdi = tr > 0 ? (100 * mdm) / tr : 0;
+    pOut[i] = pdi;
+    mOut[i] = mdi;
+    const dx = pdi + mdi > 0 ? (100 * Math.abs(pdi - mdi)) / (pdi + mdi) : 0;
+    if (i < 2 * n - 1) dxSum += dx;
+    else if (i === 2 * n - 1) a = (dxSum + dx) / n;
+    else a = (a * (n - 1) + dx) / n;
+    if (i >= 2 * n - 1) adxOut[i] = a;
+  }
+  return { adx: adxOut, plusDi: pOut, minusDi: mOut };
+}
+
+/** Commodity Channel Index on typical price. */
+export function cci(c: Candle[], n = 20): Series {
+  const tp = Float64Array.from(c, (x) => (x.h + x.l + x.c) / 3);
+  const m = sma(tp, n);
+  const out = nan(c.length);
+  for (let i = n - 1; i < c.length; i++) {
+    let md = 0;
+    for (let j = i - n + 1; j <= i; j++) md += Math.abs(tp[j]! - m[i]!);
+    md /= n;
+    out[i] = md > 0 ? (tp[i]! - m[i]!) / (0.015 * md) : 0;
+  }
+  return out;
+}
+
+/** Money Flow Index (volume-weighted RSI on typical price). */
+export function mfi(c: Candle[], n = 14): Series {
+  const out = nan(c.length);
+  const tp = c.map((x) => (x.h + x.l + x.c) / 3);
+  for (let i = n; i < c.length; i++) {
+    let pos = 0;
+    let neg = 0;
+    for (let j = i - n + 1; j <= i; j++) {
+      const flow = tp[j]! * c[j]!.volUsd;
+      if (tp[j]! > tp[j - 1]!) pos += flow;
+      else if (tp[j]! < tp[j - 1]!) neg += flow;
+    }
+    out[i] = neg === 0 ? (pos === 0 ? 50 : 100) : 100 - 100 / (1 + pos / neg);
+  }
+  return out;
+}
+
+/** Williams %R, -100 (at the low of n bars) .. 0 (at the high). */
+export function willr(c: Candle[], n = 14): Series {
+  return stochK(c, n).map((k) => k - 100);
+}
+
+/** Stochastic %D: SMA(d) of %K(n). */
+export function stochD(c: Candle[], n = 14, d = 3): Series {
+  return sma(stochK(c, n), d);
+}
+
+export const volume = (c: Candle[]): Series => Float64Array.from(c, (x) => x.volUsd);

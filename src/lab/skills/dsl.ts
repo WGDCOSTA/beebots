@@ -13,7 +13,11 @@
 // Conditions in a list must all hold; `{ "any": [ ... ] }` holds when one of its conditions does. Operators: < <= > >=
 // crosses_above crosses_below. Expressions: close open high low volume, sma(n) ema(n) rsi(n) atr(n) atr_pct(n) roc(n)
 // zscore(n) stoch(n) highest(n) lowest(n) (prior n bars) bb_upper(n,k) bb_mid(n) bb_lower(n,k) bb_pctb(n,k)
-// macd_hist(fast,slow,signal) supertrend(n,mult), numbers, and $param references.
+// macd_hist(fast,slow,signal) supertrend(n,mult) adx(n) plus_di(n) minus_di(n) cci(n) mfi(n) willr(n) stoch_d(n,d)
+// volume_sma(n), numbers, and $param references.
+//
+// Exits in Freqtrade's terms, on top of the rules: "roi": { "0": 0.06, "60": 0.03, "240": 0 } (take profit by minutes
+// held, like minimal_roi), "stoploss": -0.08, "trailing": { "positive": 0.01, "offset": 0.03 }.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -39,6 +43,10 @@ export const SkillSpecSchema = z
     description: z.string().max(400).default(""),
     params: z.record(z.object({ default: z.number(), grid: z.array(z.number()).max(8).optional() })).default({}),
     stopAtr: z.union([z.number().min(0).max(10), z.string().regex(/^\$[A-Za-z_][A-Za-z0-9_]*$/)]).optional(),
+    // Freqtrade-style exits. roi: { "<minutes>": fraction } like minimal_roi; stoploss: negative fraction.
+    roi: z.record(z.string().regex(/^\d+$/), z.number().min(0).max(10)).optional(),
+    stoploss: z.number().min(-0.99).max(0).optional(),
+    trailing: z.object({ positive: z.number().gt(0).max(0.5), offset: z.number().min(0).max(5) }).strict().optional(),
     long: Side.optional(),
     short: Side.optional(),
   })
@@ -65,6 +73,14 @@ const FNS: Record<string, { arity: number[]; make: (a: number[]) => (c: Candle[]
   bb_pctb: { arity: [1, 2], make: ([n, k]) => (c) => S.bollinger(S.closes(c), n, k ?? 2).pctB },
   macd_hist: { arity: [0, 3], make: ([f, s, g]) => (c) => S.macd(S.closes(c), f ?? 12, s ?? 26, g ?? 9).hist },
   supertrend: { arity: [0, 2], make: ([n, m]) => (c) => S.supertrend(c, n ?? 10, m ?? 3) },
+  adx: { arity: [0, 1], make: ([n]) => (c) => S.adx(c, n ?? 14).adx },
+  plus_di: { arity: [0, 1], make: ([n]) => (c) => S.adx(c, n ?? 14).plusDi },
+  minus_di: { arity: [0, 1], make: ([n]) => (c) => S.adx(c, n ?? 14).minusDi },
+  cci: { arity: [0, 1], make: ([n]) => (c) => S.cci(c, n ?? 20) },
+  mfi: { arity: [0, 1], make: ([n]) => (c) => S.mfi(c, n ?? 14) },
+  willr: { arity: [0, 1], make: ([n]) => (c) => S.willr(c, n ?? 14) },
+  stoch_d: { arity: [0, 1, 2], make: ([n, d]) => (c) => S.stochD(c, n ?? 14, d ?? 3) },
+  volume_sma: { arity: [1], make: ([n]) => (c) => S.sma(S.volume(c), n!) },
 };
 const FIELDS: Record<string, (c: Candle) => number> = { close: (x) => x.c, open: (x) => x.o, high: (x) => x.h, low: (x) => x.l, volume: (x) => x.volUsd };
 
@@ -163,6 +179,15 @@ export function skillFromSpec(raw: unknown, source = "import"): Skill {
       defaults,
       grid,
       stopAtr: typeof spec.stopAtr === "string" ? spec.stopAtr.slice(1) : spec.stopAtr,
+      ...(spec.roi || spec.stoploss !== undefined || spec.trailing
+        ? {
+            exits: {
+              ...(spec.roi ? { roi: Object.entries(spec.roi).map(([m, r]) => [Number(m), r] as [number, number]) } : {}),
+              ...(spec.stoploss !== undefined ? { stoploss: spec.stoploss } : {}),
+              ...(spec.trailing ? { trailing: spec.trailing } : {}),
+            },
+          }
+        : {}),
       source,
       signal: (c, p) =>
         positions(c.length, {

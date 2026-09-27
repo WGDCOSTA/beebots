@@ -64,11 +64,28 @@ operators `< <= > >= crosses_above crosses_below`, `any` groups and `$param` ref
 `skills/classic-pack.json` has Connors RSI(2), the golden cross, the Turtles' system 2 and more. `pnpm lab skills`
 lists everything and reports files that do not compile.
 
+## Borrowed from the big frameworks
+
+The lab stays in TypeScript inside beebots, but takes the proven parts of the established open-source tools:
+
+| From | What beebots uses | Where |
+|---|---|---|
+| [CCXT](https://github.com/ccxt/ccxt) (MIT) | Public OHLCV history from 100+ exchanges (`pnpm lab fetch --exchange binance --symbol BTC/USDT`). **Data only**: orders still go only to OKX, through the risk layer. | `src/lab/history.ts` |
+| [Freqtrade](https://www.freqtrade.io) | Its exit model: `minimal_roi` (take profit by minutes held), `stoploss`, trailing stop (`trailing_stop_positive` / `_offset`), as `roi` / `stoploss` / `trailing` in JSON skills. Its data files (`BTC_USDT-1h.json`) import with `pnpm lab import`. Hyperopt's role is played by the walk-forward grid search. | `src/lab/backtest.ts`, `src/lab/skills/dsl.ts` |
+| [Backtrader](https://www.backtrader.com) | The SQN analyzer (Van Tharp's System Quality Number) next to Sharpe and drawdown, and its classic sample strategies. | `src/lab/backtest.ts`, `skills/backtrader-samples-pack.json` |
+
+Indicators common in those strategies are in the rule language too: ADX with +DI/-DI, CCI, MFI, Williams %R,
+Stochastic %D and volume averages. `skills/freqtrade-style-pack.json` and `skills/backtrader-samples-pack.json`
+rewrite well-known community patterns in that language (Bollinger + RSI dip, ADX/DI trend, CCI reversal, MFI washout,
+EMA momentum with volume, SMA crossover, MACD with ATR stop). They are re-expressed ideas, not copied code: the
+`freqtrade-strategies` repository is GPL-3.0, beebots is MIT.
+
 ## The lab
 
 ```sh
 pnpm lab fetch --inst BTC-USDT-SWAP,ETH-USDT-SWAP,SOL-USDT-SWAP --bar 1H --days 365   # public OKX history, cached
-pnpm lab csv mydata.csv --inst MYCOIN --bar 1H                                        # or bring your own
+pnpm lab fetch --exchange binance --symbol BTC/USDT,ETH/USDT --days 365                # any CCXT exchange
+pnpm lab import mydata.csv --inst MYCOIN --bar 1H                                     # CSV or a Freqtrade .json file
 pnpm lab run [--bar 1H] [--folds 3] [--leverage 1] [--long-only] [--synthetic 4]       # the tournament
 pnpm lab council                                                                       # brains pick skills
 pnpm lab cycle                                                                         # all of the above
@@ -77,12 +94,16 @@ pnpm lab cycle                                                                  
 **Walk-forward.** The last half of each dataset is split into folds. For each fold the best parameters on everything
 before it are frozen and run on the fold. Only those out-of-sample runs are scored, then averaged across coins.
 
+**Exits.** A skill's own exit rule, plus optional ATR stop and Freqtrade-style ROI / stoploss / trailing stop,
+checked inside each bar against its high and low (stop first, the worst case). After a stop or take-profit the skill
+must leave the signal before it may re-enter that side.
+
 **Costs.** Taker fee per side (`TAKER_FEE_RATE`, 5 bp), 2 bp slippage, funding every 8 h (0.01% by default, longs pay),
 optional ATR stop per skill, leverage capped at `MAX_LEVERAGE`.
 
 **Score.** `0.55 × Sharpe + 0.30 × Calmar (capped ±3) + 0.15 × (profit factor − 1, capped)`, scaled down when a fold has
-too few trades, then weighted by **stability** (share of folds that made money). The table also shows the
-**overfit gap** (in-sample minus out-of-sample score): a big gap means the parameters were fitted to noise.
+too few trades, then weighted by **stability** (share of folds that made money). The table also shows
+**SQN** (needs 5+ trades) and the **overfit gap** (in-sample minus out-of-sample score): a big gap means the parameters were fitted to noise.
 
 Output: `data/lab/ranking.json`, a readable `data/lab/report.md`, and the hive mind updated. `--synthetic N` adds
 seeded synthetic markets for offline runs; they exercise the machinery and prove nothing about real markets.

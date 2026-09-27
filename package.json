@@ -37,6 +37,7 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "@okx_ai/okx-trade-cli": "1.4.8",
     "@typesafe-ai/sdk": "0.6.0",
+    "ccxt": "4.5.84",
     "zod": "^3.25.0"
   },
   "devDependencies": {

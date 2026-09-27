@@ -18,8 +18,12 @@ export const skillNode = (id: string) => nodeId("skill", id);
 export const coinNode = (coin: string) => nodeId("coin", coin.toUpperCase());
 export const brainNode = (brain: string) => nodeId("brain", brain);
 
-/** "BTC-USDT-SWAP 1H" -> "BTC" */
-export const coinOfDataset = (id: string) => id.split(/[-\s_]/)[0]!.toUpperCase();
+/** "BTC-USDT-SWAP 1H" -> "BTC"; a CCXT dataset "binance-BTC-USDT 1H" -> "BTC" (the lowercase exchange id is skipped). */
+export function coinOfDataset(id: string): string {
+  const parts = id.split(/[-\s_]/).filter(Boolean);
+  const first = parts[0] ?? id;
+  return (/^[a-z0-9]+$/.test(first) && parts.length > 1 ? parts[1]! : first).toUpperCase();
+}
 
 export function registerBees(g: KnowledgeGraph, bees: BeeProfile[]): void {
   for (const b of bees) {

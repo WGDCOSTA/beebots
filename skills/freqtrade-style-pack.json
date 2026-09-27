@@ -1,0 +1,92 @@
+{
+  "skills": [
+    {
+      "id": "ft_bb_rsi",
+      "name": "Bollinger + RSI dip (Freqtrade style)",
+      "family": "mean_reversion",
+      "description": "The classic Freqtrade community pattern: buy an RSI dip that closes under the lower Bollinger band, sell when RSI is hot; exits by a minimal_roi table and a fixed stoploss.",
+      "params": { "rsiLo": { "default": 30, "grid": [25, 30, 35] }, "rsiHi": { "default": 70, "grid": [65, 70] } },
+      "roi": { "0": 0.06, "120": 0.03, "360": 0.01 },
+      "stoploss": -0.08,
+      "long": {
+        "entry": [ { "left": "rsi(14)", "op": "<", "right": "$rsiLo" }, { "left": "close", "op": "<", "right": "bb_lower(20,2)" } ],
+        "exit": [ { "left": "rsi(14)", "op": ">", "right": "$rsiHi" } ]
+      }
+    },
+    {
+      "id": "ft_adx_di_trend",
+      "name": "ADX / DI trend (Freqtrade style)",
+      "family": "trend",
+      "description": "Enter when ADX says there is a trend and +DI crosses above -DI (short on the mirror); exit on the opposite DI cross. Trailing stop once 3% in profit.",
+      "params": { "adxMin": { "default": 25, "grid": [20, 25, 30] } },
+      "stoploss": -0.10,
+      "trailing": { "positive": 0.015, "offset": 0.03 },
+      "long": {
+        "entry": [ { "left": "adx(14)", "op": ">", "right": "$adxMin" }, { "left": "plus_di(14)", "op": "crosses_above", "right": "minus_di(14)" } ],
+        "exit": [ { "left": "plus_di(14)", "op": "<", "right": "minus_di(14)" } ]
+      },
+      "short": {
+        "entry": [ { "left": "adx(14)", "op": ">", "right": "$adxMin" }, { "left": "minus_di(14)", "op": "crosses_above", "right": "plus_di(14)" } ],
+        "exit": [ { "left": "minus_di(14)", "op": "<", "right": "plus_di(14)" } ]
+      }
+    },
+    {
+      "id": "ft_cci_reversal",
+      "name": "CCI extreme reversal (Freqtrade style)",
+      "family": "mean_reversion",
+      "description": "Fade CCI extremes that turn back (CCI crosses back above -100 / below +100) with a trend filter; time-based take profit.",
+      "params": { "level": { "default": 100, "grid": [100, 150, 200] } },
+      "roi": { "0": 0.05, "240": 0.02, "720": 0 },
+      "stoploss": -0.07,
+      "long": {
+        "entry": [ { "left": "cci(20)", "op": "crosses_above", "right": -100 }, { "left": "close", "op": ">", "right": "ema(200)" } ],
+        "exit": [ { "left": "cci(20)", "op": ">", "right": "$level" } ]
+      },
+      "short": {
+        "entry": [ { "left": "cci(20)", "op": "crosses_below", "right": 100 }, { "left": "close", "op": "<", "right": "ema(200)" } ],
+        "exit": [ { "left": "cci(20)", "op": "<", "right": -100 } ]
+      }
+    },
+    {
+      "id": "ft_mfi_volume",
+      "name": "MFI washout with volume spike (Freqtrade style)",
+      "family": "mean_reversion",
+      "description": "Buy when money flow is washed out (MFI low) on a volume spike above its 20-bar average; take profit by ROI, trail once up 2%.",
+      "params": { "mfiLo": { "default": 20, "grid": [15, 20, 25] } },
+      "roi": { "0": 0.04, "180": 0.02 },
+      "stoploss": -0.06,
+      "trailing": { "positive": 0.01, "offset": 0.02 },
+      "long": {
+        "entry": [ { "left": "mfi(14)", "op": "<", "right": "$mfiLo" }, { "left": "volume", "op": ">", "right": "volume_sma(20)" } ],
+        "exit": [ { "left": "mfi(14)", "op": ">", "right": 80 } ]
+      }
+    },
+    {
+      "id": "ft_ema_volume_momentum",
+      "name": "EMA momentum with volume confirmation (Freqtrade style)",
+      "family": "momentum",
+      "description": "Fast EMA crosses above the slow one while volume runs above average and ADX shows strength; ROI ladder plus trailing stop.",
+      "params": { "fast": { "default": 9, "grid": [5, 9, 13] }, "slow": { "default": 21, "grid": [21, 34] } },
+      "roi": { "0": 0.08, "240": 0.04, "1440": 0.015 },
+      "stoploss": -0.07,
+      "trailing": { "positive": 0.02, "offset": 0.04 },
+      "long": {
+        "entry": [ { "left": "ema($fast)", "op": "crosses_above", "right": "ema($slow)" }, { "left": "volume", "op": ">", "right": "volume_sma(24)" }, { "left": "adx(14)", "op": ">", "right": 20 } ],
+        "exit": [ { "left": "ema($fast)", "op": "<", "right": "ema($slow)" } ]
+      }
+    },
+    {
+      "id": "ft_willr_stoch",
+      "name": "Williams %R + Stochastic %D (Freqtrade style)",
+      "family": "mean_reversion",
+      "description": "Both oscillators deeply oversold, in an uptrend; out when Williams %R is back near the top of its range.",
+      "params": {},
+      "roi": { "0": 0.05, "360": 0.02 },
+      "stoploss": -0.08,
+      "long": {
+        "entry": [ { "left": "willr(14)", "op": "<", "right": -90 }, { "left": "stoch_d(14,3)", "op": "<", "right": 20 }, { "left": "close", "op": ">", "right": "sma(200)" } ],
+        "exit": [ { "left": "willr(14)", "op": ">", "right": -10 } ]
+      }
+    }
+  ]
+}

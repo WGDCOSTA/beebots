@@ -58,6 +58,7 @@ const compact = (s: SkillResult) => ({
   oosReturnPct: +s.oos.returnPct.toFixed(1),
   buyHoldPct: +s.oos.benchmarkPct.toFixed(1),
   sharpe: +s.oos.sharpe.toFixed(2),
+  sqn: +(s.oos.sqn ?? 0).toFixed(2),
   maxDrawdownPct: +s.oos.maxDrawdownPct.toFixed(1),
   trades: s.oos.trades,
   stabilityPct: Math.round(s.stabilityPct),
