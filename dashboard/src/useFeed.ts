@@ -96,6 +96,13 @@ function reduce(s: FeedState, a: Action): FeedState {
           const c = ev as CapEvent;
           return { ...base, flashes: { ...s.flashes, [c.bee]: { kind: "cap", at: now, text: c.detail } } };
         }
+        case "evolution": {
+          // Tier changes and level-ups flash on the bee's card.
+          const e = ev as unknown as { bee: string; kind: string; to?: string | number; points?: number; health?: number };
+          const text =
+            e.kind === "tier" ? (e.to === "dead" ? "✖ died" : e.to === "danger" ? `⚠ in danger (${Math.round(e.health ?? 0)}%)` : e.to === "critical" ? `✚ critical (${Math.round(e.health ?? 0)}%)` : `● ${String(e.to)}`) : e.kind === "level" ? `★ level ${String(e.to)} (${e.points} pts)` : null;
+          return text ? { ...base, flashes: { ...s.flashes, [e.bee]: { kind: "cap", at: now, text } } } : base;
+        }
         case "recon":
           return s.snap ? { ...base, snap: { ...s.snap, recon: { ok: ev.ok as boolean, detail: ev.detail as string, ts: ev.ts } } } : base;
         default:

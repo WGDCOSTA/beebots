@@ -2,7 +2,7 @@
 // (GET /hive/status, never the leaderboard itself), so the dashboard is the same whether or not the Hive is reachable.
 // Joining and leaving carry the owner password picked on Setup.
 import { useCallback, useEffect, useState } from "react";
-import { BEE_META, BEE_NAMES, HIVE_DISCLAIMER, type HiveStatus } from "./types";
+import { beeMeta, BEE_NAMES, HIVE_DISCLAIMER, type HiveStatus } from "./types";
 
 function ago(ts: number): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
@@ -67,7 +67,7 @@ function HiveDialog({ status, onClose, onStatus }: { status: HiveStatus; onClose
               <ul className="hive-verified">
                 {BEE_NAMES.map((b) => (
                   <li key={b} className={status.verified?.[b] ? "good" : "dim"}>
-                    {status.verified?.[b] ? "✓" : "–"} {BEE_META[b].short} <span className="dim">{status.verified?.[b] ? "verified" : "not verified yet"}</span>
+                    {status.verified?.[b] ? "✓" : "–"} {beeMeta(b).short} <span className="dim">{status.verified?.[b] ? "verified" : "not verified yet"}</span>
                   </li>
                 ))}
               </ul>

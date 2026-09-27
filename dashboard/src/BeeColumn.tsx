@@ -1,5 +1,5 @@
 import { EquityChart } from "./EquityChart";
-import { BEE_META, type BeeName, type PublicBee } from "./types";
+import { beeMeta, TIER_INFO, type BeeName, type PublicBee } from "./types";
 import type { Curve, FeedState } from "./useFeed";
 
 const CAP_LABEL: Record<string, string> = { trade_cap: "BENCHED", fee_budget: "BENCHED", loss_stop: "SENT HOME", retired: "RETIRED" };
@@ -61,7 +61,7 @@ interface Props {
 }
 
 export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Props) {
-  const meta = BEE_META[name];
+  const meta = beeMeta(name);
   const p = bee?.position ?? null;
   const flashing = flash && Date.now() - flash.at < 2500;
   const cap = bee?.cap ?? null;
@@ -87,6 +87,11 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
         </div>
         <div className="rank">
           <div className="rank-n">#{rank}</div>
+          {bee?.evo && (
+            <div className={`evo-badge ${TIER_INFO[bee.evo.tier].tone}`} title={`${TIER_INFO[bee.evo.tier].label}: health ${bee.evo.health}% of start · ${bee.evo.points} points`}>
+              {TIER_INFO[bee.evo.tier].icon} {TIER_INFO[bee.evo.tier].label} · L{bee.evo.level}
+            </div>
+          )}
           {gap !== null && <div className="rank-gap num">{gap === 0 ? "leading" : `${money(gap)} behind`}</div>}
         </div>
       </header>

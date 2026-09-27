@@ -4,7 +4,7 @@ import { Header } from "./Header";
 import { unlockAudio } from "./sound";
 import { Ticker } from "./Ticker";
 import { Toasts } from "./Toasts";
-import { BEE_META, BEE_NAMES } from "./types";
+import { ALL_BEES, beeMeta, BEE_NAMES, TIER_INFO } from "./types";
 import { useFeed } from "./useFeed";
 
 function readSoundPref(): boolean {
@@ -44,11 +44,12 @@ export function App() {
     }
   };
 
-  const board = [...BEE_NAMES].sort((a, b) => (feed.bees[b]?.equityUsd ?? 0) - (feed.bees[a]?.equityUsd ?? 0));
+  const board = [...ALL_BEES].sort((a, b) => (feed.bees[b]?.equityUsd ?? 0) - (feed.bees[a]?.equityUsd ?? 0));
   const leaderEq = feed.bees[board[0]!]?.equityUsd ?? 0;
   const baseline = feed.snap?.startEquityUsd ?? 333;
   const stalled = feed.lastEventAt > 0 && Date.now() - feed.lastEventAt > 15_000;
   const blocked = feed.snap?.market.spreadBlocked ?? [];
+  const extras = ALL_BEES.filter((b) => !BEE_NAMES.includes(b));
 
   return (
     <div className="app">
@@ -79,10 +80,10 @@ export function App() {
               const b = feed.bees[name];
               const width = b ? Math.max(4, (b.equityUsd / Math.max(leaderEq, 1)) * 100) : 0;
               return (
-                <div className="board-row" key={name} style={{ ["--bee" as string]: BEE_META[name].color }}>
+                <div className="board-row" key={name} style={{ ["--bee" as string]: beeMeta(name).color }}>
                   <span className="board-rank num">{i + 1}</span>
-                  <img src={BEE_META[name].img} alt="" />
-                  <span className="board-name">{BEE_META[name].short}</span>
+                  <img src={beeMeta(name).img} alt="" />
+                  <span className="board-name">{beeMeta(name).short}</span>
                   <span className="board-bar">
                     <span style={{ width: `${width}%` }} />
                   </span>
@@ -91,6 +92,34 @@ export function App() {
               );
             })}
           </section>
+          {extras.length > 0 && (
+            <section className="rail-card challengers">
+              <div className="rail-head">
+                <span className="eyebrow">Challengers</span>
+                <a className="dim" href="#/lab">
+                  evolution ↗
+                </a>
+              </div>
+              {extras.map((name) => {
+                const b = feed.bees[name];
+                const m = beeMeta(name);
+                const t = b?.evo ? TIER_INFO[b.evo.tier] : null;
+                return (
+                  <div className="ch-row" key={name} style={{ ["--bee" as string]: m.color }}>
+                    <span className="ch-dot" aria-hidden />
+                    <span className="ch-name">{m.short}</span>
+                    <span className={`ch-pos num ${b?.position ? b.position.side : "dim"}`}>{b?.position ? `${b.position.side === "long" ? "▲" : "▼"} ${b.position.coin}` : "flat"}</span>
+                    <span className={`num ${b && b.pnlUsd >= 0 ? "good" : "bad"}`}>{b ? `${b.pnlPct >= 0 ? "+" : ""}${b.pnlPct.toFixed(1)}%` : "–"}</span>
+                    {t && (
+                      <span className={`ch-tier ${t.tone}`} title={`${t.label} · level ${b!.evo!.level}`}>
+                        {t.icon} L{b!.evo!.level}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
+          )}
           <Ticker decisions={feed.decisions} perMin={feed.decisionTimes.length} />
           {blocked.length > 0 && (
             <section className="rail-card blocked">

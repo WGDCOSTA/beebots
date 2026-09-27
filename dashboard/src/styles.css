@@ -1600,3 +1600,64 @@ textarea.setup-input {
   border-radius: 50%;
   object-fit: cover;
 }
+
+/* ---------- Survival & rewards badges, challengers (extra bees) ---------- */
+.evo-badge {
+  margin-top: 0.2rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.evo-badge.good {
+  color: var(--good-text);
+}
+.evo-badge.warn {
+  color: var(--warning);
+}
+.evo-badge.bad {
+  color: var(--critical-text);
+}
+.challengers .rail-head a {
+  font-size: 0.7rem;
+  text-decoration: none;
+}
+.ch-row {
+  display: grid;
+  grid-template-columns: 0.6rem minmax(0, 1fr) auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.8rem;
+}
+.ch-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--bee);
+}
+.ch-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-pos.long {
+  color: var(--good-text);
+}
+.ch-pos.short {
+  color: var(--critical-text);
+}
+.ch-tier {
+  font-size: 0.7rem;
+  color: var(--text-2);
+}
+.ch-tier.warn {
+  color: var(--warning);
+}
+.ch-tier.bad {
+  color: var(--critical-text);
+}
+.ch-tier.good {
+  color: var(--good-text);
+}

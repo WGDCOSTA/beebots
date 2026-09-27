@@ -22,12 +22,16 @@ export interface AdminField {
   secret?: boolean;
 }
 
-export const FIELD_GROUPS = ["brains", "learning", "risk", "breakout", "trend", "momentum", "engine"] as const;
+export const FIELD_GROUPS = ["brains", "learning", "evolution", "risk", "breakout", "trend", "momentum", "engine"] as const;
 export type FieldGroup = (typeof FIELD_GROUPS)[number];
 
 export const GROUP_INFO: Record<FieldGroup, { title: string; help: string }> = {
   brains: { title: "Brains and models", help: "Which LLM each bee thinks with, and the models used. Jev's model decides every tick." },
   learning: { title: "Learning", help: "What the lab and the coach may do while the engine runs." },
+  evolution: {
+    title: "Survival & rewards",
+    help: "Bees know they can die at the retire line. In danger they trade smaller and their brains meet to save them; profitable bees earn points, levels and prizes.",
+  },
   risk: { title: "Risk (every bee)", help: "Hard limits the risk layer enforces whatever Jev or a brain says." },
   breakout: { title: "Breakout style (Bizzy's)", help: "Knobs for every bee on the Breakout style." },
   trend: { title: "Trend style (Breezy's)", help: "Knobs for every bee on the Trend style." },
@@ -62,6 +66,14 @@ export const ADMIN_FIELDS: AdminField[] = [
   { key: "LAB_SIGNALS", group: "learning", label: "Show Jev the lab vote", help: "Adds each bee's playbook skill vote per coin to Jev's state, as a tiebreaker. The risk layer is unchanged.", type: "bool" },
   num("COACH_INTERVAL_MIN", "learning", "Coach every (min)", "Each brain reviews its bee's real results and re-weights its skills. 0 = off.", 0, 10_080),
   num("COACH_MAX_CALLS_DAY", "learning", "Coach calls per day", "Hard cap on coach LLM calls per UTC day.", 0, 200),
+  // survival and rewards
+  { key: "SURVIVAL_MODE", group: "evolution", label: "Survival mode", help: "Health tiers, smaller size in danger, survival line in Jev's state, rescue councils.", type: "bool" },
+  num("SURVIVAL_DANGER_PCT", "evolution", "Danger below (%)", "Health (equity as % of start) where a bee is in danger: size x0.6 and a rescue council.", 1, 100),
+  num("SURVIVAL_CRITICAL_PCT", "evolution", "Critical below (%)", "Health where a bee is critical: size x0.35, every brain joins its council.", 1, 100),
+  num("SURVIVAL_MAX_CALLS_DAY", "evolution", "Council calls per day", "Hard cap on survival and reward council LLM calls per UTC day.", 0, 200),
+  { key: "REWARDS", group: "evolution", label: "Rewards", help: "Daily points for gains, levels, and prizes: more skills, skill writing, extra brains, bigger limits.", type: "bool" },
+  num("REWARD_MAX_LIMIT_BOOST", "evolution", "Max limit boost", "Largest share a reward adds to max position size (0.5 = +50%). Leverage is never raised.", 0, 1, 0.05),
+  { key: "REWARDS_IN_LIVE", group: "evolution", label: "Limit boosts with real money", help: "Off: in live mode rewards unlock skills and brains, never bigger limits.", type: "bool" },
   // risk
   num("MAX_LEVERAGE", "risk", "Max leverage", "Never above 2x (hard rule).", 0.1, 2, 0.1),
   num("MAX_NOTIONAL_USD_PER_BEE", "risk", "Max position (USD)", "Ceiling on any bee's position size.", 1, 1_000_000),

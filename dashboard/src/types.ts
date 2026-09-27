@@ -1,9 +1,14 @@
 // Mirrors the engine's read-only /snapshot and SSE payloads. No account data exists in these shapes.
 import { BEE_MARK_URL } from "./BeeMark";
 
-/** The three bee slots. Names, taglines and portraits come from the engine's /profile (set on the Setup page). */
-export type BeeName = "bee1" | "bee2" | "bee3";
+/**
+ * Bee slots: the three main bees (the live columns), then any extra bees added from the admin panel (bee4..bee9).
+ * Names, taglines and portraits come from the engine's /profile.
+ */
+export type BeeName = string;
 export const BEE_NAMES: BeeName[] = ["bee1", "bee2", "bee3"];
+/** Every bee the engine runs, main three first. Filled in from /profile. */
+export const ALL_BEES: BeeName[] = [...BEE_NAMES];
 
 export type Cap = "trade_cap" | "fee_budget" | "loss_stop" | "retired" | null;
 
@@ -42,7 +47,34 @@ export interface PublicBee {
   totals: { feesUsd: number; fundingUsd: number; jevUsd: number; realisedUsd: number; decisions: number; orders: number };
   maxNotionalUsd: number;
   last: LastDecision | null;
+  /** Survival and rewards (engine evolution.ts); null when off. */
+  evo?: { tier: Tier; health: number; points: number; level: number; deaths: number } | null;
 }
+
+export type Tier = "thriving" | "healthy" | "danger" | "critical" | "dead";
+
+export interface EvolutionRow {
+  bee: BeeName;
+  name: string;
+  points: number;
+  level: number;
+  nextLevelAt: number | null;
+  tier: Tier;
+  health: number;
+  deaths: number;
+  skillsAuthored: number;
+  perks: { skillSlots: number; canAuthorSkills: boolean; extraBrains: number; limitBoost: number; extraTrades: number };
+  history: Array<{ day: string; pnlPct: number; points: number; bonus: string | null }>;
+}
+
+/** Tier glyph + words: never colour alone. */
+export const TIER_INFO: Record<Tier, { icon: string; label: string; tone: "good" | "bad" | "warn" | "" }> = {
+  thriving: { icon: "★", label: "thriving", tone: "good" },
+  healthy: { icon: "●", label: "healthy", tone: "" },
+  danger: { icon: "⚠", label: "in danger", tone: "warn" },
+  critical: { icon: "✚", label: "critical", tone: "bad" },
+  dead: { icon: "✖", label: "dead", tone: "bad" },
+};
 
 export interface Snapshot {
   ts: number;
@@ -58,6 +90,7 @@ export interface Snapshot {
   recon: { ok: boolean | null; detail: string; ts: number };
   market: { refreshedAt: number; universe: string[]; spreadBlocked: Array<{ coin: string; spreadBp: number }>; attention: "news" | "volume" };
   visitors?: { total: number; watching: number };
+  evolution?: { survival: boolean; rewards: boolean; board: EvolutionRow[] } | null;
   /** Set when a newer GitHub Release exists than the version this install runs. */
   update?: { current: string; latest: string } | null;
 }
@@ -126,7 +159,7 @@ export type AnyEvent =
   | FundingEvent
   | { type: "equity"; ts: number; bees: PublicBee[] }
   | { type: "recon"; ts: number; ok: boolean; detail: string }
-  | { type: "order" | "heartbeat" | "status"; ts: number; [k: string]: unknown };
+  | { type: "order" | "heartbeat" | "status" | "evolution"; ts: number; [k: string]: unknown };
 
 export interface BeeMeta {
   /** Card title: "Boozy Bee" for the official three, the owner's own name for a Setup-made bee. */
@@ -143,7 +176,7 @@ export interface BeeMeta {
 }
 
 /** Colours belong to the slot, so two bees on the same style still look different. Filled in from /profile at load. */
-export const BEE_META: Record<BeeName, BeeMeta> = {
+export const BEE_META: Record<string, BeeMeta> = {
   bee1: { title: "Bizzy Bee", short: "Bizzy", tagline: "the grinder", styleLabel: "Breakout", rules: "", coins: [], img: "/bees/bizzy.jpg", color: "var(--bizzy)", glow: "var(--bizzy-glow)" },
   bee2: { title: "Breezy Bee", short: "Breezy", tagline: "the calculated one", styleLabel: "Trend", rules: "", coins: [], img: "/bees/breezy.jpg", color: "var(--breezy)", glow: "var(--breezy-glow)" },
   bee3: { title: "Boozy Bee", short: "Boozy", tagline: "the degen", styleLabel: "Momentum", rules: "", coins: [], img: "/bees/boozy.jpg", color: "var(--boozy)", glow: "var(--boozy-glow)" },
@@ -161,11 +194,27 @@ export const PROFILE: { links: Profile["links"] } = { links: null };
 
 const OFFICIAL_NAMES = ["Bizzy", "Breezy", "Boozy"];
 
+/**
+ * Extra bees take the remaining categorical slots of the validated dark palette in fixed order (the main three hold
+ * yellow, violet and magenta): blue, orange, aqua, green, red, then again with a lighter glow.
+ */
+const EXTRA_COLORS = ["#3987e5", "#d95926", "#199e70", "#008300", "#e66767", "#6da7ec"];
+
+/** Meta for any slot; unknown slots get a neutral placeholder rather than crashing a card. */
+export function beeMeta(id: BeeName): BeeMeta {
+  return BEE_META[id] ?? { title: id, short: id, tagline: "", styleLabel: "", rules: "", coins: [], img: BEE_MARK_URL, color: "var(--muted)", glow: "transparent" };
+}
+
 export function applyProfile(p: Profile): void {
   PROFILE.links = p.links;
+  ALL_BEES.length = 0;
   for (const b of p.bees) {
-    const m = BEE_META[b.id];
-    if (!m) continue;
+    ALL_BEES.push(b.id);
+    if (!BEE_META[b.id]) {
+      const c = EXTRA_COLORS[(ALL_BEES.length - 4 + EXTRA_COLORS.length) % EXTRA_COLORS.length]!;
+      BEE_META[b.id] = { title: b.name, short: b.name, tagline: "", styleLabel: "", rules: "", coins: [], img: BEE_MARK_URL, color: c, glow: `${c}73` };
+    }
+    const m = BEE_META[b.id]!;
     m.short = b.name;
     m.title = OFFICIAL_NAMES.includes(b.name) ? `${b.name} Bee` : b.name;
     m.tagline = b.tagline;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { HiveGraph } from "./HiveGraph";
 import { BRAIN_LABEL, FAMILY_LABEL, getJson, when, type GraphJson, type Playbook, type RankedSkill, type Ranking } from "./panelTypes";
-import { BEE_META, BEE_NAMES } from "./types";
+import { ALL_BEES, beeMeta, TIER_INFO, type EvolutionRow, type Snapshot } from "./types";
 
 type SortKey = "rank" | "return" | "sharpe" | "sqn" | "dd" | "trades" | "stability" | "overfit";
 const SORTS: Record<SortKey, (s: RankedSkill) => number> = {
@@ -185,9 +185,9 @@ function PlaybookCards({ playbook }: { playbook: Playbook | null }) {
   if (!playbook) return <p className="dim">No playbook yet: run the council (Admin → Lab → council) after a lab run.</p>;
   return (
     <div className="pb-grid">
-      {BEE_NAMES.map((slot) => {
+      {ALL_BEES.map((slot) => {
         const p = playbook.bees[slot];
-        const meta = BEE_META[slot];
+        const meta = beeMeta(slot);
         return (
           <section key={slot} className="pcard pb-card" style={{ ["--bee" as string]: meta.color }}>
             <div className="pb-head">
@@ -195,7 +195,7 @@ function PlaybookCards({ playbook }: { playbook: Playbook | null }) {
               <div>
                 <div className="pb-name">{meta.short}</div>
                 <div className="dim small">
-                  thinks with <strong>{BRAIN_LABEL[p?.brain ?? "rules"] ?? p?.brain}</strong>
+                  thinks with <strong>{p?.brain === "ensemble" ? "combined brains" : (BRAIN_LABEL[p?.brain ?? "rules"] ?? p?.brain)}</strong>
                   {p?.model && p.model !== "rules" ? <span className="mono"> · {p.model}</span> : null}
                 </div>
               </div>
@@ -243,6 +243,94 @@ function PlaybookCards({ playbook }: { playbook: Playbook | null }) {
   );
 }
 
+const LEVEL_POINTS = [0, 50, 150, 300, 500, 800];
+
+function perkText(p: EvolutionRow["perks"]): string {
+  const out = [`${p.skillSlots} skill slots`];
+  if (p.canAuthorSkills) out.push("writes new skills");
+  if (p.extraBrains) out.push(`+${p.extraBrains} brain${p.extraBrains > 1 ? "s" : ""} in councils`);
+  if (p.limitBoost) out.push(`+${Math.round(p.limitBoost * 100)}% max size`);
+  if (p.extraTrades) out.push(`+${p.extraTrades} trades/day`);
+  return out.join(" · ");
+}
+
+/** Survival and rewards: bees ranked by points, with health against the danger and death lines. */
+function EvolutionBoard({ evo }: { evo: NonNullable<Snapshot["evolution"]> }) {
+  if (!evo.board.length) return <p className="dim">No bee has a record yet: the board fills in after the first tick.</p>;
+  return (
+    <>
+      <p className="dim small">
+        {evo.survival ? "Survival mode is on: every bee knows it dies at the retire line. In danger it trades smaller and its brains meet to save it." : "Survival mode is off."}{" "}
+        {evo.rewards ? "Profitable days earn points (10 per 1% gained, half that lost on a losing day, +1 for surviving, +5 for the day's best bee); levels unlock prizes." : "Rewards are off."}
+      </p>
+      <div className="ptable-wrap">
+        <table className="ptable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Bee</th>
+              <th>State</th>
+              <th>Health (% of start)</th>
+              <th className="r">Points</th>
+              <th>Level</th>
+              <th>Prizes unlocked</th>
+              <th>Last days</th>
+              <th className="r">Deaths</th>
+              <th className="r">Skills written</th>
+            </tr>
+          </thead>
+          <tbody>
+            {evo.board.map((r, i) => {
+              const m = beeMeta(r.bee);
+              const t = TIER_INFO[r.tier];
+              const lo = LEVEL_POINTS[r.level] ?? 0;
+              const next = r.nextLevelAt;
+              const prog = next ? Math.max(0, Math.min(1, (r.points - lo) / (next - lo))) : 1;
+              return (
+                <tr key={r.bee}>
+                  <td className="num dim">{i + 1}</td>
+                  <td className="skill-cell">
+                    <span className="evo-dot" style={{ background: m.color }} aria-hidden /> <strong>{r.name}</strong> <span className="dim mono small">{r.bee}</span>
+                  </td>
+                  <td className={`tier-cell ${t.tone}`}>
+                    {t.icon} {t.label}
+                  </td>
+                  <td>
+                    <span className="health" title={`${r.health}%`}>
+                      <span className={`health-fill ${t.tone}`} style={{ width: `${Math.max(1, Math.min(100, (r.health / 150) * 100))}%` }} />
+                      <span className="health-line" style={{ left: `${(100 / 150) * 100}%` }} title="start" />
+                    </span>
+                    <span className="num small"> {r.health.toFixed(1)}%</span>
+                  </td>
+                  <td className="r num strong">{r.points}</td>
+                  <td>
+                    <span className="num">L{r.level}</span>
+                    <span className="lvl" title={next ? `${r.points} / ${next} points to level ${r.level + 1}` : "top level"}>
+                      <span style={{ width: `${prog * 100}%` }} />
+                    </span>
+                  </td>
+                  <td className="small">{perkText(r.perks)}</td>
+                  <td className="small num">
+                    {r.history.length
+                      ? r.history
+                          .slice(0, 5)
+                          .map((h) => `${h.points >= 0 ? "+" : ""}${h.points}${h.bonus ? "★" : ""}`)
+                          .join("  ")
+                      : "–"}
+                  </td>
+                  <td className="r num">{r.deaths}</td>
+                  <td className="r num">{r.skillsAuthored}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="dim small">Levels at 50, 150, 300, 500 and 800 points. ★ = best bee of the day. Leverage is never raised; bigger limits are off with real money unless the owner allows it.</p>
+    </>
+  );
+}
+
 function HiveFeed({ graph }: { graph: GraphJson }) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const notes = graph.nodes
@@ -276,6 +364,7 @@ export function LabPage() {
   const [ranking, setRanking] = useState<Ranking | null>(null);
   const [playbook, setPlaybook] = useState<Playbook | null>(null);
   const [graph, setGraph] = useState<GraphJson | null>(null);
+  const [evo, setEvo] = useState<Snapshot["evolution"] | null>(null);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
 
@@ -283,7 +372,8 @@ export function LabPage() {
     let alive = true;
     const load = async () => {
       try {
-        const [r, p, g] = await Promise.all([getJson<Ranking>("/lab/ranking"), getJson<Playbook>("/lab/playbook"), getJson<GraphJson>("/hive-mind")]);
+        const [r, p, g, snap] = await Promise.all([getJson<Ranking>("/lab/ranking"), getJson<Playbook>("/lab/playbook"), getJson<GraphJson>("/hive-mind"), getJson<Snapshot>("/snapshot")]);
+        if (alive) setEvo(snap?.evolution ?? null);
         if (!alive) return;
         setRanking(r && Array.isArray(r.results) && r.results.length ? r : null);
         setPlaybook(p && p.bees ? p : null);
@@ -335,6 +425,11 @@ export function LabPage() {
               {ranking.errors.length > 0 && <p className="bad small">Errors: {ranking.errors.join("; ")}</p>}
             </>
           )}
+        </section>
+
+        <section>
+          <h2>Evolution: survival & rewards</h2>
+          {evo ? <EvolutionBoard evo={evo} /> : <p className="dim">{loaded ? "Survival and rewards are not running." : "Loading…"}</p>}
         </section>
 
         <section>
