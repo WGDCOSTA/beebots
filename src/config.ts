@@ -1,10 +1,14 @@
 import { z } from "zod";
+import { BRAINS, type BrainCreds, type BrainId } from "./brains/llm.js";
 import { STYLE_INFO, STYLES, type Settings, type StyleId } from "./settings.js";
 
 /** Three bee slots. Each one trades one of the three styles (settings.ts); two bees may share a style. */
 export const BEES = ["bee1", "bee2", "bee3"] as const;
 export type BeeId = (typeof BEES)[number];
 export { STYLES, type StyleId };
+
+/** Each main bee thinks with its own LLM brain (strategy, lessons, messages; Jev still makes the per-tick call). */
+const DEFAULT_BRAINS: Record<BeeId, BrainId> = { bee1: "openai", bee2: "claude", bee3: "kimi" };
 
 /** With no Setup file (settings only from .env), the bees are the original three. */
 const DEFAULT_SLOTS: Record<BeeId, StyleId> = { bee1: "bizzy", bee2: "breezy", bee3: "boozy" };
@@ -36,6 +40,9 @@ const str = (def: string) =>
     .string()
     .optional()
     .transform((v) => (v === undefined || v.trim() === "" ? def : v.trim()));
+/** One of `values`; blank (compose passes "" for an unset variable) means the default. */
+const oneOf = <T extends readonly [string, ...string[]]>(values: T, def: T[number]) =>
+  z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : typeof v === "string" ? v.trim() : v), z.enum(values).optional().default(def as never)) as unknown as z.ZodType<T[number], z.ZodTypeDef, string | undefined>;
 const opt = z
   .string()
   .optional()
@@ -124,6 +131,28 @@ const EnvSchema = z.object({
   UPDATE_CHECK: bool(true),
   UPDATE_REPO: str("imikerussell/beebots"),
   APP_VERSION: str("dev"),
+  // ---- LLM brains and the strategy lab (brains/*, lab/*, graph/*) ----
+  // ChatGPT reuses OPENAI_API_KEY. Claude: ANTHROPIC_API_KEY. Kimi (Moonshot AI): KIMI_API_KEY (or MOONSHOT_API_KEY).
+  OPENAI_BRAIN_MODEL: str("gpt-5.4"),
+  ANTHROPIC_API_KEY: opt,
+  CLAUDE_MODEL: str("claude-opus-5"),
+  CLAUDE_EFFORT: oneOf(["low", "medium", "high"] as const, "medium"),
+  KIMI_API_KEY: opt,
+  MOONSHOT_API_KEY: opt,
+  KIMI_MODEL: str("kimi-k2.5"),
+  KIMI_BASE_URL: str("https://api.moonshot.ai/v1"),
+  BEE1_BRAIN: oneOf(BRAINS, DEFAULT_BRAINS.bee1),
+  BEE2_BRAIN: oneOf(BRAINS, DEFAULT_BRAINS.bee2),
+  BEE3_BRAIN: oneOf(BRAINS, DEFAULT_BRAINS.bee3),
+  LAB_DIR: str("./data/lab"),
+  GRAPH_PATH: str("./data/lab/hive-mind.sqlite"),
+  // Extra folders of importable JSON skills (comma separated), on top of ./skills.
+  SKILLS_DIRS: str("./skills"),
+  // Show Jev each bee's lab vote (its playbook skills on 1h bars). Off by default: it changes what Jev sees.
+  LAB_SIGNALS: bool(false),
+  // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
+  COACH_INTERVAL_MIN: num(0),
+  COACH_MAX_CALLS_DAY: num(12),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
   ALERT_WEBHOOK_URL: opt,
 });
@@ -193,6 +222,9 @@ export interface Config {
   dbPath: string;
   logLevel: "debug" | "info" | "warn" | "error";
   alertWebhookUrl?: string;
+  /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bee thinks with. */
+  brains: { creds: BrainCreds; slots: Record<BeeId, BrainId> };
+  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; coachIntervalMin: number; coachMaxCallsDay: number };
 }
 
 export class ConfigError extends Error {}
@@ -296,5 +328,48 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     dbPath: e.DB_PATH.replaceAll("{mode}", mode),
     logLevel: e.LOG_LEVEL,
     alertWebhookUrl: e.ALERT_WEBHOOK_URL,
+    brains: {
+      creds: brainCreds(e, settings),
+      slots: { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN },
+    },
+    lab: {
+      dir: e.LAB_DIR,
+      graphPath: e.GRAPH_PATH,
+      playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,
+      skillsDirs: e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean),
+      signals: e.LAB_SIGNALS,
+      coachIntervalMin: Math.max(0, e.COACH_INTERVAL_MIN),
+      coachMaxCallsDay: Math.max(0, e.COACH_MAX_CALLS_DAY),
+    },
+  };
+}
+
+/** Brain keys from the environment first, then the Setup file. A brain without a key is left out. */
+export function brainCreds(
+  e: { OPENAI_API_KEY?: string; OPENAI_BRAIN_MODEL: string; ANTHROPIC_API_KEY?: string; CLAUDE_MODEL: string; CLAUDE_EFFORT: "low" | "medium" | "high"; KIMI_API_KEY?: string; MOONSHOT_API_KEY?: string; KIMI_MODEL: string; KIMI_BASE_URL: string },
+  settings: Settings | null,
+): BrainCreds {
+  const openai = e.OPENAI_API_KEY ?? settings?.openaiKey;
+  const claude = e.ANTHROPIC_API_KEY ?? settings?.anthropicKey;
+  const kimi = e.KIMI_API_KEY ?? e.MOONSHOT_API_KEY ?? settings?.kimiKey;
+  return {
+    ...(openai ? { openai: { apiKey: openai, model: e.OPENAI_BRAIN_MODEL } } : {}),
+    ...(claude ? { claude: { apiKey: claude, model: e.CLAUDE_MODEL, effort: e.CLAUDE_EFFORT } } : {}),
+    ...(kimi ? { kimi: { apiKey: kimi, model: e.KIMI_MODEL, baseUrl: e.KIMI_BASE_URL.replace(/\/+$/, "") } } : {}),
+  };
+}
+
+/** The same env parsing as loadConfig, for tools that need only the brain and lab settings (no Jev key required). */
+export function labEnv(env: NodeJS.ProcessEnv = process.env, settings: Settings | null = null) {
+  const e = EnvSchema.parse(env) as z.infer<typeof EnvSchema>;
+  return {
+    creds: brainCreds(e, settings),
+    slots: { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN } as Record<BeeId, BrainId>,
+    dir: e.LAB_DIR,
+    graphPath: e.GRAPH_PATH,
+    playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,
+    skillsDirs: e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean),
+    takerFeeRate: e.TAKER_FEE_RATE,
+    maxLeverage: e.MAX_LEVERAGE,
   };
 }

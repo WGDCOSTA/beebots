@@ -152,6 +152,24 @@ Every tick, for every bee:
 
 Jev is stateless and never sees an order endpoint. If Jev is down or slow, the bees hold and open nothing.
 
+## Brains, the strategy lab and the hive mind
+
+On top of Jev, each main bee can have its own **LLM brain**: ChatGPT (bee 1), Claude (bee 2) and Kimi (bee 3), each
+on its own API key. The brains are slow and strategic; they never place an order.
+
+- **Skills.** Trading rules (trend, breakout, momentum, mean reversion, hybrids), 17 built in and more importable as
+  JSON from [`skills/`](skills/).
+- **The lab.** `pnpm lab fetch` downloads OKX history; `pnpm lab run` simulates every skill and parameter set with fees,
+  slippage, funding and stops, using walk-forward so only out-of-sample results count, and ranks them.
+- **The council.** `pnpm lab council`: each brain reads the ranking and the hive mind, picks the skills its bee should
+  lean on, writes lessons and messages the other bees.
+- **The hive mind.** A knowledge graph (bees, brains, skills, coins, lessons, messages, real trade results) that every
+  round starts from, exported as graphify-style `graph.json`.
+- **Live.** With `LAB_SIGNALS=true` Jev sees each bee's skill vote per coin as a tiebreaker; with `COACH_INTERVAL_MIN`
+  set the brains re-weight their skills from the bee's real results while it trades.
+
+Details, commands and settings: [docs/INTELLIGENCE.md](docs/INTELLIGENCE.md).
+
 ## Settings
 
 Most people need none: Setup covers the keys. To change anything else, create a `.env` next to
@@ -212,6 +230,7 @@ pnpm test            # risk layer (every cap, gate and forced move, both directi
 pnpm universe        # the tradable coin list from live public data (no keys)
 pnpm snapshot        # each style's menu and snapshot from live data (no Jev call)
 pnpm e2e:fake-jev    # the whole engine on paper with a random fake Jev (no spend)
+pnpm lab cycle       # strategy lab: fetch history, rank every skill walk-forward, let the brains pick (docs/INTELLIGENCE.md)
 pnpm dev             # the real engine on paper, with real Jev calls (Setup runs if there is no key)
 
 cd dashboard && pnpm install && pnpm dev    # http://127.0.0.1:5173, proxied to the engine

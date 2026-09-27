@@ -11,7 +11,7 @@ FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddf
 # The release this image was built from (set by the GitHub release build). "dev" for local builds: no update check.
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
-ENV NODE_ENV=production REF_DIR=/app/ref SETTINGS_PATH=/data/settings.json
+ENV NODE_ENV=production REF_DIR=/app/ref SETTINGS_PATH=/data/settings.json LAB_DIR=/data/lab GRAPH_PATH=/data/lab/hive-mind.sqlite
 WORKDIR /app
 # OKX CLI profiles (site = "eea", no keys; keys come from the environment per call) and its 7-day trade log live here.
 RUN mkdir -p /home/node/.okx /data && chown -R node:node /home/node /data
@@ -21,6 +21,8 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node scripts/okx-profiles.sh ./scripts/okx-profiles.sh
 # The three original portraits: the default art, and the style reference for generated bees.
 COPY --chown=node:node dashboard/public/bees ./ref
+# Importable strategy skills for the lab (docs/INTELLIGENCE.md). Run it with: docker compose exec engine node dist/tools/lab.js cycle
+COPY --chown=node:node skills ./skills
 USER node
 ENV HOME=/home/node
 RUN sh ./scripts/okx-profiles.sh

@@ -11,7 +11,8 @@ export interface Snapshot {
   approxTokens: number;
 }
 
-export function buildSnapshot(brain: BeeBrain, ctx: BeeContext): Snapshot {
+/** `extra` is merged into the state before hashing (e.g. the lab vote, brains/signals.ts). */
+export function buildSnapshot(brain: BeeBrain, ctx: BeeContext, extra?: Record<string, unknown> | null): Snapshot {
   const ids = brain.snapshotCoins(ctx);
   let cols: string[] = [];
   const rows: Record<string, Array<number | string | null>> = {};
@@ -29,6 +30,7 @@ export function buildSnapshot(brain: BeeBrain, ctx: BeeContext): Snapshot {
     coins: { cols, rows },
   };
   if (brain.id === "boozy") state.attn = ctx.view.newsAvailable ? "news_z" : "volume_z";
+  if (extra) Object.assign(state, extra);
   const json = JSON.stringify(state);
   return {
     state,

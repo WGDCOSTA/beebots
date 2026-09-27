@@ -66,6 +66,23 @@ services:
       ENGINE_PORT: "8080"
       DB_PATH: /data/bees-{mode}.sqlite
       SETTINGS_PATH: /data/settings.json
+      # LLM brains, strategy lab and hive mind (docs/INTELLIGENCE.md). All optional.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      OPENAI_BRAIN_MODEL: ${OPENAI_BRAIN_MODEL:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+      CLAUDE_EFFORT: ${CLAUDE_EFFORT:-}
+      KIMI_MODEL: ${KIMI_MODEL:-}
+      KIMI_BASE_URL: ${KIMI_BASE_URL:-}
+      BEE1_BRAIN: ${BEE1_BRAIN:-}
+      BEE2_BRAIN: ${BEE2_BRAIN:-}
+      BEE3_BRAIN: ${BEE3_BRAIN:-}
+      LAB_SIGNALS: ${LAB_SIGNALS:-}
+      COACH_INTERVAL_MIN: ${COACH_INTERVAL_MIN:-}
+      COACH_MAX_CALLS_DAY: ${COACH_MAX_CALLS_DAY:-}
+      LAB_DIR: /data/lab
+      GRAPH_PATH: /data/lab/hive-mind.sqlite
     volumes:
       - bees-data:/data
     expose:
