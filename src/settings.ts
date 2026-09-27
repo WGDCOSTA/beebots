@@ -77,6 +77,10 @@ export const SettingsSchema = z.object({
   version: z.literal(1),
   jevKey: z.string().trim().min(8),
   openaiKey: z.string().trim().min(8).optional(),
+  /** Claude's brain (Anthropic API key). Optional: without it bee2 falls back to rules in the lab council. */
+  anthropicKey: z.string().trim().min(8).optional(),
+  /** Kimi's brain (Moonshot AI API key). Optional, as above for bee3. */
+  kimiKey: z.string().trim().min(8).optional(),
   /** The owner password, as a salted scrypt hash (gate.ts). Absent in files saved before it existed. */
   ownerPasswordHash: z.string().startsWith("scrypt$").optional(),
   /** When the operator ticked the risk statements on the Setup page. */

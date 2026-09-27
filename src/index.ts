@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
@@ -22,6 +22,14 @@ import { loadSettings, STYLE_INFO } from "./settings.js";
 import { imagePath, Setup } from "./setup.js";
 import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
+import { Coach } from "./brains/coach.js";
+import type { CouncilBee } from "./brains/council.js";
+import { makeClients } from "./brains/llm.js";
+import { PlaybookWatcher } from "./brains/playbook.js";
+import { LabSignals, LAB_NOTE } from "./brains/signals.js";
+import { KnowledgeGraph } from "./graph/graph.js";
+import { contextFor, registerBees } from "./graph/hive-mind.js";
+import { skillRegistry } from "./lab/skills/index.js";
 
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
 // Reference portraits for generated bees: the dashboard's default art (copied into the image by the Dockerfile).
@@ -63,6 +71,7 @@ function runSetup() {
     refDir: REF_DIR,
     windowMin: Math.max(1, Number(env.SETUP_WINDOW_MIN) || 120),
     okxApiBase: env.OKX_API_BASE?.trim().replace(/\/+$/, "") || "https://eea.okx.com",
+    kimiBaseUrl: env.KIMI_BASE_URL?.trim() || undefined,
     onSaved: () => {
       log.info("settings saved; exiting so Docker restarts the engine with them");
       process.exit(0);
@@ -132,8 +141,51 @@ async function main() {
     unlinkSync(resumeFlag);
     return true;
   };
-  engine = new Engine({ cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest });
+  // The hive mind (knowledge graph) and the three LLM brains. Brains never trade: they curate skills and lessons.
+  const graph = new KnowledgeGraph(cfg.lab.graphPath);
+  const clients = makeClients(cfg.brains.creds);
+  const councilBees: CouncilBee[] = BEES.map((id) => {
+    const s = cfg.slots[id];
+    const brain = cfg.brains.slots[id];
+    return { slot: id, name: s.name, style: s.style, rules: s.rules, coins: s.coins, brain, model: clients[brain]?.model ?? "rules" };
+  });
+  registerBees(graph, councilBees);
+  const playbook = new PlaybookWatcher(cfg.lab.playbookPath);
+  const registry = skillRegistry(cfg.lab.skillsDirs);
+  for (const e of registry.errors) log.warn("skill import failed", { error: e });
+  const signals = cfg.lab.signals ? new LabSignals(new Map(registry.skills.map((s) => [s.id, s])), () => playbook.get()) : null;
+  log.info("brains", { brains: BEES.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, coachMin: cfg.lab.coachIntervalMin });
+
+  engine = new Engine({
+    cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest,
+    ...(signals
+      ? {
+          labVotes: (id: (typeof BEES)[number], instIds: string[]) => {
+            const view = feed.view();
+            const coins = instIds.map((instId) => ({ instId, coin: view.instruments.get(instId)?.coin ?? instId.split("-")[0]! }));
+            return signals.votes(id, coins, (instId) => feed.candles1h(instId));
+          },
+          labNote: LAB_NOTE,
+        }
+      : {}),
+  });
   await engine.start();
+  const coach = new Coach({ graph, db, clients, bees: councilBees, playbookPath: cfg.lab.playbookPath, intervalMin: cfg.lab.coachIntervalMin, maxCallsPerDay: cfg.lab.coachMaxCallsDay });
+  coach.start();
+  const rankingPath = join(cfg.lab.dir, "ranking.json");
+  let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
+  const labRanking = () => {
+    if (Date.now() - rankingCache.at > 30_000) {
+      try {
+        // Folds are detail for the CLI report; the endpoint serves the table.
+        const r = JSON.parse(readFileSync(rankingPath, "utf8")) as { results?: Array<Record<string, unknown>> };
+        rankingCache = { at: Date.now(), body: { ...r, results: (r.results ?? []).map(({ folds: _f, ...rest }) => rest) } };
+      } catch {
+        rankingCache = { at: Date.now(), body: null };
+      }
+    }
+    return rankingCache.body;
+  };
 
   // The owner password (picked on Setup) gates joining and leaving the Hive from the dashboard. Installs without one
   // (a Setup file from before it existed, or keys only in .env) can set OWNER_PASSWORD instead.
@@ -169,7 +221,10 @@ async function main() {
 
   const server = startServer(
     {
-      engine: { bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status() },
+      engine: {
+        bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
+        lab: { ranking: labRanking, playbook: () => playbook.get(), graph: () => graph.export(), context: (bee) => contextFor(graph, bee) },
+      },
       hive,
       profile: () => profile(cfg),
       beeImage: (b) => (cfg.slots[b as keyof typeof cfg.slots]?.customImage ? imagePath(cfg.settingsPath, b) : null),
@@ -181,6 +236,8 @@ async function main() {
   const shutdown = (sig: string) => {
     log.info("shutting down", { sig });
     engine?.stop();
+    coach.stop();
+    graph.close();
     hive.stop();
     updates.stop();
     server.close();

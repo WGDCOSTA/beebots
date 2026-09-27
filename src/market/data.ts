@@ -68,6 +68,8 @@ export class MarketFeed {
   private instruments = new Map<string, Instrument>();
   private tickers = new Map<string, Ticker>();
   private stats = new Map<string, CoinStats>();
+  /** Last 1h candles per coin with stats, kept for the lab signals (brains/signals.ts). */
+  private c1h = new Map<string, Candle[]>();
   private gated: string[] = [];
   private spreadBlocked: string[] = [];
   private oiHistory = new Map<string, Array<[number, number]>>();
@@ -94,6 +96,11 @@ export class MarketFeed {
       spreadBlocked: this.spreadBlocked,
       newsAvailable: this.newsAvailable,
     };
+  }
+
+  /** 1h candles (oldest first, up to 200) from the last refresh, or [] for a coin without stats. */
+  candles1h(instId: string): Candle[] {
+    return this.c1h.get(instId) ?? [];
   }
 
   instIdForCoin(coin: string): string | undefined {
@@ -144,6 +151,7 @@ export class MarketFeed {
     const want = [...new Set([...this.gated, ...trendIds, ...this.heldInstIds()])].filter((id) => this.instruments.has(id) && tickers.has(id));
 
     const next = new Map<string, CoinStats>();
+    const nextC1h = new Map<string, Candle[]>();
     await Promise.all(
       want.map(async (id) => {
         const inst = this.instruments.get(id)!;
@@ -166,10 +174,13 @@ export class MarketFeed {
           if (c4h) s.trend = trendStats(c4h);
           s.breakout = breakoutLevels(c1h, now, BREAKOUT_K);
           next.set(id, s);
+          nextC1h.set(id, c1h);
         } catch (err) {
           log.warn("market data failed for coin", { instId: id, err: safeError(err) });
           const old = this.stats.get(id);
           if (old) next.set(id, old);
+          const oldC = this.c1h.get(id);
+          if (oldC) nextC1h.set(id, oldC);
         }
       }),
     );
@@ -189,6 +200,7 @@ export class MarketFeed {
     }
 
     this.stats = next;
+    this.c1h = nextC1h;
     this.lastRefreshAt = now;
   }
 

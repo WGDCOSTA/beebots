@@ -92,6 +92,11 @@ export function Setup() {
   const [jevOk, setJevOk] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
   const [openaiOk, setOpenaiOk] = useState(false);
+  // Optional brains: bee2 thinks with Claude, bee3 with Kimi (bee1 with ChatGPT, on the OpenAI key above).
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [anthropicOk, setAnthropicOk] = useState(false);
+  const [kimiKey, setKimiKey] = useState("");
+  const [kimiOk, setKimiOk] = useState(false);
   const [bees, setBees] = useState<BeeDraft[]>([]);
   const [hive, setHive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -176,6 +181,8 @@ export function Setup() {
       await post("save", {
         jevKey,
         ...(openaiKey ? { openaiKey } : {}),
+        ...(anthropicKey.trim() ? { anthropicKey: anthropicKey.trim() } : {}),
+        ...(kimiKey.trim() ? { kimiKey: kimiKey.trim() } : {}),
         accept,
         ownerPassword: password,
         bees: bees.map((b) => ({
@@ -371,6 +378,40 @@ export function Setup() {
                 {openaiOk && <p className="setup-ok">✓ OpenAI key works.</p>}
               </>
             )}
+            <h3>Brains (optional)</h3>
+            <p>
+              Each main bee can have its own strategic brain: your first bee thinks with ChatGPT (the OpenAI key above), the second with Claude, the
+              third with Kimi. The brains pick backtested skills from the strategy lab and write lessons to the hive mind; Jev still makes every
+              trading decision. Leave these empty to use simple rules instead. You can add them later in <code>.env</code>.
+            </p>
+            <div className="setup-row">
+              <input
+                className="setup-input mono"
+                type="password"
+                autoComplete="off"
+                placeholder="Anthropic key (Claude), sk-ant-…"
+                value={anthropicKey}
+                onChange={(e) => (setAnthropicKey(e.target.value), setAnthropicOk(false))}
+              />
+              <button className="ghost" disabled={busy || anthropicKey.trim().length < 8} onClick={() => run(async () => (await post("check-claude", { key: anthropicKey.trim() }), setAnthropicOk(true)))}>
+                Check
+              </button>
+            </div>
+            {anthropicOk && <p className="setup-ok">✓ Claude key works.</p>}
+            <div className="setup-row">
+              <input
+                className="setup-input mono"
+                type="password"
+                autoComplete="off"
+                placeholder="Moonshot key (Kimi), sk-…"
+                value={kimiKey}
+                onChange={(e) => (setKimiKey(e.target.value), setKimiOk(false))}
+              />
+              <button className="ghost" disabled={busy || kimiKey.trim().length < 8} onClick={() => run(async () => (await post("check-kimi", { key: kimiKey.trim() }), setKimiOk(true)))}>
+                Check
+              </button>
+            </div>
+            {kimiOk && <p className="setup-ok">✓ Kimi key works.</p>}
             <div className="setup-actions">
               <button className="ghost" onClick={() => setStep(2)}>
                 Back

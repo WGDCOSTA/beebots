@@ -37,6 +37,12 @@ export interface EngineDeps {
   closeRequested?: () => boolean;
   /** Dry run only: consume a one-shot "resume last position" request (flag file). */
   takeResumeRequest?: () => boolean;
+  /**
+   * LAB_SIGNALS: the bee's playbook skills' vote per coin in its snapshot (coin -> -1..+1), or null. Shown to Jev as
+   * `lab` with a one-line note; the menu and the risk layer do not change.
+   */
+  labVotes?: (id: BeeId, instIds: string[]) => Record<string, number> | null;
+  labNote?: string;
 }
 
 interface LastDecision {
@@ -256,7 +262,13 @@ export class Engine {
     if (bee.cap === "trade_cap" || bee.cap === "fee_budget") return this.decideBenched(id, now);
     const ctx = this.ctx(id, now);
     const menu = brain.menu(ctx);
-    const snap = buildSnapshot(brain, ctx);
+    let lab: Record<string, number> | null = null;
+    try {
+      lab = this.d.labVotes?.(id, brain.snapshotCoins(ctx)) ?? null;
+    } catch (err) {
+      log.warn("lab votes failed", { bee: id, err: safeError(err) });
+    }
+    const snap = buildSnapshot(brain, ctx, lab ? { lab } : null);
     if (brain.id === "boozy" && bee.top1.coin) snap.state.top1 = `${bee.top1.coin} x${bee.top1.streak}`;
 
     let jevStatus: JevStatus = "ok";
@@ -269,7 +281,8 @@ export class Engine {
     else if (labels.length === 0) jevStatus = "no_options";
     else if (required) r = requiredAnswer(labels[0]!);
     else {
-      r = await jev.decide({ strategy: brain.strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
+      const strategy = lab && this.d.labNote ? `${brain.strategy} ${this.d.labNote}` : brain.strategy;
+      r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
     }
     const proposal: Proposal | null =

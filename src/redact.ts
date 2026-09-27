@@ -21,6 +21,8 @@ const PATTERNS: Array<[RegExp, string]> = [
   [/(OK-ACCESS-(?:KEY|SIGN|PASSPHRASE|TIMESTAMP))["']?\s*[:=]\s*["']?[^\s"',}]+/gi, "$1: " + MASK],
   // key=value / "key": "value" pairs with a sensitive name
   [/(["']?(?:api[_-]?key|secret[_-]?key|secret|passphrase|password|token|access[_-]?token|authorization|uid|subacct)["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, "$1" + MASK],
+  // LLM API keys: OpenAI (sk-..., sk-proj-...), Anthropic (sk-ant-...), Moonshot/Kimi (sk-...)
+  [/\bsk-[A-Za-z0-9_-]{16,}/g, MASK],
   // Email addresses
   [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]"],
   // EVM / hex addresses and tx hashes

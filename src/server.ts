@@ -1,4 +1,5 @@
-// Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bee>.
+// Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bee>,
+// /lab/ranking, /lab/playbook, /hive-mind (graph.json) and /hive-mind/<bee> (what a bee's brain knows).
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
 // POST /hive/join and /hive/leave, which need the owner password (gate.ts, hive.ts). GET /hive/status is public and holds no key.
 // /visit is the page's hit counter: it bumps a total and returns it (see visitors.ts; no IP is stored or logged).
@@ -22,6 +23,8 @@ export interface ServerDeps {
     visitors: Visitors;
     /** "Update available" (update.ts): null unless a newer GitHub Release exists. */
     update?: () => unknown;
+    /** The strategy lab and the hive mind (read-only): last ranking, the playbook, the knowledge graph. */
+    lab?: { ranking: () => unknown; playbook: () => unknown; graph: () => unknown; context: (bee: string) => unknown };
   };
   /** Present only in setup mode. */
   setup?: Setup;
@@ -150,7 +153,18 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         });
         return;
       }
+      case "/lab/ranking":
+        return e.lab ? json(res, 200, e.lab.ranking() ?? { results: [] }) : json(res, 404, { error: "lab not enabled" });
+      case "/lab/playbook":
+        return e.lab ? json(res, 200, e.lab.playbook() ?? { bees: {} }) : json(res, 404, { error: "lab not enabled" });
+      case "/hive-mind":
+        return e.lab ? json(res, 200, e.lab.graph()) : json(res, 404, { error: "lab not enabled" });
       default:
+        if (e.lab && url.pathname.startsWith("/hive-mind/")) {
+          const bee = url.pathname.slice("/hive-mind/".length);
+          if (!/^bee[1-3]$/.test(bee)) return json(res, 404, { error: "not found" });
+          return json(res, 200, e.lab.context(bee));
+        }
         return json(res, 404, { error: "not found" });
     }
   });

@@ -1,0 +1,83 @@
+{
+  "skills": [
+    {
+      "id": "connors_rsi2",
+      "name": "Connors RSI(2)",
+      "family": "mean_reversion",
+      "description": "Larry Connors: above the 200 average, buy when RSI(2) is washed out; sell into the first strength. Shorts mirror it below the average.",
+      "params": { "lo": { "default": 10, "grid": [5, 10, 15] }, "trend": { "default": 200, "grid": [100, 200] } },
+      "stopAtr": 3,
+      "long": {
+        "entry": [ { "left": "close", "op": ">", "right": "sma($trend)" }, { "left": "rsi(2)", "op": "<", "right": "$lo" } ],
+        "exit": [ { "any": [ { "left": "close", "op": ">", "right": "sma(5)" }, { "left": "close", "op": "<", "right": "sma($trend)" } ] } ]
+      },
+      "short": {
+        "entry": [ { "left": "close", "op": "<", "right": "sma($trend)" }, { "left": "rsi(2)", "op": ">", "right": 90 } ],
+        "exit": [ { "any": [ { "left": "close", "op": "<", "right": "sma(5)" }, { "left": "close", "op": ">", "right": "sma($trend)" } ] } ]
+      }
+    },
+    {
+      "id": "golden_cross",
+      "name": "Golden / death cross",
+      "family": "trend",
+      "description": "The textbook signal: long when the 50 average crosses above the 200, flat on the death cross.",
+      "params": { "fast": { "default": 50, "grid": [20, 50] }, "slow": { "default": 200, "grid": [100, 200] } },
+      "long": {
+        "entry": [ { "left": "sma($fast)", "op": ">", "right": "sma($slow)" } ],
+        "exit": [ { "left": "sma($fast)", "op": "<", "right": "sma($slow)" } ]
+      }
+    },
+    {
+      "id": "macd_zero_cross",
+      "name": "MACD signal cross above zero",
+      "family": "momentum",
+      "description": "Only take MACD crossovers that happen with price above its 100 average; exit when the histogram turns negative.",
+      "params": {},
+      "stopAtr": 2.5,
+      "long": {
+        "entry": [ { "left": "macd_hist", "op": "crosses_above", "right": 0 }, { "left": "close", "op": ">", "right": "ema(100)" } ],
+        "exit": [ { "left": "macd_hist", "op": "<", "right": 0 } ]
+      },
+      "short": {
+        "entry": [ { "left": "macd_hist", "op": "crosses_below", "right": 0 }, { "left": "close", "op": "<", "right": "ema(100)" } ],
+        "exit": [ { "left": "macd_hist", "op": ">", "right": 0 } ]
+      }
+    },
+    {
+      "id": "turtle_system2",
+      "name": "Turtle system 2 (55/20)",
+      "family": "breakout",
+      "description": "The original Turtles' slower system: 55-bar breakout in, 20-bar opposite breakout out, 2 ATR stop.",
+      "params": {},
+      "stopAtr": 2,
+      "long": { "entry": [ { "left": "close", "op": ">", "right": "highest(55)" } ], "exit": [ { "left": "close", "op": "<", "right": "lowest(20)" } ] },
+      "short": { "entry": [ { "left": "close", "op": "<", "right": "lowest(55)" } ], "exit": [ { "left": "close", "op": ">", "right": "highest(20)" } ] }
+    },
+    {
+      "id": "supertrend_rsi",
+      "name": "Supertrend with RSI confirmation",
+      "family": "hybrid",
+      "description": "Ride the Supertrend direction only while RSI(14) agrees (above 50 long, below 50 short).",
+      "params": { "mult": { "default": 3, "grid": [2, 3] } },
+      "long": {
+        "entry": [ { "left": "supertrend(10,$mult)", "op": ">", "right": 0 }, { "left": "rsi(14)", "op": ">", "right": 50 } ],
+        "exit": [ { "left": "supertrend(10,$mult)", "op": "<", "right": 0 } ]
+      },
+      "short": {
+        "entry": [ { "left": "supertrend(10,$mult)", "op": "<", "right": 0 }, { "left": "rsi(14)", "op": "<", "right": 50 } ],
+        "exit": [ { "left": "supertrend(10,$mult)", "op": ">", "right": 0 } ]
+      }
+    },
+    {
+      "id": "volatility_regime_trend",
+      "name": "Calm-market trend",
+      "family": "hybrid",
+      "description": "Trend-follow with EMA 20/50 only when ATR is under 3% of price (skip the wild regimes).",
+      "params": { "maxAtr": { "default": 3, "grid": [2, 3, 5] } },
+      "long": {
+        "entry": [ { "left": "ema(20)", "op": ">", "right": "ema(50)" }, { "left": "atr_pct(14)", "op": "<", "right": "$maxAtr" } ],
+        "exit": [ { "any": [ { "left": "ema(20)", "op": "<", "right": "ema(50)" }, { "left": "atr_pct(14)", "op": ">", "right": "$maxAtr" } ] } ]
+      }
+    }
+  ]
+}

@@ -19,6 +19,7 @@ import { BIZZY_BREAKOUT_COINS } from "./bees/bizzy.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
 import { deriveStyle } from "./bees/custom.js";
 import { fetchXperpCoins } from "./okx/public.js";
+import { checkClaudeKey, checkKimiKey } from "./brains/llm.js";
 import { checkOpenAiKey, designBee, OpenAiError, paintBee, type BeeDesign } from "./openai.js";
 import { safeError } from "./redact.js";
 import { clientAddr } from "./visitors.js";
@@ -43,6 +44,8 @@ export interface SetupOpts {
   okxApiBase: string;
   /** Minutes after the engine starts that Setup stays open (SETUP_WINDOW_MIN). */
   windowMin: number;
+  /** Moonshot's API base, for the Kimi key check (KIMI_BASE_URL). */
+  kimiBaseUrl?: string;
   now?: () => number;
   /** Injectable for tests; defaults to one real Jev call. */
   checkJev?: (key: string, model: string) => Promise<string | null>;
@@ -118,6 +121,9 @@ const SetupBee = BeeSchema.extend({
 const SaveBody = z.object({
   jevKey: z.string().trim().min(8),
   openaiKey: z.string().trim().min(8).optional(),
+  /** Optional brains: Claude (Anthropic) and Kimi (Moonshot AI). Checked with a free call before saving. */
+  anthropicKey: z.string().trim().min(8).optional(),
+  kimiKey: z.string().trim().min(8).optional(),
   accept: Accept,
   bees: z.array(SetupBee).length(3),
   /** Gates the dashboard's writes (joining or leaving the Hive). Stored as a salted scrypt hash only. */
@@ -256,6 +262,20 @@ export class Setup {
         return send(res, 200, { ok: true });
       }
 
+      case "/setup/check-claude": {
+        const key = String(body.key ?? "").trim();
+        if (key.length < 8) return send(res, 400, { error: "Paste your Anthropic API key." });
+        const err = await checkClaudeKey(key);
+        return send(res, err ? 400 : 200, err ? { error: err } : { ok: true });
+      }
+
+      case "/setup/check-kimi": {
+        const key = String(body.key ?? "").trim();
+        if (key.length < 8) return send(res, 400, { error: "Paste your Moonshot (Kimi) API key." });
+        const err = await checkKimiKey(key, this.o.kimiBaseUrl);
+        return send(res, err ? 400 : 200, err ? { error: err } : { ok: true });
+      }
+
       case "/setup/design": {
         const key = this.openaiKey(body);
         const description = String(body.description ?? "").trim();
@@ -304,6 +324,10 @@ export class Setup {
         if (missing.length) return send(res, 400, { error: "Every bee needs its portrait before you start." });
         const jevErr = await this.checkJev(b.jevKey, this.o.jevModel);
         if (jevErr) return send(res, 400, { error: jevErr });
+        const claudeErr = b.anthropicKey ? await checkClaudeKey(b.anthropicKey) : null;
+        if (claudeErr) return send(res, 400, { error: claudeErr });
+        const kimiErr = b.kimiKey ? await checkKimiKey(b.kimiKey, this.o.kimiBaseUrl) : null;
+        if (kimiErr) return send(res, 400, { error: kimiErr });
         // The page's coins and style are re-checked here: coins against OKX's list (when it can be read), the style
         // against the coins.
         const known = await this.coinList().catch(() => null);
@@ -316,6 +340,8 @@ export class Setup {
           jevKey: b.jevKey,
           ownerPasswordHash: hashPassword(b.ownerPassword),
           ...(b.openaiKey ? { openaiKey: b.openaiKey } : {}),
+          ...(b.anthropicKey ? { anthropicKey: b.anthropicKey } : {}),
+          ...(b.kimiKey ? { kimiKey: b.kimiKey } : {}),
           acceptedRiskAt: Date.now(),
           bees,
           hive: b.hive,
