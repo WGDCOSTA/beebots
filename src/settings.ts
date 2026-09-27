@@ -69,6 +69,8 @@ const BeeSchema = z.object({
     .default([]),
   /** What the bee looks like (used for its portrait). */
   look: z.string().trim().max(400).optional(),
+  /** Extra bees: the LLM brain chosen when the bee was added (main bees use BEE1_BRAIN..BEE3_BRAIN). */
+  brain: z.enum(["openai", "claude", "kimi"]).optional(),
   /** true once a portrait has been generated for this bee (served from the data volume). */
   image: z.boolean().default(false),
 });
@@ -85,7 +87,8 @@ export const SettingsSchema = z.object({
   ownerPasswordHash: z.string().startsWith("scrypt$").optional(),
   /** When the operator ticked the risk statements on the Setup page. */
   acceptedRiskAt: z.number(),
-  bees: z.array(BeeSchema).length(3),
+  /** The three main bees, then up to six extra bees added from the admin panel. */
+  bees: z.array(BeeSchema).min(3).max(9),
   /** The "Join the Hive?" answer on the Setup page (absent in files saved before the Hive existed). */
   hive: z.boolean().optional(),
   createdAt: z.number(),

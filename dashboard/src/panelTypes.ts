@@ -112,7 +112,11 @@ export interface AdminState {
   hasSettingsFile: boolean;
   pendingRestart: boolean;
   keys: Record<KeyName, { set: boolean; source: "env" | "settings" | null }>;
-  bees: Array<{ slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; image: boolean }> | null;
+  bees: Array<{ slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; image: boolean; brain: string | null; extra: boolean; running: boolean; flat: boolean }> | null;
+  maxBees: number;
+  /** Coins with a live X-Perp right now ([] before the market loads: free text then). */
+  coins: string[];
+  evolution: { survival: boolean; rewards: boolean; board: import("./types").EvolutionRow[] } | null;
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];

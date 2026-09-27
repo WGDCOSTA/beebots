@@ -174,7 +174,7 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
       default:
         if (e.lab && url.pathname.startsWith("/hive-mind/")) {
           const bee = url.pathname.slice("/hive-mind/".length);
-          if (!/^bee[1-3]$/.test(bee)) return json(res, 404, { error: "not found" });
+          if (!/^bee[1-9]$/.test(bee)) return json(res, 404, { error: "not found" });
           return json(res, 200, e.lab.context(bee));
         }
         return json(res, 404, { error: "not found" });

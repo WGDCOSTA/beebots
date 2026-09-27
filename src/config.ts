@@ -2,16 +2,25 @@ import { z } from "zod";
 import { BRAINS, type BrainCreds, type BrainId } from "./brains/llm.js";
 import { STYLE_INFO, STYLES, type Settings, type StyleId } from "./settings.js";
 
-/** Three bee slots. Each one trades one of the three styles (settings.ts); two bees may share a style. */
+/**
+ * The three main bee slots (the live dashboard's columns, Setup, the Hive). Each one trades one of the three styles
+ * (settings.ts); two bees may share a style. Extra bees added from the admin panel take slots bee4..bee9: the engine
+ * runs every slot in `cfg.beeIds`.
+ */
 export const BEES = ["bee1", "bee2", "bee3"] as const;
-export type BeeId = (typeof BEES)[number];
+export const ALL_SLOTS = ["bee1", "bee2", "bee3", "bee4", "bee5", "bee6", "bee7", "bee8", "bee9"] as const;
+export type BeeId = (typeof ALL_SLOTS)[number];
+/** Main slots plus extras. */
+export const MAX_BEES = 9;
+export const slotId = (i: number): BeeId => ALL_SLOTS[i]!;
+export const isBeeId = (s: string): s is BeeId => (ALL_SLOTS as readonly string[]).includes(s);
 export { STYLES, type StyleId };
 
 /** Each main bee thinks with its own LLM brain (strategy, lessons, messages; Jev still makes the per-tick call). */
-const DEFAULT_BRAINS: Record<BeeId, BrainId> = { bee1: "openai", bee2: "claude", bee3: "kimi" };
+const DEFAULT_BRAINS: Record<(typeof BEES)[number], BrainId> = { bee1: "openai", bee2: "claude", bee3: "kimi" };
 
 /** With no Setup file (settings only from .env), the bees are the original three. */
-const DEFAULT_SLOTS: Record<BeeId, StyleId> = { bee1: "bizzy", bee2: "breezy", bee3: "boozy" };
+const DEFAULT_SLOTS: Record<(typeof BEES)[number], StyleId> = { bee1: "bizzy", bee2: "breezy", bee3: "boozy" };
 /** Typed as the only acknowledgement that unlocks MODE=live. */
 export const LIVE_ACK_PHRASE = "I-ACCEPT-REAL-MONEY-RISK";
 
@@ -153,6 +162,17 @@ const EnvSchema = z.object({
   // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
   COACH_INTERVAL_MIN: num(0),
   COACH_MAX_CALLS_DAY: num(12),
+  // ---- Survival and rewards (evolution.ts) ----
+  // A bee in danger trades smaller and is told how close it is to death (BEE_RETIRE_AT_PCT); its brains meet to save it.
+  SURVIVAL_MODE: bool(true),
+  SURVIVAL_DANGER_PCT: num(80),
+  SURVIVAL_CRITICAL_PCT: num(60),
+  SURVIVAL_MAX_CALLS_DAY: num(12),
+  // Profitable bees earn points and levels; levels unlock more skills, skill writing, extra brains and bigger limits.
+  REWARDS: bool(true),
+  REWARD_MAX_LIMIT_BOOST: num(0.5),
+  // Limit boosts with real money too (off: in live mode rewards unlock skills and brains, never bigger limits).
+  REWARDS_IN_LIVE: bool(false),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
   ALERT_WEBHOOK_URL: opt,
 });
@@ -207,6 +227,10 @@ export interface SlotProfile {
 
 export interface Config {
   mode: Mode;
+  /** Every bee the engine runs: bee1..bee3, then any extra bees from the admin panel (with exchange keys, outside paper). */
+  beeIds: BeeId[];
+  /** Extra bees left out because their exchange keys are missing in demo/live mode (named in the log). */
+  skippedBees: BeeId[];
   slots: Record<BeeId, SlotProfile>;
   openai: { apiKey?: string; textModel: string; imageModel: string };
   links: { sponsor: string; code: string };
@@ -243,6 +267,16 @@ export interface Config {
   /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bee thinks with. */
   brains: { creds: BrainCreds; slots: Record<BeeId, BrainId> };
   lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; coachIntervalMin: number; coachMaxCallsDay: number };
+  evolution: {
+    survival: boolean;
+    dangerPct: number;
+    criticalPct: number;
+    survivalMaxCallsDay: number;
+    rewards: boolean;
+    maxLimitBoost: number;
+    /** Whether reward limit boosts apply in this mode. */
+    boostLimits: boolean;
+  };
 }
 
 export class ConfigError extends Error {}
@@ -266,11 +300,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
 
   if (e.MAX_LEVERAGE > 2 || e.MAX_LEVERAGE <= 0) throw new ConfigError("MAX_LEVERAGE must be in (0, 2]. Hard rule 3.");
   if (e.MAX_FLAT_MINUTES < 0) throw new ConfigError("MAX_FLAT_MINUTES must be >= 0");
+  // Survival lines must sit above the death line, in order. An install with a high BEE_RETIRE_AT_PCT keeps running:
+  // the lines move up just above it rather than refusing to start.
+  const criticalPct = Math.max(e.SURVIVAL_CRITICAL_PCT, e.BEE_RETIRE_AT_PCT + 1);
+  const dangerPct = Math.max(e.SURVIVAL_DANGER_PCT, criticalPct + 1);
+  if (e.REWARD_MAX_LIMIT_BOOST < 0 || e.REWARD_MAX_LIMIT_BOOST > 1) throw new ConfigError("REWARD_MAX_LIMIT_BOOST must be between 0 and 1.");
 
   const slots = {} as Record<BeeId, SlotProfile>;
-  BEES.forEach((id, i) => {
+  const allIds: BeeId[] = Array.from({ length: Math.max(BEES.length, Math.min(MAX_BEES, settings?.bees.length ?? 0)) }, (_, i) => slotId(i));
+  allIds.forEach((id, i) => {
     const b = settings?.bees[i];
-    const style = b?.style ?? DEFAULT_SLOTS[id];
+    const style = b?.style ?? DEFAULT_SLOTS[id as (typeof BEES)[number]] ?? "boozy";
     slots[id] = b
       ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true }
       : { style, name: STYLE_INFO[style].name, tagline: STYLE_INFO[style].tagline, customImage: false, rules: "", coins: [], fromSetup: false };
@@ -279,8 +319,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   const creds: Partial<Record<BeeId, OkxCreds>> = {};
   if (mode !== "dry") {
     const infix = mode === "demo" ? "OKX_DEMO_API" : "OKX_API";
-    for (const bee of BEES) {
+    for (const bee of allIds) {
       const p = bee.toUpperCase();
+      const extra = !(BEES as readonly string[]).includes(bee);
+      // Extra bees read their keys straight from the environment (BEE4_OKX_DEMO_API_KEY, ...); without them they sit
+      // out demo/live rather than blocking the whole engine.
+      const raw = (k: string) => (extra ? (env[k] ?? "").trim() || undefined : (e[k] as string | undefined));
+      if (extra) {
+        const k = raw(`${p}_${infix}_KEY`);
+        const s = raw(`${p}_${infix}_SECRET`);
+        const ph = raw(`${p}_${infix}_PASSPHRASE`);
+        if (k && s && ph) creds[bee] = { apiKey: k, secretKey: s, passphrase: ph };
+        continue;
+      }
       const k = e[`${p}_${infix}_KEY`] as string | undefined;
       const s = e[`${p}_${infix}_SECRET`] as string | undefined;
       const ph = e[`${p}_${infix}_PASSPHRASE`] as string | undefined;
@@ -290,6 +341,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       if (k && s && ph) creds[bee] = { apiKey: k, secretKey: s, passphrase: ph };
     }
   }
+  const skippedBees = mode === "dry" ? [] : allIds.filter((id) => !creds[id]);
+  const beeIds = allIds.filter((id) => !skippedBees.includes(id));
   if (missing.length) {
     throw new ConfigError(`MODE=${mode} needs these settings, which are blank or missing:\n  ${missing.join("\n  ")}`);
   }
@@ -309,6 +362,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
 
   return {
     mode,
+    beeIds,
+    skippedBees,
     slots,
     openai: { apiKey: e.OPENAI_API_KEY ?? settings?.openaiKey, textModel: e.OPENAI_TEXT_MODEL, imageModel: e.OPENAI_IMAGE_MODEL },
     links: { sponsor: e.HOST_LINK, code: e.REPO_LINK },
@@ -348,18 +403,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     alertWebhookUrl: e.ALERT_WEBHOOK_URL,
     brains: {
       creds: brainCreds(e, settings),
-      slots: { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN },
+      slots: brainSlots(allIds, { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN }, settings),
     },
     lab: {
       dir: e.LAB_DIR,
       graphPath: e.GRAPH_PATH,
       playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,
-      skillsDirs: e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean),
+      // Skills the bees wrote and passed their backtest (brains/survival.ts) live in <LAB_DIR>/learned.
+      skillsDirs: [...e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean), `${e.LAB_DIR.replace(/\/+$/, "")}/learned`],
       signals: e.LAB_SIGNALS,
       coachIntervalMin: Math.max(0, e.COACH_INTERVAL_MIN),
       coachMaxCallsDay: Math.max(0, e.COACH_MAX_CALLS_DAY),
     },
+    evolution: {
+      survival: e.SURVIVAL_MODE,
+      dangerPct,
+      criticalPct,
+      survivalMaxCallsDay: Math.max(0, e.SURVIVAL_MAX_CALLS_DAY),
+      rewards: e.REWARDS,
+      maxLimitBoost: e.REWARD_MAX_LIMIT_BOOST,
+      boostLimits: mode !== "live" || e.REWARDS_IN_LIVE,
+    },
   };
+}
+
+/** Main bees: BEE1_BRAIN..BEE3_BRAIN. Extra bees: the brain picked when they were added, else they take turns. */
+function brainSlots(ids: BeeId[], main: Record<(typeof BEES)[number], BrainId>, settings: Settings | null): Record<BeeId, BrainId> {
+  const out = {} as Record<BeeId, BrainId>;
+  ids.forEach((id, i) => {
+    out[id] = (main as Record<string, BrainId>)[id] ?? settings?.bees[i]?.brain ?? BRAINS[i % BRAINS.length]!;
+  });
+  return out;
 }
 
 /** Brain keys from the environment first, then the Setup file. A brain without a key is left out. */
@@ -386,7 +460,7 @@ export function labEnv(env: NodeJS.ProcessEnv = process.env, settings: Settings 
     dir: e.LAB_DIR,
     graphPath: e.GRAPH_PATH,
     playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,
-    skillsDirs: e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean),
+    skillsDirs: [...e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean), `${e.LAB_DIR.replace(/\/+$/, "")}/learned`],
     takerFeeRate: e.TAKER_FEE_RATE,
     maxLeverage: e.MAX_LEVERAGE,
   };

@@ -17,7 +17,8 @@ const PlaybookSkill = z.object({
 export type PlaybookSkill = z.infer<typeof PlaybookSkill>;
 
 const BeePlan = z.object({
-  brain: z.union([z.enum(BRAINS), z.literal("rules")]),
+  // "ensemble": several brains combined in a survival or reward council (brains/survival.ts).
+  brain: z.union([z.enum(BRAINS), z.literal("rules"), z.literal("ensemble")]),
   model: z.string(),
   skills: z.array(PlaybookSkill).max(6),
   lessons: z.array(z.string()).max(10).default([]),

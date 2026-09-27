@@ -15,6 +15,12 @@ export class LabSignals {
     private playbook: () => Playbook | null,
   ) {}
 
+  /** A skill a bee just wrote and backtested (brains/survival.ts): usable in votes right away. */
+  register(skill: Skill): void {
+    this.skills.set(skill.id, skill);
+    this.cache.clear();
+  }
+
   /** `coins` maps instId -> coin ticker. Returns null when the bee has no playbook or no vote could be computed. */
   votes(slot: string, coins: Array<{ instId: string; coin: string }>, candles: (instId: string) => Candle[]): Record<string, number> | null {
     const plan = this.playbook()?.bees[slot];

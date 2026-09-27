@@ -168,6 +168,11 @@ on its own API key. The brains are slow and strategic; they never place an order
 - **Live.** With `LAB_SIGNALS=true` Jev sees each bee's skill vote per coin as a tiebreaker; with `COACH_INTERVAL_MIN`
   set the brains re-weight their skills from the bee's real results while it trades.
 
+**Survival and rewards.** Every bee knows it can die at the retire line: in danger it trades smaller and several
+brains combine to rescue it, writing and backtesting new skills if they must. Profitable bees earn points and levels
+that unlock prizes (more skills, skill writing, extra brains, bigger limits, never more leverage). The owner can add
+up to six more bees and edit what every bee trades.
+
 On the dashboard, **Lab & hive mind** (`#/lab`) shows the ranking, each bee's playbook and the graph, and **Admin**
 (`#/admin`, owner password) configures keys, bees, brains, risk limits and style knobs, runs the lab and restarts
 the engine. Trading mode and exchange keys stay in `.env`.

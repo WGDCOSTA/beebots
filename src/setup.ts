@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { BEES } from "./config.js";
+import { BEES, isBeeId } from "./config.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send } from "./gate.js";
 import { checkJevKey } from "./jev.js";
 import { log } from "./log.js";
@@ -105,7 +105,7 @@ export function imageDir(settingsPath: string): string {
 }
 
 export function imagePath(settingsPath: string, slot: string): string | null {
-  if (!(BEES as readonly string[]).includes(slot)) return null;
+  if (!isBeeId(slot)) return null;
   const p = join(imageDir(settingsPath), `${slot}.jpg`);
   return existsSync(p) ? p : null;
 }

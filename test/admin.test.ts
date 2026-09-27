@@ -34,8 +34,12 @@ function settingsFile(): string {
 
 const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null };
 
-function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks> } = {}) {
+function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[] } = {}) {
   const settingsPath = settingsFile();
+  const forgotten: string[] = [];
+  const revived: string[] = [];
+  const imported: string[] = [];
+  const labDir = join(settingsPath, "..", "lab");
   let hash = HASH;
   let restarted = 0;
   const started: Array<[string, unknown]> = [];
@@ -53,6 +57,18 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks> } 
     playbook: () => null,
     onPasswordChanged: (h) => (hash = h),
     restart: () => restarted++,
+    coins: () => ["BTC", "ETH", "SOL", "DOGE"],
+    runningBees: () => ["bee1", "bee2", "bee3"],
+    isFlat: (id) => !(opts.holding ?? []).includes(id),
+    forgetBee: (id) => forgotten.push(id),
+    revive: (id) => {
+      if (id === "bee2") throw new Error("This bee still holds a position; it must be flat before it can be revived.");
+      revived.push(id);
+    },
+    council: async () => null,
+    evolution: () => ({ board: [] }),
+    registerSkill: (sk) => imported.push(sk.id),
+    labDir,
   });
   async function call(path: string, body: unknown = {}, password = PW) {
     const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
@@ -67,7 +83,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks> } 
     await admin.handle(req as never, res as never, path);
     return out as { status: number; body: Record<string, unknown> & { error?: string } };
   }
-  return { admin, call, settingsPath, started, restarted: () => restarted, hash: () => hash };
+  return { admin, call, settingsPath, started, restarted: () => restarted, hash: () => hash, forgotten, revived, imported, labDir };
 }
 
 describe("admin fields", () => {
@@ -155,6 +171,9 @@ describe("admin API", () => {
     expect(r.status).toBe(200);
     const s = loadSettings(h.settingsPath)!;
     expect(s.bees[1]).toMatchObject({ name: "Calm", coins: ["DOGE"], style: "boozy", image: true });
+    // Coins must be tradable right now.
+    const badCoin = await h.call("/admin/bees", { bees: [bees[0], { ...bees[1], coins: ["NOPE"] }, bees[2]] });
+    expect(badCoin.body.error).toMatch(/Not tradable.*NOPE/);
     expect((await h.call("/admin/bees", { bees: [{ ...bees[0], name: "Bizzy" }, bees[1], bees[2]] })).body.error).toMatch(/official bee/);
   });
 
@@ -176,6 +195,59 @@ describe("admin API", () => {
     await h.call("/admin/restart");
     await new Promise((r) => setTimeout(r, 600));
     expect(h.restarted()).toBe(1);
+  });
+});
+
+describe("adding and removing bees", () => {
+  const base = [
+    { name: "Zippy", tagline: "", rules: "", coins: ["BTC"], style: "bizzy" },
+    { name: "Calm", tagline: "", rules: "", coins: ["BTC", "ETH"], style: "breezy" },
+    { name: "Wild", tagline: "", rules: "", coins: [], style: "boozy" },
+  ];
+
+  it("adds extra bees with fresh books and their own brain, up to nine", async () => {
+    const h = harness();
+    const r = await h.call("/admin/bees", { bees: [...base, { name: "Scout", tagline: "the new one", rules: "Trade SOL.", coins: ["SOL"], style: "boozy", brain: "claude" }] });
+    expect(r.status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.bees[3]).toMatchObject({ name: "Scout", coins: ["SOL"], brain: "claude", image: false });
+    expect(h.forgotten).toEqual(["bee4"]);
+    const listed = (r.body.bees as Array<{ slot: string; extra: boolean; running: boolean }>)[3]!;
+    expect(listed).toMatchObject({ slot: "bee4", extra: true, running: false });
+    const ten = Array.from({ length: 10 }, (_, i) => ({ ...base[2], name: `B${i}` }));
+    expect((await h.call("/admin/bees", { bees: ten })).status).toBe(400);
+    expect((await h.call("/admin/bees", { bees: base.slice(0, 2) })).status).toBe(400);
+  });
+
+  it("removes only the last bees, and only while they are flat", async () => {
+    const h = harness({ holding: ["bee4"] });
+    await h.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout" }] });
+    const r = await h.call("/admin/bees", { bees: base });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/bee4 still holds a position/);
+    const h2 = harness();
+    await h2.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout" }] });
+    expect((await h2.call("/admin/bees", { bees: base })).status).toBe(200);
+    expect(loadSettings(h2.settingsPath)!.bees).toHaveLength(3);
+  });
+
+  it("revives a dead bee, and explains when it cannot", async () => {
+    const h = harness();
+    expect((await h.call("/admin/revive", { bee: "bee3" })).status).toBe(200);
+    expect(h.revived).toEqual(["bee3"]);
+    expect((await h.call("/admin/revive", { bee: "bee2" })).body.error).toMatch(/must be flat/);
+    expect((await h.call("/admin/revive", { bee: "../etc" })).status).toBe(400);
+  });
+
+  it("imports a skill: compiled, backtested, saved and made live", async () => {
+    const h = harness();
+    const skill = { id: "owner_dip", name: "Owner dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } };
+    const r = await h.call("/admin/skills/import", { json: JSON.stringify(skill) });
+    expect(r.status).toBe(200);
+    expect(r.body.backtest).toHaveProperty("score");
+    expect(h.imported).toEqual(["owner_dip"]);
+    expect(existsSync(join(h.labDir, "learned", "owner_owner_dip.json"))).toBe(true);
+    expect((await h.call("/admin/skills/import", { json: "{nope" })).body.error).toMatch(/not valid JSON/);
+    expect((await h.call("/admin/skills/import", { json: JSON.stringify({ ...skill, long: { entry: [{ left: "magic(1)", op: ">", right: 1 }], exit: skill.long.exit } }) })).body.error).toMatch(/unknown indicator/);
   });
 });
 

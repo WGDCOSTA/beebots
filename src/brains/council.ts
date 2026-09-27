@@ -6,10 +6,12 @@ import { brainNode, contextFor, registerBees, skillNode, type BeeProfile } from 
 import { nodeId, type KnowledgeGraph } from "../graph/graph.js";
 import type { Ranking, SkillResult } from "../lab/tournament.js";
 import { log } from "../log.js";
+import type { BeeId } from "../config.js";
 import { BRAIN_INFO, type BrainId, type LlmClient } from "./llm.js";
 import { NATURAL_FAMILY, type BeePlan, type Playbook, type PlaybookSkill } from "./playbook.js";
 
 export interface CouncilBee extends BeeProfile {
+  slot: BeeId;
   brain: BrainId;
 }
 

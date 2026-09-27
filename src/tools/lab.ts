@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { runCouncil, type CouncilBee } from "../brains/council.js";
 import { BRAIN_INFO, BRAINS, checkClaudeKey, checkKimiKey, makeClients } from "../brains/llm.js";
 import { loadPlaybook, savePlaybook } from "../brains/playbook.js";
-import { BEES, labEnv, withOverrides } from "../config.js";
+import { BEES, labEnv, MAX_BEES, slotId, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
 import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
@@ -61,10 +61,13 @@ const insts = (f: Record<string, string>) => (f.inst ? f.inst.split(",").map((s)
 
 function councilBees(): CouncilBee[] {
   const clients = makeClients(env.creds);
-  return BEES.map((slot, i) => {
+  // The main three, then any extra bees added from the admin panel.
+  const n = Math.max(BEES.length, Math.min(MAX_BEES, settings?.bees.length ?? 0));
+  return Array.from({ length: n }, (_, i) => {
+    const slot = slotId(i);
     const b = settings?.bees[i];
-    const style = b?.style ?? (["bizzy", "breezy", "boozy"] as const)[i]!;
-    const brain = env.slots[slot];
+    const style = b?.style ?? (["bizzy", "breezy", "boozy"] as const)[i] ?? "boozy";
+    const brain = env.slots[slot] ?? b?.brain ?? BRAINS[i % BRAINS.length]!;
     return {
       slot,
       name: b?.name ?? STYLE_INFO[style].name,

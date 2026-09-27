@@ -131,6 +131,57 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
   risk vetoes) and re-weights its adopted skills. It may drop a skill but never add one; new skills only come from a
   lab run and the council. At most `COACH_MAX_CALLS_DAY` calls a day.
 
+## More bees
+
+The three main bees are the live dashboard's columns, Setup's bees and the Hive's slots. From **Admin → Bees** the
+owner can add up to six more (slots `bee4`..`bee9`, nine in all), each with its own name, style, assets, rules and
+brain (ChatGPT, Claude or Kimi), and edit the assets every bee may trade (chips from OKX's live coin list). New bees
+start with fresh paper money after a restart; only the last bees can be removed, and only while flat. Extra bees race
+in the leaderboard, the "Challengers" card, the lab and the councils; the Hive shows the main three. Outside paper
+trading an extra bee needs its own exchange keys in `.env` (`BEE4_OKX_DEMO_API_KEY`, …) or it sits out.
+
+## Survival mode
+
+Every bee knows it can die. Its **health** is equity as a % of its start:
+
+| Tier | Health | What changes |
+|---|---|---|
+| ★ thriving | ≥ 110% | nothing |
+| ● healthy | ≥ `SURVIVAL_DANGER_PCT` (80) | nothing |
+| ⚠ danger | below 80 | position size ×0.6; a survival council meets |
+| ✚ critical | below `SURVIVAL_CRITICAL_PCT` (60) | size ×0.35; every available brain joins its council |
+| ✖ dead | at `BEE_RETIRE_AT_PCT` (40) | the risk layer retires it: no more trading until the owner revives it |
+
+Jev sees `survival: { health, tier, deathAt }` in every snapshot with one line of instructions: protect capital first
+in danger. The **survival council** (`src/brains/survival.ts`) combines brains: the bee's own brain answers first,
+then the others, each reading its teammates' advice. Their skill picks are averaged (in danger, stable low-drawdown
+skills are favoured), and each brain may write a **new skill** in the JSON rule language. A written skill is
+compiled, backtested walk-forward on the lab's history and adopted only with a positive out-of-sample score and 50%+
+stability; it is saved to `<LAB_DIR>/learned/` (named after its author, e.g. `bee4_calm_trend`), used by the lab
+votes at once and ranked in every later lab run. A death is written into the hive mind as a lesson. **Revive** (Admin
+→ Bees) gives a dead bee fresh paper money; it keeps half its points and all its lessons.
+
+## Rewards
+
+At each UTC day's end every living bee scores: **+10 points per 1% gained** (losses cost half that rate), **+1 for
+surviving the day**, **+5 for the day's best bee**. Points never go below zero. Levels and prizes:
+
+| Level | Points | Prizes |
+|---|---|---|
+| 0 | 0 | 3 skills in its playbook |
+| 1 | 50 | 4 skills, **writes new skills** in its councils, +10% max position |
+| 2 | 150 | 5 skills, +20% max position, +1 trade a day |
+| 3 | 300 | 6 skills, **one extra brain** in its councils, +30% max position |
+| 4 | 500 | +40% max position, +2 trades a day |
+| 5 | 800 | **two extra brains**, +50% max position (`REWARD_MAX_LIMIT_BOOST`) |
+
+A level-up wakes a reward council (the prize in action). Leverage is never raised (hard rule: `MAX_LEVERAGE` ≤ 2
+still caps every position), and with real money limit boosts are off unless `REWARDS_IN_LIVE=true`. The Lab page's
+**Evolution** table ranks the bees by points with health, level progress, prizes, the last days and deaths.
+
+Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`, `SURVIVAL_DANGER_PCT`,
+`SURVIVAL_CRITICAL_PCT`, `SURVIVAL_MAX_CALLS_DAY`, `REWARDS`, `REWARD_MAX_LIMIT_BOOST`, `REWARDS_IN_LIVE`.
+
 ## Dashboard pages
 
 - **`#/lab` – Lab & hive mind** (public, read-only, like the rest of the dashboard):
@@ -144,11 +195,13 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
   - **Overview**: mode, keys, brains, hive-mind size, the current lab job, restart;
   - **API keys**: Jev, OpenAI, Anthropic, Kimi. Write-only (the page only learns whether a key is set and where from),
     each tested with a free call before saving; keys set in `.env` stay there;
-  - **Bees**: name, tagline, style, coins and rules of the three bees (the style is re-checked against the coins);
+  - **Bees**: add or remove bees, and edit each one's name, tagline, style, assets (coin picker), rules and brain;
+    see its health and level, revive a dead bee, or convene its brains now;
   - **Settings**: brains and models, Jev's cap, every risk limit, the per-style knobs, cadence and alerts. Saved as
     overrides in `admin.json`; a variable set in the environment always wins and shows as "set in .env";
-  - **Lab & learning**: start fetch / run / council / cycle (a child process, so the engine keeps trading), watch
-    its log, run a coach review, turn `LAB_SIGNALS` and the coach on;
+  - **Lab, skills & evolution**: start fetch / run / council / cycle (a child process, so the engine keeps trading),
+    watch its log, run a coach review, **import a skill** (compiled and backtested on the spot), and set learning,
+    survival and rewards;
   - **Security**: change the owner password.
 
   Saved changes apply after **Restart engine** (the engine exits and Docker starts it again). The trading mode,

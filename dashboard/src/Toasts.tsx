@@ -1,5 +1,5 @@
 import { signed } from "./BeeColumn";
-import { BEE_META } from "./types";
+import { beeMeta } from "./types";
 import type { Toast } from "./useFeed";
 
 const PURPOSE: Record<string, string> = {
@@ -20,7 +20,7 @@ export function Toasts({ toasts }: { toasts: Toast[] }) {
   return (
     <div className="toasts" aria-live="polite">
       {toasts.map((t) => {
-        const meta = BEE_META[t.bee];
+        const meta = beeMeta(t.bee);
         const closing = t.purpose !== "open" && t.purpose !== "add";
         const net = t.realisedUsd - t.feeUsd;
         return (

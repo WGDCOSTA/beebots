@@ -4,13 +4,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
 import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type KeyName } from "./panelTypes";
+import { TIER_INFO } from "./types";
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "keys", label: "API keys" },
   { id: "bees", label: "Bees" },
   { id: "settings", label: "Settings" },
-  { id: "lab", label: "Lab & learning" },
+  { id: "lab", label: "Lab, skills & evolution" },
   { id: "security", label: "Security" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -175,58 +176,165 @@ function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
   );
 }
 
+type BeeDraft = { slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; brain: string; extra: boolean; running: boolean; flat: boolean; isNew?: boolean };
+
+/** Asset picker: chips for the coins tradable right now, plus free text when the market is not loaded. */
+function CoinPicker({ all, value, onChange }: { all: string[]; value: string[]; onChange: (c: string[]) => void }) {
+  const [q, setQ] = useState("");
+  const toggle = (c: string) => onChange(value.includes(c) ? value.filter((x) => x !== c) : [...value, c].slice(0, 20));
+  if (!all.length)
+    return <input className="pinput mono" value={value.join(", ")} placeholder="BTC, ETH (empty = any coin)" onChange={(e) => onChange(e.target.value.split(/[\s,]+/).map((c) => c.trim().toUpperCase()).filter(Boolean))} />;
+  const shown = all.filter((c) => !q || c.includes(q.toUpperCase())).slice(0, 60);
+  return (
+    <div className="coin-picker">
+      <div className="coin-selected">
+        {value.length ? (
+          value.map((c) => (
+            <button key={c} className="chip on" onClick={() => toggle(c)} title="Remove">
+              {c} ×
+            </button>
+          ))
+        ) : (
+          <span className="dim small">Any coin (none picked)</span>
+        )}
+      </div>
+      <input className="pinput small" placeholder={`Search ${all.length} coins…`} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="coin-list">
+        {shown.map((c) => (
+          <button key={c} className={`chip ${value.includes(c) ? "on" : ""}`} onClick={() => toggle(c)}>
+            {c}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
-  const [bees, setBees] = useState(() => s.bees?.map((b) => ({ ...b, coinsText: b.coins.join(", ") })) ?? null);
+  const [bees, setBees] = useState<BeeDraft[] | null>(
+    () => s.bees?.map((b) => ({ slot: b.slot, name: b.name, tagline: b.tagline, rules: b.rules, coins: b.coins, style: b.style, brain: b.brain ?? "openai", extra: b.extra, running: b.running, flat: b.flat })) ?? null,
+  );
   if (!bees) return <div className="pcard">The original three bees run without a Setup file, so there is nothing to edit here. Design your own bees on Setup to customise them.</div>;
-  const set = (i: number, patch: Partial<(typeof bees)[number]>) => setBees(bees.map((b, j) => (j === i ? { ...b, ...patch } : b)));
+  const evo = new Map((s.evolution?.board ?? []).map((r) => [r.bee, r]));
+  const set = (i: number, patch: Partial<BeeDraft>) => setBees(bees.map((b, j) => (j === i ? { ...b, ...patch } : b)));
+  const add = () =>
+    setBees([
+      ...bees,
+      { slot: `bee${bees.length + 1}`, name: "", tagline: "", rules: "", coins: [], style: "boozy", brain: ["openai", "claude", "kimi"][bees.length % 3]!, extra: true, running: false, flat: true, isNew: true },
+    ]);
   const save = () =>
     call(
       "bees",
-      { bees: bees.map((b) => ({ name: b.name, tagline: b.tagline, rules: b.rules, style: b.style, coins: b.coinsText.split(/[\s,]+/).map((c) => c.trim().toUpperCase()).filter(Boolean) })) },
+      { bees: bees.map((b) => ({ name: b.name.trim(), tagline: b.tagline, rules: b.rules, style: b.style, coins: b.coins, ...(b.extra ? { brain: b.brain } : {}) })) },
       "Bees saved. Restart the engine to apply.",
     );
+  const last = bees.length - 1;
   return (
     <>
       <div className="bee-edit-grid">
-        {bees.map((b, i) => (
-          <div className="pcard" key={b.slot}>
-            <h3>Bee {i + 1}</h3>
-            <label className="plabel">
-              Name
-              <input className="pinput" value={b.name} maxLength={24} onChange={(e) => set(i, { name: e.target.value })} />
-            </label>
-            <label className="plabel">
-              Tagline
-              <input className="pinput" value={b.tagline} maxLength={40} onChange={(e) => set(i, { tagline: e.target.value })} />
-            </label>
-            <label className="plabel">
-              Trading style
-              <select className="pinput" value={b.style} onChange={(e) => set(i, { style: e.target.value })}>
-                {s.styles.map((st) => (
-                  <option key={st.id} value={st.id}>
-                    {st.label}
-                  </option>
-                ))}
-              </select>
+        {bees.map((b, i) => {
+          const e = evo.get(b.slot);
+          const t = e ? TIER_INFO[e.tier] : null;
+          return (
+            <div className="pcard" key={b.slot}>
+              <div className="bee-card-head">
+                <h3>
+                  {b.name || "New bee"} <span className="dim mono small">{b.slot}</span>
+                </h3>
+                {b.extra && <span className="badge">extra</span>}
+                {b.isNew || !b.running ? <span className="badge">starts after restart</span> : null}
+              </div>
+              {e && t && (
+                <div className={`evo-line ${t.tone}`}>
+                  {t.icon} {t.label} · health {e.health.toFixed(1)}% · L{e.level} · {e.points} pts{e.deaths ? ` · ${e.deaths} death${e.deaths > 1 ? "s" : ""}` : ""}
+                </div>
+              )}
+              <div className="row-actions compact">
+                {e?.tier === "dead" && (
+                  <button className="pbtn small" disabled={!b.flat} title={b.flat ? "" : "Flat first"} onClick={() => confirm(`Revive ${b.name} with fresh paper money? It keeps half its points and all its lessons.`) && void call("revive", { bee: b.slot }, `${b.name} revived.`)}>
+                    ✚ Revive
+                  </button>
+                )}
+                {b.running && e?.tier !== "dead" && (
+                  <button className="pbtn ghost small" onClick={() => void call("council", { bee: b.slot }, `Council convened for ${b.name}.`)}>
+                    Convene its brains
+                  </button>
+                )}
+              </div>
+              <label className="plabel">
+                Name
+                <input className="pinput" value={b.name} maxLength={24} onChange={(ev) => set(i, { name: ev.target.value })} />
+              </label>
+              <label className="plabel">
+                Tagline
+                <input className="pinput" value={b.tagline} maxLength={40} onChange={(ev) => set(i, { tagline: ev.target.value })} />
+              </label>
+              <div className="form-grid two">
+                <label className="plabel">
+                  Trading style
+                  <select className="pinput" value={b.style} onChange={(ev) => set(i, { style: ev.target.value })}>
+                    {s.styles.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {b.extra ? (
+                  <label className="plabel">
+                    Thinks with
+                    <select className="pinput" value={b.brain} onChange={(ev) => set(i, { brain: ev.target.value })}>
+                      {["openai", "claude", "kimi"].map((x) => (
+                        <option key={x} value={x}>
+                          {BRAIN_LABEL[x]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="plabel dim small">Brain: Settings → Brains and models</div>
+                )}
+              </div>
               <span className="dim small">{s.styles.find((x) => x.id === b.style)?.blurb} Breakout needs coins within BTC/ETH/SOL/HYPE and Trend within BTC/ETH; otherwise the bee runs on Momentum.</span>
-            </label>
-            <label className="plabel">
-              Coins (empty = any)
-              <input className="pinput mono" value={b.coinsText} placeholder="BTC, ETH" onChange={(e) => set(i, { coinsText: e.target.value })} />
-            </label>
-            <label className="plabel">
-              Rules Jev reads every tick
-              <textarea className="pinput" rows={5} maxLength={500} value={b.rules} onChange={(e) => set(i, { rules: e.target.value })} />
-              <span className="dim small num">{b.rules.length}/500</span>
-            </label>
-          </div>
-        ))}
+              <div className="plabel">
+                Assets it may trade
+                <CoinPicker all={s.coins} value={b.coins} onChange={(c) => set(i, { coins: c })} />
+              </div>
+              <label className="plabel">
+                Rules Jev reads every tick
+                <textarea className="pinput" rows={4} maxLength={500} value={b.rules} onChange={(ev) => set(i, { rules: ev.target.value })} />
+                <span className="dim small num">{b.rules.length}/500</span>
+              </label>
+              {b.extra && i === last && (
+                <button
+                  className="pbtn ghost small"
+                  disabled={!b.flat}
+                  title={b.flat ? "" : "It holds a position: it must be flat first"}
+                  onClick={() => confirm(`Remove ${b.name || "this bee"}? Its history stays in the database.`) && setBees(bees.slice(0, -1))}
+                >
+                  Remove this bee
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {bees.length < s.maxBees && (
+          <button className="pcard add-bee" onClick={add}>
+            <span className="add-plus">+</span>
+            <span>Add a bee</span>
+            <span className="dim small">
+              {bees.length}/{s.maxBees} · starts with fresh paper money after a restart
+            </span>
+          </button>
+        )}
       </div>
       <div className="row-actions">
-        <button className="pbtn" onClick={() => void save()}>
+        <button className="pbtn" disabled={bees.some((b) => !b.name.trim())} onClick={() => void save()}>
           Save bees
         </button>
-        <span className="dim small">Portraits are painted on Setup. A bee's history and money are kept when you rename it.</span>
+        <span className="dim small">
+          Extra bees race here and in the lab; the Hive leaderboard shows the main three. Outside paper trading an extra bee needs its own exchange keys in .env (BEE4_OKX_DEMO_API_KEY, …) or it sits out.
+        </span>
       </div>
     </>
   );
@@ -335,7 +443,44 @@ function SettingsTab({ s, call, only }: { s: AdminState; call: (path: string, bo
   );
 }
 
-function LabTab({ s, call, refresh }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void> }) {
+function ImportSkill({ password }: { password: string }) {
+  const [json, setJson] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState<{ ok: boolean; text: string } | null>(null);
+  const go = async () => {
+    setBusy(true);
+    setOut(null);
+    try {
+      const r = await adminCall<{ skill: { id: string }; backtest: { score: number; returnPct: number; stabilityPct: number; trades: number; maxDrawdownPct: number } }>("skills/import", password, { json });
+      const b = r.backtest;
+      setOut({
+        ok: b.score > 0,
+        text: `${r.skill.id} saved.${b.score > 0 ? "" : " It did not beat its costs out of sample, so councils will pass on it unless new data says otherwise."} Quick walk-forward backtest: score ${b.score.toFixed(2)}, out of sample ${b.returnPct.toFixed(1)}%, stable ${b.stabilityPct.toFixed(0)}%, ${b.trades} trades, max drawdown ${b.maxDrawdownPct.toFixed(1)}%. It joins every lab run from now on.`,
+      });
+      setJson("");
+    } catch (e) {
+      setOut({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="pcard">
+      <h3>Import a skill</h3>
+      <p className="dim">
+        Paste a skill in the JSON rule language (see <span className="mono">skills/README.md</span>; Freqtrade-style <span className="mono">roi</span> / <span className="mono">stoploss</span> /{" "}
+        <span className="mono">trailing</span> exits work). It is compiled, backtested walk-forward and saved; the lab ranks it with the others and a council can adopt it.
+      </p>
+      <textarea className="pinput mono" rows={8} value={json} onChange={(e) => setJson(e.target.value)} placeholder='{"id":"my_dip","name":"My dip","family":"mean_reversion","long":{"entry":[{"left":"rsi(14)","op":"<","right":30}],"exit":[{"left":"rsi(14)","op":">","right":55}]}}' />
+      <button className="pbtn" disabled={busy || json.trim().length < 10} onClick={() => void go()}>
+        {busy ? "Backtesting…" : "Import & backtest"}
+      </button>
+      {out && <p className={out.ok ? "good" : "bad"}>{out.text}</p>}
+    </div>
+  );
+}
+
+function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void>; password: string }) {
   const [cmd, setCmd] = useState<"cycle" | "fetch" | "run" | "council">("cycle");
   const [source, setSource] = useState<"okx" | "ccxt" | "synthetic">("okx");
   const [symbols, setSymbols] = useState("BTC-USDT-SWAP,ETH-USDT-SWAP,SOL-USDT-SWAP");
@@ -483,7 +628,9 @@ function LabTab({ s, call, refresh }: { s: AdminState; call: (path: string, body
         {!s.coachAvailable && <p className="dim small">Needs at least one brain key (API keys tab).</p>}
       </div>
 
-      <SettingsTab s={s} call={call} only={["learning"]} />
+      <ImportSkill password={password} />
+
+      <SettingsTab s={s} call={call} only={["learning", "evolution"]} />
     </>
   );
 }
@@ -611,7 +758,7 @@ export function AdminPage() {
               {tab === "keys" && <KeysTab s={s} call={safeCall} />}
               {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} />}
               {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
-              {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} />}
+              {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}
               {tab === "security" && <SecurityTab call={safeCall} />}
             </div>
             <div className="row-actions end">

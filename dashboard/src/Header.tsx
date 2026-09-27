@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { money, signed } from "./BeeColumn";
 import { HiveButton } from "./Hive";
-import { PROFILE, type Snapshot } from "./types";
+import { ALL_BEES, PROFILE, type Snapshot } from "./types";
 
 function Clock() {
   const [now, setNow] = useState(Date.now());
@@ -81,7 +81,7 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
             </a>
           ) : null}
           <span className="dim">
-            day {day} · 3 bees · OKX X-Perps · not financial advice
+            day {day} · {ALL_BEES.length} bees · OKX X-Perps · not financial advice
           </span>
         </div>
       </div>

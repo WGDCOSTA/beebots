@@ -2,7 +2,7 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
-import { BEES, ConfigError, loadConfig, STYLES, withOverrides, type Config } from "./config.js";
+import { BEES, ConfigError, type BeeId, loadConfig, STYLES, withOverrides, type Config } from "./config.js";
 import { Db } from "./db.js";
 import { Engine } from "./engine.js";
 import { EventBus } from "./events.js";
@@ -30,6 +30,10 @@ import { LabJobs } from "./admin/jobs.js";
 import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
+import { SurvivalCouncil } from "./brains/survival.js";
+import { Evolution, TIERS, type BeeEvolution, type EvolutionEvent } from "./evolution.js";
+import { beeNode } from "./graph/hive-mind.js";
+import type { Ranking } from "./lab/tournament.js";
 import { KnowledgeGraph } from "./graph/graph.js";
 import { contextFor, registerBees } from "./graph/hive-mind.js";
 import { skillRegistry } from "./lab/skills/index.js";
@@ -45,7 +49,7 @@ function profile(cfg: Config | null) {
     mode: cfg?.mode ?? "dry",
     links: cfg?.links ?? null,
     bees: cfg
-      ? BEES.map((id) => {
+      ? cfg.beeIds.map((id) => {
           const s = cfg.slots[id];
           return {
             id,
@@ -112,9 +116,9 @@ async function main() {
   const demo = cfg.mode === "demo";
 
   let engine: Engine | null = null;
-  const held = () => (engine ? BEES.map((id) => engine!.bees[id]?.position?.instId).filter((x): x is string => !!x) : []);
+  const held = () => (engine ? cfg.beeIds.map((id) => engine!.bees[id]?.position?.instId).filter((x): x is string => !!x) : []);
   // News needs a key: borrow the first Momentum bee's (demo/live only).
-  const newsCreds = BEES.filter((b) => cfg.slots[b].style === "boozy").map((b) => cfg.creds[b]).find((c) => !!c);
+  const newsCreds = cfg.beeIds.filter((b) => cfg.slots[b].style === "boozy").map((b) => cfg.creds[b]).find((c) => !!c);
   const news = cfg.mode !== "dry" && newsCreds ? createNewsSource(cli, newsCreds, demo) : null;
   const feed = new MarketFeed(
     api,
@@ -148,7 +152,7 @@ async function main() {
   // The hive mind (knowledge graph) and the three LLM brains. Brains never trade: they curate skills and lessons.
   const graph = new KnowledgeGraph(cfg.lab.graphPath);
   const clients = makeClients(cfg.brains.creds);
-  const councilBees: CouncilBee[] = BEES.map((id) => {
+  const councilBees: CouncilBee[] = cfg.beeIds.map((id) => {
     const s = cfg.slots[id];
     const brain = cfg.brains.slots[id];
     return { slot: id, name: s.name, style: s.style, rules: s.rules, coins: s.coins, brain, model: clients[brain]?.model ?? "rules" };
@@ -158,13 +162,71 @@ async function main() {
   const registry = skillRegistry(cfg.lab.skillsDirs);
   for (const e of registry.errors) log.warn("skill import failed", { error: e });
   const signals = cfg.lab.signals ? new LabSignals(new Map(registry.skills.map((s) => [s.id, s])), () => playbook.get()) : null;
-  log.info("brains", { brains: BEES.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, coachMin: cfg.lab.coachIntervalMin });
+  if (cfg.skippedBees.length) log.warn("extra bees sit out: no exchange keys for this mode", { bees: cfg.skippedBees.join(",") });
+  log.info("brains", { brains: cfg.beeIds.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, coachMin: cfg.lab.coachIntervalMin });
+
+  // Survival and rewards: health tiers, points, levels, prizes (evolution.ts), and the councils they wake.
+  const rankingPath = join(cfg.lab.dir, "ranking.json");
+  let fullRanking: { at: number; r: Ranking | null } = { at: 0, r: null };
+  const readRanking = (): Ranking | null => {
+    if (Date.now() - fullRanking.at > 60_000) {
+      try {
+        fullRanking = { at: Date.now(), r: JSON.parse(readFileSync(rankingPath, "utf8")) as Ranking };
+      } catch {
+        fullRanking = { at: Date.now(), r: null };
+      }
+    }
+    return fullRanking.r;
+  };
+  let survival: SurvivalCouncil | null = null;
+  const beeByslot = (id: BeeId) => councilBees.find((b) => b.slot === id);
+  const onEvolution = (e: EvolutionEvent) => {
+    bus.emit("evolution", { ...e, name: cfg.slots[e.bee]?.name ?? e.bee });
+    const name = cfg.slots[e.bee]?.name ?? e.bee;
+    if (e.kind === "tier") {
+      const worse = TIERS.indexOf(e.to) > TIERS.indexOf(e.from);
+      if (e.to === "dead") {
+        graph.learn(beeNode(e.bee), `${name} died at ${e.health.toFixed(1)}% of its start. What it held and how it traded led here; the next life should avoid it.`, [], { source: "death" });
+        alerts.send(`${name} died (equity ${e.health.toFixed(1)}% of start). Revive it from the admin panel.`);
+      } else if (worse && (e.to === "danger" || e.to === "critical") && cfg.evolution.survival) {
+        const bee = beeByslot(e.bee);
+        if (bee) void survival?.convene(bee, "survival").catch((err) => log.warn("survival council failed", { bee: e.bee, err: safeError(err) }));
+      }
+    }
+    if (e.kind === "level" && e.to > e.from) {
+      graph.post(beeNode(e.bee), "hive", `${name} reached level ${e.to} with ${e.points} points.`, { source: "rewards" });
+      const bee = beeByslot(e.bee);
+      if (bee) void survival?.convene(bee, "reward").catch((err) => log.warn("reward council failed", { bee: e.bee, err: safeError(err) }));
+    }
+  };
+  let savedEvolution: Partial<Record<BeeId, BeeEvolution>> = {};
+  try {
+    savedEvolution = JSON.parse(db.getMeta("evolution") ?? "{}") as Partial<Record<BeeId, BeeEvolution>>;
+  } catch {
+    /* start fresh */
+  }
+  const evolution = new Evolution(
+    { ...cfg.evolution, deathPct: cfg.risk.retireAtPct, startEquityUsd: cfg.risk.startEquityUsd },
+    savedEvolution,
+    onEvolution,
+  );
+  survival = new SurvivalCouncil({
+    graph,
+    evolution,
+    clients,
+    playbookPath: cfg.lab.playbookPath,
+    learnedDir: join(cfg.lab.dir, "learned"),
+    historyDir: join(cfg.lab.dir, "history"),
+    ranking: readRanking,
+    onNewSkill: (skill) => signals?.register(skill),
+    maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
+  });
 
   engine = new Engine({
-    cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest,
+    cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
     ...(signals
       ? {
-          labVotes: (id: (typeof BEES)[number], instIds: string[]) => {
+          labVotes: (id: BeeId, instIds: string[]) => {
             const view = feed.view();
             const coins = instIds.map((instId) => ({ instId, coin: view.instruments.get(instId)?.coin ?? instId.split("-")[0]! }));
             return signals.votes(id, coins, (instId) => feed.candles1h(instId));
@@ -176,7 +238,6 @@ async function main() {
   await engine.start();
   const coach = new Coach({ graph, db, clients, bees: councilBees, playbookPath: cfg.lab.playbookPath, intervalMin: cfg.lab.coachIntervalMin, maxCallsPerDay: cfg.lab.coachMaxCallsDay });
   coach.start();
-  const rankingPath = join(cfg.lab.dir, "ranking.json");
   let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
   const labRanking = () => {
     if (Date.now() - rankingCache.at > 30_000) {
@@ -216,7 +277,8 @@ async function main() {
       return {
         startedAt: snap.startedAt,
         startEquityUsd: snap.startEquityUsd,
-        bees: snap.bees.map((b) => {
+        // The Hive leaderboard knows the three main slots only; extra bees race locally.
+        bees: snap.bees.filter((b) => (BEES as readonly string[]).includes(b.bee)).map((b) => {
           const s = cfg.slots[b.bee];
           return { slot: b.bee, name: s.name, style: s.style, tagline: s.tagline, rules: s.rules, coins: s.coins, equityUsd: b.equityUsd, fundingUsd: b.totals.fundingUsd, cap: b.cap, tradesToday: b.tradesToday };
         }),
@@ -256,6 +318,29 @@ async function main() {
       ownerHash = hash;
     },
     restart: () => shutdown("admin restart"),
+    coins: () => {
+      const set = new Set<string>();
+      for (const i of feed.view().instruments.values()) if (i.kind === "crypto" && i.state === "live") set.add(i.coin);
+      return [...set].sort();
+    },
+    runningBees: () => cfg.beeIds,
+    isFlat: (id) => !engine?.bees[id]?.position,
+    forgetBee: (id) => {
+      // Only a slot the engine is not running (a bee added since the last restart).
+      if (cfg.beeIds.includes(id)) return;
+      db.raw.prepare("DELETE FROM bee_state WHERE bee = ?").run(id);
+      delete evolution.bees[id];
+      engine?.saveEvolution();
+    },
+    revive: (id) => engine!.respawn(id),
+    council: async (id) => {
+      const bee = beeByslot(id);
+      if (!bee) throw new Error("That bee is not running; restart the engine after adding it.");
+      return survival?.convene(bee, "manual");
+    },
+    evolution: () => engine?.snapshot().evolution ?? null,
+    registerSkill: (skill) => signals?.register(skill),
+    labDir: cfg.lab.dir,
   });
 
   const server = startServer(

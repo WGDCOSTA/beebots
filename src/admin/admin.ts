@@ -8,7 +8,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { deriveStyle } from "../bees/custom.js";
-import { ConfigError, loadConfig, parseEnv, withOverrides, type Mode } from "../config.js";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { backtestData } from "../brains/survival.js";
+import { BEES, ConfigError, isBeeId, loadConfig, MAX_BEES, parseEnv, slotId, withOverrides, type BeeId, type Mode } from "../config.js";
+import { skillFromSpec, type Skill } from "../lab/skills/index.js";
+import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
@@ -51,6 +56,23 @@ export interface AdminOpts {
   onPasswordChanged: (hash: string) => void;
   /** Exit so Docker restarts the engine with the saved changes. */
   restart: () => void;
+  /** Coins with a live X-Perp right now (for the asset picker); [] when the market is not loaded yet. */
+  coins?: () => string[];
+  /** Bees the running engine trades, and whether one is flat (a bee may only be removed flat). */
+  runningBees?: () => BeeId[];
+  isFlat?: (id: BeeId) => boolean;
+  /** Drop the stored books of a slot about to be (re)used by a brand-new bee. */
+  forgetBee?: (id: BeeId) => void;
+  /** Revive a dead bee (fresh paper money). Throws a readable error when it cannot. */
+  revive?: (id: BeeId) => void;
+  /** Convene a council for a bee now (all the brains its tier and level allow). */
+  council?: (id: BeeId) => Promise<unknown>;
+  /** Survival and rewards board (evolution.ts). */
+  evolution?: () => unknown;
+  /** A skill the owner imported: make it live without a restart. */
+  registerSkill?: (skill: Skill) => void;
+  /** <LAB_DIR>, for imported skills and backtest history. */
+  labDir?: string;
   now?: () => number;
 }
 
@@ -65,8 +87,12 @@ const BeeEdit = z.object({
   rules: Str(500).default(""),
   coins: BeeSchema.shape.coins,
   style: z.enum(STYLES),
+  /** Extra bees only: which LLM brain it thinks with. */
+  brain: z.enum(["openai", "claude", "kimi"]).optional(),
 });
-const BeesBody = z.object({ bees: z.array(BeeEdit).length(3) });
+const BeesBody = z.object({ bees: z.array(BeeEdit).min(BEES.length).max(MAX_BEES) });
+const SlotBody = z.object({ bee: z.string() });
+const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
 const PasswordBody = z.object({ next: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD) });
 const LabBody = z.object({
   command: z.enum(LAB_COMMANDS),
@@ -123,8 +149,23 @@ export class Admin {
       pendingRestart: this.pending,
       keys,
       bees: settings
-        ? settings.bees.map((b, i) => ({ slot: `bee${i + 1}`, name: b.name, tagline: b.tagline, rules: b.rules, coins: b.coins, style: b.style, image: b.image }))
+        ? settings.bees.map((b, i) => ({
+            slot: slotId(i),
+            name: b.name,
+            tagline: b.tagline,
+            rules: b.rules,
+            coins: b.coins,
+            style: b.style,
+            image: b.image,
+            brain: b.brain ?? null,
+            extra: i >= BEES.length,
+            running: this.o.runningBees?.().includes(slotId(i)) ?? true,
+            flat: this.o.isFlat?.(slotId(i)) ?? true,
+          }))
         : null,
+      maxBees: MAX_BEES,
+      coins: this.o.coins?.() ?? [],
+      evolution: this.o.evolution?.() ?? null,
       styles: STYLES.map((s) => ({ id: s, label: STYLE_INFO[s].label, blurb: STYLE_INFO[s].blurb })),
       groups: FIELD_GROUPS.map((g) => ({ id: g, ...GROUP_INFO[g] })),
       fields: ADMIN_FIELDS.map((f) => {
@@ -245,17 +286,81 @@ export class Admin {
         const s = loadSettings(this.o.settingsPath);
         if (!s) return send(res, 409, { error: "The original three bees run without a Setup file; design your own on Setup first." });
         const names = p.data.bees.map((b) => b.name.toLowerCase());
-        if (new Set(names).size !== 3) return send(res, 400, { error: "Each bee needs its own name." });
+        if (new Set(names).size !== names.length) return send(res, 400, { error: "Each bee needs its own name." });
+        // Only the last bees can go (slots are positions: removing one in the middle would hand its books to another),
+        // and only while flat.
+        const removed = s.bees.slice(p.data.bees.length).map((_, i) => slotId(p.data.bees.length + i));
+        const holding = removed.filter((id) => this.o.isFlat && !this.o.isFlat(id));
+        if (holding.length) return send(res, 409, { error: `${holding.join(", ")} still holds a position; it must be flat before it is removed.` });
+        const known = this.o.coins?.() ?? [];
+        if (known.length) {
+          const bad = [...new Set(p.data.bees.flatMap((b) => b.coins))].filter((c) => !known.includes(c));
+          if (bad.length) return send(res, 400, { error: `Not tradable on OKX right now: ${bad.join(", ")}.` });
+        }
         const reserved = p.data.bees.find((b) => isReservedName(b.name));
         if (reserved) return send(res, 400, { error: `"${reserved.name}" belongs to an official bee.` });
+        const added: BeeId[] = [];
         const bees = p.data.bees.map((b, i) => {
           const coins = [...new Set(b.coins)];
-          return { ...s.bees[i]!, name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins) };
+          const old = s.bees[i];
+          if (!old) added.push(slotId(i));
+          const brain = i >= BEES.length ? (b.brain ?? old?.brain) : undefined;
+          return { ...(old ?? { image: false }), name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins), ...(brain ? { brain } : {}) };
         });
+        // A brand-new bee starts with fresh paper money, never with the books of a bee that once had its slot.
+        for (const id of added) this.o.forgetBee?.(id);
         saveSettings(this.o.settingsPath, { ...s, bees });
         this.pending = true;
         log.info("admin: bees saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
         return send(res, 200, this.state());
+      }
+
+      case "/admin/revive": {
+        const p = SlotBody.safeParse(body);
+        if (!p.success || !isBeeId(p.data.bee) || !this.o.revive) return send(res, 400, { error: "bee: bee1..bee9" });
+        try {
+          this.o.revive(p.data.bee);
+        } catch (err) {
+          return send(res, 409, { error: (err as Error).message });
+        }
+        log.info("admin: bee revived", { bee: p.data.bee });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/council": {
+        const p = SlotBody.safeParse(body);
+        if (!p.success || !isBeeId(p.data.bee) || !this.o.council) return send(res, 400, { error: "bee: bee1..bee9" });
+        void this.o.council(p.data.bee).catch((err) => log.warn("admin: council failed", { err: safeError(err) }));
+        return send(res, 200, { ok: true, note: "Council convened: its brains are thinking. Lessons, messages and any new skill appear in the hive mind in a minute or two." });
+      }
+
+      case "/admin/skills/import": {
+        const p = ImportBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "json: a skill in the JSON rule language" });
+        let raw: unknown;
+        try {
+          raw = JSON.parse(p.data.json);
+        } catch {
+          return send(res, 400, { error: "That is not valid JSON." });
+        }
+        let skill: Skill;
+        try {
+          skill = skillFromSpec(raw, "imported by the owner");
+        } catch (err) {
+          return send(res, 400, { error: (err as Error).message });
+        }
+        const labDir = this.o.labDir ?? "./data/lab";
+        const result = evaluateSkill(skill, backtestData(join(labDir, "history")), { ...DEFAULT_TOURNAMENT, maxCombos: 12 });
+        mkdirSync(join(labDir, "learned"), { recursive: true });
+        writeFileSync(join(labDir, "learned", `owner_${skill.id}.json`), JSON.stringify(raw, null, 2));
+        this.o.registerSkill?.(skill);
+        log.info("admin: skill imported", { id: skill.id, score: result.score.toFixed(2) });
+        return send(res, 200, {
+          ok: true,
+          skill: { id: skill.id, name: skill.name, family: skill.family },
+          backtest: { score: result.score, returnPct: result.oos.returnPct, stabilityPct: result.stabilityPct, trades: result.oos.trades, maxDrawdownPct: result.oos.maxDrawdownPct },
+          note: "Saved. It joins every lab run from now on; a council can adopt it.",
+        });
       }
 
       case "/admin/password": {
