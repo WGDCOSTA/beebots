@@ -5,7 +5,7 @@
 	# Read-only engine endpoints. Only GET is proxied; the engine refuses everything else too.
 	@api {
 		method GET
-		path /events /snapshot /history /equity /visit /health /profile /bee-image/* /setup/status /hive/status
+		path /events /snapshot /history /equity /visit /health /profile /bee-image/* /setup/status /hive/status /lab/ranking /lab/playbook /hive-mind /hive-mind/*
 	}
 	handle @api {
 		reverse_proxy engine:8080 {
@@ -37,6 +37,18 @@
 	handle @hive {
 		request_body {
 			max_size 16KB
+		}
+		reverse_proxy engine:8080
+	}
+
+	# The admin panel (#/admin on the dashboard). Every call carries the owner password; the engine checks it.
+	@admin {
+		method POST
+		path /admin/*
+	}
+	handle @admin {
+		request_body {
+			max_size 64KB
 		}
 		reverse_proxy engine:8080
 	}

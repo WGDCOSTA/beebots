@@ -123,6 +123,8 @@ export interface HiveOpts {
   ownerPasswordHash: () => string | null;
   /** File path of a bee's painted portrait (a JPEG from Setup), or null. Uploaded so the board shows it. */
   portrait?: (slot: string) => string | null;
+  /** Share one password gate (and its lockout) with the admin panel. */
+  gate?: PasswordGate;
   /** Injectable for tests. */
   fetch?: typeof fetch;
   now?: () => number;
@@ -147,7 +149,7 @@ export class Hive {
 
   constructor(private o: HiveOpts) {
     this.state = loadHive(o.path);
-    this.gate = new PasswordGate("x-owner-password", o.ownerPasswordHash, "owner password");
+    this.gate = o.gate ?? new PasswordGate("x-owner-password", o.ownerPasswordHash, "owner password");
     this.fetch = o.fetch ?? fetch;
     this.now = o.now ?? Date.now;
   }

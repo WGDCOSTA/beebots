@@ -157,6 +157,24 @@ const EnvSchema = z.object({
   ALERT_WEBHOOK_URL: opt,
 });
 
+/** Raw parsed settings (numbers, booleans, enums) for an environment; `{}` gives every default. */
+export function parseEnv(env: NodeJS.ProcessEnv): Record<string, unknown> {
+  const r = EnvSchema.safeParse(env);
+  if (!r.success) throw new ConfigError(`Invalid settings:\n  ${r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n  ")}`);
+  return r.data as Record<string, unknown>;
+}
+
+/**
+ * Admin-panel overrides under the environment: a variable set (non-blank) in the environment always wins, as for
+ * the Setup file; an override fills it in otherwise. Compose passes "" for unset variables, so blank means unset.
+ */
+export function withOverrides(env: NodeJS.ProcessEnv, overrides: Record<string, string> | null | undefined): NodeJS.ProcessEnv {
+  if (!overrides) return env;
+  const out: NodeJS.ProcessEnv = { ...env };
+  for (const [k, v] of Object.entries(overrides)) if (!(env[k] ?? "").trim()) out[k] = v;
+  return out;
+}
+
 export interface BeeKnobs {
   maxTradesPerDay: number;
   feeBudgetUsdDay: number;
