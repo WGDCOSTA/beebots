@@ -7,6 +7,18 @@ export type Family = (typeof FAMILIES)[number];
 export type Params = Record<string, number>;
 
 /**
+ * Exits in Freqtrade's terms (fractions of the entry price, 0.04 = 4%):
+ * - roi: [minutes since entry, take-profit] pairs; the pair with the largest minutes reached applies ("minimal_roi");
+ * - stoploss: a negative fraction, e.g. -0.1 closes at 10% against the entry;
+ * - trailing: once the best price is `offset` in profit, the stop follows it at `positive` behind.
+ */
+export interface Exits {
+  roi?: Array<[number, number]>;
+  stoploss?: number;
+  trailing?: { positive: number; offset: number };
+}
+
+/**
  * A trading skill: a rule that turns candles into a target position per bar. `signal(c, p)[i]` is the position
  * (+1 long, -1 short, 0 flat) wanted at the CLOSE of bar i; the simulator fills it at the next bar's open, so a skill
  * can never trade on a price it has not seen.
@@ -21,6 +33,8 @@ export interface Skill {
   grid: Record<string, number[]>;
   /** Code-side stop in ATR(14) multiples; 0/undefined = the skill's own exit only. May be a param name. */
   stopAtr?: number | string;
+  /** Freqtrade-style exits on top of the signal: time-based take profit, a fixed stop, a trailing stop. */
+  exits?: Exits;
   /** Where the skill came from: "builtin", or the file it was imported from. */
   source: string;
   signal(c: Candle[], p: Params): Int8Array;

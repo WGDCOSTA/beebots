@@ -58,7 +58,7 @@ describe("simulate", () => {
   });
 
   it("scores few-trade results down", () => {
-    const base = { totalReturnPct: 10, cagrPct: 10, sharpe: 2, sortino: 2, maxDrawdownPct: 5, calmar: 2, trades: 2, winRatePct: 100, profitFactor: 3, expectancyPct: 5, avgBars: 10, exposurePct: 50, feesPct: 0.1, benchmarkPct: 5, bars: 500 };
+    const base = { sqn: 1, totalReturnPct: 10, cagrPct: 10, sharpe: 2, sortino: 2, maxDrawdownPct: 5, calmar: 2, trades: 2, winRatePct: 100, profitFactor: 3, expectancyPct: 5, avgBars: 10, exposurePct: 50, feesPct: 0.1, benchmarkPct: 5, bars: 500 };
     expect(score({ ...base, trades: 2 })).toBeLessThan(score({ ...base, trades: 20 }));
   });
 });

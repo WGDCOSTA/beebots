@@ -1,7 +1,8 @@
 // The strategy lab, from the command line. Paper only: public market history, simulated money, no exchange account.
 //
 //   pnpm lab fetch   [--inst BTC-USDT-SWAP,ETH-USDT-SWAP] [--bar 1H] [--days 365] [--base https://www.okx.com]
-//   pnpm lab csv     <file.csv> --inst NAME [--bar 1H]          import your own history
+//   pnpm lab fetch   --exchange binance --symbol BTC/USDT,ETH/USDT [--bar 1H] [--days 365]   any of CCXT's 100+ exchanges
+//   pnpm lab import  <file.csv|file.json> --inst NAME [--bar 1H] CSV, or a Freqtrade data file (BTC_USDT-1h.json)
 //   pnpm lab skills                                              list every skill (built-in + ./skills/*.json)
 //   pnpm lab run     [--bar 1H] [--inst ...] [--synthetic 4] [--folds 3] [--leverage 1] [--fee 0.0005] [--long-only]
 //   pnpm lab council                                             each bee's brain picks skills from the last ranking
@@ -17,7 +18,7 @@ import { loadPlaybook, savePlaybook } from "../brains/playbook.js";
 import { BEES, labEnv } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
-import { BAR_MS, fetchHistory, parseCsv, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
+import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
 import { skillRegistry, type Skill } from "../lab/skills/index.js";
 import { rankingTable, runTournament, type Ranking } from "../lab/tournament.js";
 import { checkOpenAiKey } from "../openai.js";
@@ -75,7 +76,28 @@ function councilBees(): CouncilBee[] {
   });
 }
 
+async function cmdFetchCcxt(f: Record<string, string>) {
+  const exchange = f.exchange!;
+  const ex = await ccxtExchange(exchange);
+  const days = Number(f.days ?? 365);
+  for (const symbol of (f.symbol ?? "BTC/USDT,ETH/USDT,SOL/USDT").split(",").map((x) => x.trim()).filter(Boolean)) {
+    const name = `${exchange}-${symbol.replace(/[/:]/g, "-")}`;
+    process.stdout.write(`fetching ${symbol} on ${exchange} ${bar(f)} (${days} days)... `);
+    try {
+      const c = await fetchHistoryCcxt(ex, symbol, bar(f), days);
+      if (!c.length) {
+        console.log("no data");
+        continue;
+      }
+      console.log(`${c.length} candles -> ${writeCache(historyDir, name, bar(f), c)}`);
+    } catch (err) {
+      console.log(`failed: ${(err as Error).message}`);
+    }
+  }
+}
+
 async function cmdFetch(f: Record<string, string>) {
+  if (f.exchange) return cmdFetchCcxt(f);
   const rest = createOkxPublicRest({ apiBase: (f.base ?? "https://www.okx.com").replace(/\/+$/, ""), timeoutMs: 15_000 });
   const days = Number(f.days ?? 365);
   for (const instId of insts(f) ?? DEFAULT_INSTS) {
@@ -96,8 +118,9 @@ async function cmdFetch(f: Record<string, string>) {
 
 function cmdCsv(pos: string[], f: Record<string, string>) {
   const file = pos[0];
-  if (!file || !f.inst) throw new Error("usage: pnpm lab csv <file.csv> --inst NAME [--bar 1H]");
-  const c = parseCsv(readFileSync(file, "utf8"));
+  if (!file || !f.inst) throw new Error("usage: pnpm lab import <file.csv|file.json> --inst NAME [--bar 1H]");
+  const text = readFileSync(file, "utf8");
+  const c = file.toLowerCase().endsWith(".json") ? parseFreqtradeJson(text) : parseCsv(text);
   console.log(`${c.length} candles -> ${writeCache(historyDir, f.inst, bar(f), c)}`);
 }
 
@@ -114,7 +137,7 @@ function loadDatasets(f: Record<string, string>): Dataset[] {
     const instId = name.slice(0, -`_${b}.json`.length);
     if (wanted && !wanted.includes(instId)) continue;
     const c = readCache(historyDir, instId, b);
-    if (c && c.length > 300) out.push({ id: `${instId} ${b}`, instId, bar: b, candles: c, source: "okx" });
+    if (c && c.length > 300) out.push({ id: `${instId} ${b}`, instId, bar: b, candles: c, source: /^[a-z0-9]+-/.test(instId) ? "ccxt" : "okx" });
   }
   return out;
 }
@@ -131,11 +154,11 @@ function writeReport(r: Ranking) {
     `Walk-forward: ${r.opts.folds} out-of-sample folds over the last ${Math.round(r.opts.testFrac * 100)}% of each dataset; fee ${r.opts.sim.feeRate * 10_000} bp/side, slippage ${r.opts.sim.slippageBps} bp, leverage ${r.opts.sim.leverage}x, funding ${r.opts.sim.fundingPer8hPct}%/8h.`,
     `Paper simulation on past data. Past results do not predict future ones. Not financial advice.`,
     ``,
-    `| # | skill | family | score | OOS return | buy & hold | Sharpe | max DD | trades | stable | overfit | params |`,
-    `|---|---|---|---|---|---|---|---|---|---|---|---|`,
+    `| # | skill | family | score | OOS return | buy & hold | Sharpe | SQN | max DD | trades | stable | overfit | params |`,
+    `|---|---|---|---|---|---|---|---|---|---|---|---|---|`,
     ...r.results.map(
       (s) =>
-        `| ${s.rank} | ${s.name} (\`${s.skillId}\`) | ${s.family} | ${s.score.toFixed(2)} | ${s.oos.returnPct.toFixed(1)}% | ${s.oos.benchmarkPct.toFixed(1)}% | ${s.oos.sharpe.toFixed(2)} | ${s.oos.maxDrawdownPct.toFixed(1)}% | ${s.oos.trades} | ${s.stabilityPct.toFixed(0)}% | ${s.overfitGap.toFixed(2)} | ${Object.entries(s.params).map(([k, v]) => `${k}=${v}`).join(" ")} |`,
+        `| ${s.rank} | ${s.name} (\`${s.skillId}\`) | ${s.family} | ${s.score.toFixed(2)} | ${s.oos.returnPct.toFixed(1)}% | ${s.oos.benchmarkPct.toFixed(1)}% | ${s.oos.sharpe.toFixed(2)} | ${(s.oos.sqn ?? 0).toFixed(2)} | ${s.oos.maxDrawdownPct.toFixed(1)}% | ${s.oos.trades} | ${s.stabilityPct.toFixed(0)}% | ${s.overfitGap.toFixed(2)} | ${Object.entries(s.params).map(([k, v]) => `${k}=${v}`).join(" ")} |`,
     ),
     ...(r.errors.length ? [``, `Errors:`, ...r.errors.map((e) => `- ${e}`)] : []),
   ];
@@ -256,6 +279,7 @@ async function main() {
     case "fetch":
       return cmdFetch(f);
     case "csv":
+    case "import":
       return cmdCsv(pos, f);
     case "skills":
       return cmdSkills();

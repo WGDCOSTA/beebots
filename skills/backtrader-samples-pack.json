@@ -1,0 +1,38 @@
+{
+  "skills": [
+    {
+      "id": "bt_sma_cross",
+      "name": "SMA crossover (Backtrader quickstart style)",
+      "family": "trend",
+      "description": "Backtrader's canonical first strategy: long when the fast SMA crosses above the slow one, close on the cross back. Long only, no stop.",
+      "params": { "fast": { "default": 10, "grid": [10, 20] }, "slow": { "default": 30, "grid": [30, 50] } },
+      "long": {
+        "entry": [ { "left": "sma($fast)", "op": "crosses_above", "right": "sma($slow)" } ],
+        "exit": [ { "left": "sma($fast)", "op": "crosses_below", "right": "sma($slow)" } ]
+      }
+    },
+    {
+      "id": "bt_close_sma",
+      "name": "Close vs SMA (Backtrader sample style)",
+      "family": "trend",
+      "description": "The simplest signal in Backtrader's samples: long while the close crosses above its SMA, out when it crosses below.",
+      "params": { "n": { "default": 15, "grid": [15, 30, 50] } },
+      "long": {
+        "entry": [ { "left": "close", "op": "crosses_above", "right": "sma($n)" } ],
+        "exit": [ { "left": "close", "op": "crosses_below", "right": "sma($n)" } ]
+      }
+    },
+    {
+      "id": "bt_macd_atr",
+      "name": "MACD with ATR stop (Backtrader sample style)",
+      "family": "trend",
+      "description": "MACD line crossing its signal above a rising trend filter, protected by an ATR stop, as in Backtrader's MACD sample.",
+      "params": { "stop": { "default": 3, "grid": [2, 3] } },
+      "stopAtr": "$stop",
+      "long": {
+        "entry": [ { "left": "macd_hist", "op": "crosses_above", "right": 0 }, { "left": "sma(30)", "op": ">", "right": "sma(60)" } ],
+        "exit": [ { "left": "macd_hist", "op": "crosses_below", "right": 0 } ]
+      }
+    }
+  ]
+}

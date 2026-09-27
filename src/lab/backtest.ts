@@ -2,6 +2,7 @@
 // slippage, leverage, an optional ATR stop and perpetual funding, and never touches an exchange.
 import type { Candle } from "../market/types.js";
 import * as S from "./series.js";
+import type { Exits } from "./skills/types.js";
 
 export interface SimOpts {
   /** Taker fee per side (0.0005 = 5 bp, the engine's default). */
@@ -15,6 +16,8 @@ export interface SimOpts {
   /** Funding per 8 h settlement in % of notional, paid by longs and received by shorts (0.01 = OKX's usual base rate). */
   fundingPer8hPct: number;
   startEquity: number;
+  /** Freqtrade-style exits (skills/types.ts). */
+  exits?: Exits;
 }
 
 export const DEFAULT_SIM: SimOpts = { feeRate: 0.0005, slippageBps: 2, leverage: 1, stopAtr: 0, fundingPer8hPct: 0.01, startEquity: 1000 };
@@ -28,7 +31,7 @@ export interface Trade {
   pnlUsd: number;
   retPct: number;
   bars: number;
-  reason: "signal" | "stop" | "end";
+  reason: "signal" | "stop" | "roi" | "trailing" | "end";
 }
 
 export interface SimResult {
@@ -61,6 +64,7 @@ export function simulate(c: Candle[], sig: Int8Array, opts: Partial<SimOpts> = {
   let entryBar = 0;
   let entryCash = 0;
   let stopPx = NaN;
+  let peakPx = NaN;
   let blocked: 0 | 1 | -1 = 0;
   let feesUsd = 0;
   let fundingUsd = 0;
@@ -92,6 +96,47 @@ export function simulate(c: Candle[], sig: Int8Array, opts: Partial<SimOpts> = {
     entryBar = i;
     const atrPrev = a?.[i - 1];
     stopPx = a && atrPrev !== undefined && Number.isFinite(atrPrev) ? px - dir * o.stopAtr * atrPrev : NaN;
+    // A fixed stoploss tightens an ATR stop, never loosens it.
+    if (o.exits?.stoploss !== undefined && o.exits.stoploss < 0) {
+      const fixed = px * (1 + dir * o.exits.stoploss);
+      stopPx = Number.isFinite(stopPx) ? (dir === 1 ? Math.max(stopPx, fixed) : Math.min(stopPx, fixed)) : fixed;
+    }
+    peakPx = px;
+  };
+  const roiTable = o.exits?.roi?.length ? [...o.exits.roi].sort((x, y) => x[0] - y[0]) : null;
+  const trail = o.exits?.trailing;
+  /** Stop, trailing stop and take-profit inside bar i, checked against its range (worst case first: the stop). */
+  const exitsInBar = (i: number) => {
+    const bar = c[i]!;
+    let stop = stopPx;
+    let trailing = false;
+    if (trail && Number.isFinite(peakPx) && (side === 1 ? peakPx >= entryPx * (1 + trail.offset) : peakPx <= entryPx * (1 - trail.offset))) {
+      const t = peakPx * (1 - side * trail.positive);
+      if (!Number.isFinite(stop) || (side === 1 ? t > stop : t < stop)) {
+        stop = t;
+        trailing = true;
+      }
+    }
+    if (Number.isFinite(stop) && (side === 1 ? bar.l <= stop : bar.h >= stop)) {
+      const px = side === 1 ? Math.min(bar.o, stop) : Math.max(bar.o, stop);
+      blocked = side as 1 | -1;
+      close(i, px, trailing ? "trailing" : "stop");
+      return;
+    }
+    if (roiTable) {
+      const mins = (bar.ts - entryTs) / 60_000;
+      let target: number | null = null;
+      for (const [m, r] of roiTable) if (mins >= m) target = r;
+      if (target !== null) {
+        const tp = entryPx * (1 + side * target);
+        if (side === 1 ? bar.h >= tp : bar.l <= tp) {
+          blocked = side as 1 | -1;
+          close(i, side === 1 ? Math.max(bar.o, tp) : Math.min(bar.o, tp), "roi");
+          return;
+        }
+      }
+    }
+    peakPx = side === 1 ? Math.max(peakPx, bar.h) : Math.min(peakPx, bar.l);
   };
 
   for (let i = start; i < to; i++) {
@@ -105,14 +150,7 @@ export function simulate(c: Candle[], sig: Int8Array, opts: Partial<SimOpts> = {
       if (want !== 0) open(i, want as 1 | -1);
     }
 
-    if (side !== 0 && Number.isFinite(stopPx)) {
-      const hit = side === 1 ? bar.l <= stopPx : bar.h >= stopPx;
-      if (hit) {
-        const px = side === 1 ? Math.min(bar.o, stopPx) : Math.max(bar.o, stopPx);
-        blocked = side as 1 | -1;
-        close(i, px, "stop");
-      }
-    }
+    if (side !== 0) exitsInBar(i);
 
     if (side !== 0) {
       barsInMarket++;
@@ -150,6 +188,8 @@ export interface Metrics {
   avgBars: number;
   exposurePct: number;
   feesPct: number;
+  /** Van Tharp's System Quality Number (Backtrader's SQN analyzer): sqrt(trades) x mean / stdev of trade returns. 0 under 5 trades. */
+  sqn: number;
   /** Buy-and-hold over the same window, for context. */
   benchmarkPct: number;
   bars: number;
@@ -179,6 +219,9 @@ export function metrics(r: SimResult, c: Candle[], from: number, to: number, sta
   const wins = r.trades.filter((t) => t.pnlUsd > 0);
   const grossWin = wins.reduce((x, t) => x + t.pnlUsd, 0);
   const grossLoss = -r.trades.filter((t) => t.pnlUsd <= 0).reduce((x, t) => x + t.pnlUsd, 0);
+  const tr = r.trades.map((t) => t.retPct);
+  const tMean = tr.reduce((x, y) => x + y, 0) / Math.max(1, tr.length);
+  const tSd = Math.sqrt(tr.reduce((x, y) => x + (y - tMean) ** 2, 0) / Math.max(1, tr.length - 1));
   const s = Math.max(1, from);
   const bh = to - 1 > s ? (c[to - 1]!.c / c[s]!.o - 1) * 100 : 0;
   return {
@@ -195,6 +238,9 @@ export function metrics(r: SimResult, c: Candle[], from: number, to: number, sta
     avgBars: r.trades.length ? r.trades.reduce((x, t) => x + t.bars, 0) / r.trades.length : 0,
     exposurePct: n ? (r.barsInMarket / n) * 100 : 0,
     feesPct: (r.feesUsd / startEquity) * 100,
+    // Too few trades (or identical ones, e.g. every exit at the same ROI rung) make SQN meaningless: 0 below 5 trades,
+    // and capped at +/-10 (Van Tharp's scale tops out around 7).
+    sqn: tr.length >= 5 && tSd > 1e-9 ? Math.max(-10, Math.min(10, (Math.sqrt(tr.length) * tMean) / tSd)) : 0,
     benchmarkPct: bh,
     bars: n,
   };

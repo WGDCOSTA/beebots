@@ -47,6 +47,8 @@ export interface SkillResult {
     returnPct: number;
     benchmarkPct: number;
     sharpe: number;
+    /** Mean System Quality Number over folds (Backtrader's SQN). */
+    sqn: number;
     maxDrawdownPct: number;
     trades: number;
     winRatePct: number;
@@ -109,14 +111,14 @@ export function evaluateSkill(skill: Skill, datasets: Dataset[], opts: Tournamen
       let best = sigs[0]!;
       let bestScore = -Infinity;
       for (const s of sigs) {
-        const r = simulate(c, s.sig, { ...opts.sim, stopAtr: s.stop }, w.train.from, w.train.to);
+        const r = simulate(c, s.sig, { ...opts.sim, stopAtr: s.stop, exits: skill.exits }, w.train.from, w.train.to);
         const sc = score(metrics(r, c, w.train.from, w.train.to, opts.sim.startEquity), opts.minTrades);
         if (sc > bestScore) {
           bestScore = sc;
           best = s;
         }
       }
-      const r = simulate(c, best.sig, { ...opts.sim, stopAtr: best.stop }, w.test.from, w.test.to);
+      const r = simulate(c, best.sig, { ...opts.sim, stopAtr: best.stop, exits: skill.exits }, w.test.from, w.test.to);
       const m = metrics(r, c, w.test.from, w.test.to, opts.sim.startEquity);
       compounded *= 1 + m.totalReturnPct / 100;
       folds.push({ dataset: ds.id, fold: f, params: best.p, isScore: bestScore, oos: m, oosScore: score(m, opts.minTrades) });
@@ -153,6 +155,7 @@ export function evaluateSkill(skill: Skill, datasets: Dataset[], opts: Tournamen
       returnPct: mean(perDatasetReturn),
       benchmarkPct: mean(perDatasetBench),
       sharpe: mean(folds.map((f) => f.oos.sharpe)),
+      sqn: mean(folds.filter((f) => f.oos.trades > 1).map((f) => f.oos.sqn)),
       maxDrawdownPct: Math.max(0, ...folds.map((f) => f.oos.maxDrawdownPct)),
       trades: folds.reduce((a, f) => a + f.oos.trades, 0),
       winRatePct: mean(folds.filter((f) => f.oos.trades > 0).map((f) => f.oos.winRatePct)),
@@ -204,6 +207,7 @@ export function rankingTable(r: Ranking, top = 20): string {
       `${s.oos.returnPct.toFixed(1)}%`.padStart(8),
       `${s.oos.benchmarkPct.toFixed(1)}%`.padStart(8),
       s.oos.sharpe.toFixed(2).padStart(6),
+      (s.oos.sqn ?? 0).toFixed(2).padStart(5),
       `${s.oos.maxDrawdownPct.toFixed(1)}%`.padStart(7),
       String(s.oos.trades).padStart(5),
       `${s.stabilityPct.toFixed(0)}%`.padStart(5),
@@ -211,5 +215,5 @@ export function rankingTable(r: Ranking, top = 20): string {
       paramKey(s.params),
     ].join(" "),
   );
-  return ["rk skill                    family          score   oosRet   b&hRet sharpe   maxDD  trds  stab  ovfit params", ...rows].join("\n");
+  return ["rk skill                    family          score   oosRet   b&hRet sharpe   sqn   maxDD  trds  stab  ovfit params", ...rows].join("\n");
 }

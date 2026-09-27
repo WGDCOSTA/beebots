@@ -16,7 +16,7 @@ export interface Dataset {
   instId: string;
   bar: Bar;
   candles: Candle[];
-  source: "okx" | "csv" | "synthetic";
+  source: "okx" | "ccxt" | "csv" | "synthetic";
 }
 
 /** OKX serves at most 100 rows per history page (older than `after`). */
@@ -36,6 +36,65 @@ export async function fetchHistory(rest: OkxPublicRest, instId: string, bar: Bar
     after = oldest;
   }
   return [...byTs.values()].sort((a, b) => a.ts - b.ts);
+}
+
+// ---------- CCXT: public OHLCV from 100+ exchanges (data only; beebots never sends an order through it) ----------
+
+/** The one CCXT method the lab uses, so tests can inject a fake exchange. */
+export interface OhlcvExchange {
+  fetchOHLCV(symbol: string, timeframe?: string, since?: number, limit?: number): Promise<Array<Array<number | string | undefined>>>;
+}
+
+export const CCXT_TIMEFRAME: Record<Bar, string> = { "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d" };
+
+/** CCXT / Freqtrade rows [ts, open, high, low, close, volume(base)] -> candles (volume in USD ~ base x close). */
+export function ohlcvRows(rows: Array<Array<number | string | undefined | null>>): Candle[] {
+  return rows
+    .map((r) => {
+      const [ts, o, h, l, c, v] = r.map((x) => Number(x));
+      return { ts: ts!, o: o!, h: h!, l: l!, c: c!, volUsd: Number.isFinite(v) ? v! * c! : 0, confirmed: true };
+    })
+    .filter((x) => [x.ts, x.o, x.h, x.l, x.c].every(Number.isFinite))
+    .sort((a, b) => a.ts - b.ts);
+}
+
+/** A CCXT exchange by id ("binance", "bybit", "kraken", ...), with CCXT's own rate limiter on. Public data only. */
+export async function ccxtExchange(id: string): Promise<OhlcvExchange> {
+  const mod = (await import("ccxt")) as unknown as { default: Record<string, unknown> & { exchanges: string[] } };
+  const ccxt = mod.default;
+  if (!ccxt.exchanges.includes(id)) throw new Error(`CCXT has no exchange "${id}" (try binance, bybit, okx, kraken, coinbase, ...)`);
+  const Cls = ccxt[id] as new (o: object) => OhlcvExchange;
+  const proxy = process.env.HTTPS_PROXY ?? process.env.https_proxy;
+  return new Cls({ enableRateLimit: true, ...(proxy ? { httpsProxy: proxy } : {}) });
+}
+
+/** Pages forward from `days` ago with `since`, dropping the candle that has not closed yet. */
+export async function fetchHistoryCcxt(ex: OhlcvExchange, symbol: string, bar: Bar, days: number, now = Date.now(), pageLimit = 1000): Promise<Candle[]> {
+  const ms = BAR_MS[bar];
+  let since = now - days * 86_400_000;
+  const byTs = new Map<number, Candle>();
+  for (let page = 0; page < 5000; page++) {
+    const rows = await ex.fetchOHLCV(symbol, CCXT_TIMEFRAME[bar], since, pageLimit);
+    const cs = ohlcvRows(rows);
+    if (!cs.length) break;
+    for (const x of cs) if (x.ts + ms <= now) byTs.set(x.ts, x);
+    const last = cs[cs.length - 1]!.ts;
+    if (last + ms >= now || last < since) break;
+    since = last + ms;
+  }
+  return [...byTs.values()].sort((a, b) => a.ts - b.ts);
+}
+
+/**
+ * Freqtrade's JSON data files (user_data/data/<exchange>/BTC_USDT-1h.json): an array of [ts, o, h, l, c, v] rows.
+ * Also accepts { "candles": [...] } (this lab's own cache).
+ */
+export function parseFreqtradeJson(text: string): Candle[] {
+  const j = JSON.parse(text) as unknown;
+  if (Array.isArray(j)) return ohlcvRows(j as Array<Array<number>>);
+  const c = (j as { candles?: Candle[] }).candles;
+  if (Array.isArray(c)) return c;
+  throw new Error("JSON is neither Freqtrade OHLCV rows nor a lab cache file");
 }
 
 export const cacheFile = (dir: string, instId: string, bar: Bar) => join(dir, `${instId.replace(/[^A-Za-z0-9_-]/g, "_")}_${bar}.json`);
