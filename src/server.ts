@@ -1,5 +1,6 @@
 // Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bee>,
 // /lab/ranking, /lab/playbook, /hive-mind (graph.json) and /hive-mind/<bee> (what a bee's brain knows).
+// POST /admin/* is the admin panel (admin/admin.ts); every call there needs the owner password.
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
 // POST /hive/join and /hive/leave, which need the owner password (gate.ts, hive.ts). GET /hive/status is public and holds no key.
 // /visit is the page's hit counter: it bumps a total and returns it (see visitors.ts; no IP is stored or logged).
@@ -30,6 +31,8 @@ export interface ServerDeps {
   setup?: Setup;
   /** Present once trading: join/leave the Hive (owner password) and its public status. */
   hive?: Hive;
+  /** The admin panel's API (owner password on every call). */
+  admin?: { handle(req: import("node:http").IncomingMessage, res: ServerResponse, path: string): Promise<boolean> };
   /** Names, styles and portraits of the bees, for the dashboard. No secrets. */
   profile: () => unknown;
   /** File path of a bee's generated portrait, or null. */
@@ -67,6 +70,15 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
           if (!handled) json(res, 404, { error: "not found" });
         })
         .catch(() => json(res, 500, { error: "hive request failed" }));
+      return;
+    }
+    if (deps.admin && url.pathname.startsWith("/admin/")) {
+      void deps.admin
+        .handle(req, res, url.pathname)
+        .then((handled) => {
+          if (!handled) json(res, 404, { error: "not found" });
+        })
+        .catch(() => json(res, 500, { error: "admin request failed" }));
       return;
     }
     if (req.method !== "GET") return json(res, 405, { error: "read-only" });

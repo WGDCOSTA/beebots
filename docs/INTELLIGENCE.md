@@ -131,6 +131,29 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
   risk vetoes) and re-weights its adopted skills. It may drop a skill but never add one; new skills only come from a
   lab run and the council. At most `COACH_MAX_CALLS_DAY` calls a day.
 
+## Dashboard pages
+
+- **`#/lab` – Lab & hive mind** (public, read-only, like the rest of the dashboard):
+  - the last ranking, sortable and filterable by family, with a diverging score bar; click a skill to see every
+    out-of-sample fold and the parameters picked on the past;
+  - each bee's playbook: its brain, the skills it leans on and their weights, its message to the hive and lessons;
+  - the hive-mind graph (force layout; node type shown by colour and shape, the legend filters types; hover for
+    details, click to pin a node and list its links; a table view carries the same data);
+  - the latest messages and lessons.
+- **`#/admin` – Admin** (owner password, the same gate and 15-minute lockout as joining the Hive):
+  - **Overview**: mode, keys, brains, hive-mind size, the current lab job, restart;
+  - **API keys**: Jev, OpenAI, Anthropic, Kimi. Write-only (the page only learns whether a key is set and where from),
+    each tested with a free call before saving; keys set in `.env` stay there;
+  - **Bees**: name, tagline, style, coins and rules of the three bees (the style is re-checked against the coins);
+  - **Settings**: brains and models, Jev's cap, every risk limit, the per-style knobs, cadence and alerts. Saved as
+    overrides in `admin.json`; a variable set in the environment always wins and shows as "set in .env";
+  - **Lab & learning**: start fetch / run / council / cycle (a child process, so the engine keeps trading), watch
+    its log, run a coach review, turn `LAB_SIGNALS` and the coach on;
+  - **Security**: change the owner password.
+
+  Saved changes apply after **Restart engine** (the engine exits and Docker starts it again). The trading mode,
+  `LIVE_ACK` and exchange keys are deliberately not in the panel: real money stays an `.env` decision.
+
 ## Suggested routine
 
 1. `pnpm lab cycle` once a week (or after adding skills).

@@ -66,6 +66,12 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
         <div className="brand-row">
           <div className="logo">beebots</div>
           <HiveButton />
+          <a className="nav-pill" href="#/lab">
+            Lab & hive mind
+          </a>
+          <a className="nav-pill" href="#/admin">
+            Admin
+          </a>
         </div>
         <div className="brand-sub">
           <span className={`mode mode-${snap?.mode ?? "dry"}`}>{snap?.mode === "live" ? "● LIVE MONEY" : snap?.mode === "demo" ? "OKX DEMO" : "PAPER TRADING"}{snap?.closed ? (snap.closed.flat ? " · ENDED" : " · CLOSING") : ""}</span>

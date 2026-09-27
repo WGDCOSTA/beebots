@@ -2,14 +2,14 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
-import { BEES, ConfigError, loadConfig, STYLES, type Config } from "./config.js";
+import { BEES, ConfigError, loadConfig, STYLES, withOverrides, type Config } from "./config.js";
 import { Db } from "./db.js";
 import { Engine } from "./engine.js";
 import { EventBus } from "./events.js";
-import { hashPassword, MIN_PASSWORD } from "./gate.js";
+import { hashPassword, MIN_PASSWORD, PasswordGate } from "./gate.js";
 import { Hive, hivePath } from "./hive.js";
 import { OkxExecutor, SimExecutor, type Executor } from "./exec/executor.js";
-import { Jev } from "./jev.js";
+import { checkJevKey, Jev } from "./jev.js";
 import { log, setLogLevel } from "./log.js";
 import { MarketFeed } from "./market/data.js";
 import { createOkxCli } from "./okx/cli.js";
@@ -18,13 +18,16 @@ import { createPublicApi } from "./okx/public.js";
 import { createOkxPublicRest } from "./okx/rest.js";
 import { safeError } from "./redact.js";
 import { startServer } from "./server.js";
-import { loadSettings, STYLE_INFO } from "./settings.js";
+import { loadOverrides, loadSettings, STYLE_INFO } from "./settings.js";
 import { imagePath, Setup } from "./setup.js";
 import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
 import type { CouncilBee } from "./brains/council.js";
-import { makeClients } from "./brains/llm.js";
+import { checkClaudeKey, checkKimiKey, makeClients } from "./brains/llm.js";
+import { Admin } from "./admin/admin.js";
+import { LabJobs } from "./admin/jobs.js";
+import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
 import { KnowledgeGraph } from "./graph/graph.js";
@@ -87,7 +90,8 @@ async function main() {
   if (!settings && !process.env.TYPESAFE_API_KEY?.trim()) return runSetup();
   let cfg;
   try {
-    cfg = loadConfig({ ...process.env, SETTINGS_PATH }, settings);
+    // Admin-panel overrides (admin.json) fill in what the environment leaves blank.
+    cfg = loadConfig(withOverrides({ ...process.env, SETTINGS_PATH }, loadOverrides(SETTINGS_PATH)), settings);
   } catch (err) {
     if (err instanceof ConfigError) {
       log.error("refusing to start", { reason: err.message });
@@ -177,9 +181,11 @@ async function main() {
   const labRanking = () => {
     if (Date.now() - rankingCache.at > 30_000) {
       try {
-        // Folds are detail for the CLI report; the endpoint serves the table.
         const r = JSON.parse(readFileSync(rankingPath, "utf8")) as { results?: Array<Record<string, unknown>> };
-        rankingCache = { at: Date.now(), body: { ...r, results: (r.results ?? []).map(({ folds: _f, ...rest }) => rest) } };
+        type Fold = { dataset: string; fold: number; params: unknown; oosScore: number; oos: { totalReturnPct: number; sharpe: number; trades: number; maxDrawdownPct: number; benchmarkPct: number } };
+        // Folds are trimmed to what the dashboard's detail view shows.
+        const trim = (f: Fold) => ({ dataset: f.dataset, fold: f.fold, params: f.params, score: f.oosScore, returnPct: f.oos.totalReturnPct, benchmarkPct: f.oos.benchmarkPct, sharpe: f.oos.sharpe, trades: f.oos.trades, maxDrawdownPct: f.oos.maxDrawdownPct });
+        rankingCache = { at: Date.now(), body: { ...r, results: (r.results ?? []).map((x) => ({ ...x, folds: ((x.folds ?? []) as Fold[]).map(trim) })) } };
       } catch {
         rankingCache = { at: Date.now(), body: null };
       }
@@ -191,11 +197,15 @@ async function main() {
   // (a Setup file from before it existed, or keys only in .env) can set OWNER_PASSWORD instead.
   const envPassword = process.env.OWNER_PASSWORD ?? "";
   if (envPassword && envPassword.length < MIN_PASSWORD) log.warn(`OWNER_PASSWORD is ignored: it needs at least ${MIN_PASSWORD} characters`);
-  const ownerPasswordHash = settings?.ownerPasswordHash ?? (envPassword.length >= MIN_PASSWORD ? hashPassword(envPassword) : null);
+  let ownerHash = settings?.ownerPasswordHash ?? (envPassword.length >= MIN_PASSWORD ? hashPassword(envPassword) : null);
+  const ownerPasswordHash = () => ownerHash;
+  // One gate, one lockout, for every owner write (Hive and admin panel).
+  const gate = new PasswordGate("x-owner-password", ownerPasswordHash, "owner password");
 
   // The Hive (opt-in public leaderboard, paper only).
   const hive = new Hive({
-    ownerPasswordHash: () => ownerPasswordHash,
+    ownerPasswordHash,
+    gate,
     path: hivePath(cfg.settingsPath),
     url: cfg.hive.url,
     mode: cfg.mode,
@@ -219,6 +229,35 @@ async function main() {
   const updates = new UpdateCheck({ repo: cfg.update.repo, current: cfg.update.version, enabled: cfg.update.enabled });
   updates.start();
 
+  // The admin panel: settings, keys, bees, password, lab jobs, coach, restart (admin/admin.ts).
+  const jobs = new LabJobs(
+    () => withOverrides(process.env, loadOverrides(SETTINGS_PATH)),
+    () => {
+      rankingCache = { at: 0, body: null };
+    },
+  );
+  const admin = new Admin({
+    settingsPath: SETTINGS_PATH,
+    env: process.env,
+    gate,
+    mode: cfg.mode,
+    version: cfg.update.version,
+    checks: {
+      jev: (k) => checkJevKey(k, cfg.jev.model),
+      openai: (k) => checkOpenAiKey(k).then(() => null, (e: Error) => `OpenAI said: ${e.message}`),
+      anthropic: (k) => checkClaudeKey(k),
+      kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
+    },
+    jobs,
+    coachNow: Object.keys(clients).length ? () => coach.reflectAll() : null,
+    graphStats: () => graph.stats(),
+    playbook: () => playbook.get(),
+    onPasswordChanged: (hash) => {
+      ownerHash = hash;
+    },
+    restart: () => shutdown("admin restart"),
+  });
+
   const server = startServer(
     {
       engine: {
@@ -226,6 +265,7 @@ async function main() {
         lab: { ranking: labRanking, playbook: () => playbook.get(), graph: () => graph.export(), context: (bee) => contextFor(graph, bee) },
       },
       hive,
+      admin,
       profile: () => profile(cfg),
       beeImage: (b) => (cfg.slots[b as keyof typeof cfg.slots]?.customImage ? imagePath(cfg.settingsPath, b) : null),
     },

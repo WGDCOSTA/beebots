@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { runCouncil, type CouncilBee } from "../brains/council.js";
 import { BRAIN_INFO, BRAINS, checkClaudeKey, checkKimiKey, makeClients } from "../brains/llm.js";
 import { loadPlaybook, savePlaybook } from "../brains/playbook.js";
-import { BEES, labEnv } from "../config.js";
+import { BEES, labEnv, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
 import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
@@ -23,7 +23,7 @@ import { skillRegistry, type Skill } from "../lab/skills/index.js";
 import { rankingTable, runTournament, type Ranking } from "../lab/tournament.js";
 import { checkOpenAiKey } from "../openai.js";
 import { createOkxPublicRest } from "../okx/rest.js";
-import { loadSettings, STYLE_INFO } from "../settings.js";
+import { loadOverrides, loadSettings, STYLE_INFO } from "../settings.js";
 
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
 const DEFAULT_INSTS = ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP", "HYPE-USDT-SWAP"];
@@ -52,7 +52,8 @@ const settings = (() => {
     return null;
   }
 })();
-const env = labEnv(process.env, settings);
+// Admin-panel overrides apply to the lab too (the environment still wins).
+const env = labEnv(withOverrides(process.env, loadOverrides(SETTINGS_PATH)), settings);
 const historyDir = join(env.dir, "history");
 const rankingPath = join(env.dir, "ranking.json");
 const bar = (f: Record<string, string>) => (f.bar ?? "1H") as Bar;

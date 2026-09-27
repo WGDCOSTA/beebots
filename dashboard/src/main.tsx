@@ -1,9 +1,26 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
+import { AdminPage } from "./AdminPage";
+import { LabPage } from "./LabPage";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Setup } from "./Setup";
 import "./styles.css";
+import "./panels.css";
 import { applyProfile, type Profile } from "./types";
+
+/** Hash routes: #/ live dashboard, #/lab ranking + hive mind, #/admin owner panel. */
+function Routes() {
+  const read = () => location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] ?? "";
+  const [route, setRoute] = useState(read);
+  useEffect(() => {
+    const on = () => setRoute(read());
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  if (route === "lab") return <LabPage />;
+  if (route === "admin") return <AdminPage />;
+  return <App />;
+}
 
 async function boot() {
   let profile: Profile | null = null;
@@ -14,7 +31,7 @@ async function boot() {
     /* engine not up yet: show the defaults, the feed reconnects on its own */
   }
   if (profile && !profile.setup) applyProfile(profile);
-  createRoot(document.getElementById("root")!).render(<StrictMode>{profile?.setup ? <Setup /> : <App />}</StrictMode>);
+  createRoot(document.getElementById("root")!).render(<StrictMode>{profile?.setup ? <Setup /> : <Routes />}</StrictMode>);
 }
 
 void boot();

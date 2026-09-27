@@ -107,6 +107,22 @@ export function saveSettings(path: string, s: Settings): void {
   writePrivateJson(path, s);
 }
 
+/** The admin panel's settings overrides (admin.json, next to settings.json): variable name -> value as text. */
+export const adminPath = (settingsPath: string) => `${dirname(settingsPath)}/admin.json`;
+
+const AdminFile = z.object({ version: z.literal(1), overrides: z.record(z.string().max(500)), updatedAt: z.number() });
+
+export function loadOverrides(settingsPath: string): Record<string, string> {
+  const p = adminPath(settingsPath);
+  if (!existsSync(p)) return {};
+  const r = AdminFile.safeParse(JSON.parse(readFileSync(p, "utf8")));
+  return r.success ? r.data.overrides : {};
+}
+
+export function saveOverrides(settingsPath: string, overrides: Record<string, string>): void {
+  writePrivateJson(adminPath(settingsPath), { version: 1, overrides, updatedAt: Date.now() });
+}
+
 /** Atomic JSON write, readable by the engine's user only (Setup file, Hive file). */
 export function writePrivateJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
