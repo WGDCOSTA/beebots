@@ -225,6 +225,22 @@ Extra bees can trade gold, oil and stocks instead of crypto (Admin → Bees → 
 councils, coach and watchlists stay inside their market, and they open only in trading hours the engine has verified
 from the market. See [MACRO_SQUAD.md](MACRO_SQUAD.md).
 
+## The profit-lock ratchet
+
+Every style keeps its own stops, and on top of them the engine runs a dynamic profit-locking ratchet
+(`src/bees/ratchet.ts`) for the methods in `RATCHET_STYLES` (default Breakout, Momentum, the macro squad and any
+lab-skill specialisation; the Trend style is left out so it can ride 4h trends). It tracks the best price since entry
+and computes two stop candidates; the more protective wins, and the stop only ever moves in the trade's favour:
+
+- **Hard profit floor** (`RATCHET_LOCK`, default `2.5:0.5,5:0.65`): past +2.5% the stop locks at least 50% of the
+  best move, past +5% it locks 65%. A trade that reached +2.5% can no longer be stopped out at break-even.
+- **Runner hug** (`RATCHET_HUG`, default `2.5:1.2,5:0.8,8:0.6`): the trail sits 1.2x ATR behind the peak from +2.5%,
+  0.8x from +5% and 0.6x from +8%, so a runner is hugged tighter the further it has run.
+
+Legs (multi-orders) get the same ratchet. `RATCHET=false` turns it off and leaves each style's own lock. A stop is a
+level, not a guaranteed fill: a gap or slippage can still close a trade below it. The lab's backtests do not simulate
+the ratchet yet.
+
 ## Survival mode
 
 Every bee knows it can die. Its **health** is equity as a % of its start:

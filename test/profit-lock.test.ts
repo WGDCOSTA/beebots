@@ -29,8 +29,8 @@ describe("profitLockStop", () => {
   });
 });
 
-async function harness(px: number, answer = "NOT_ON_MENU") {
-  const cfg = testConfig({ DRY_RUN: "true" });
+async function harness(px: number, answer = "NOT_ON_MENU", env: Record<string, string> = { RATCHET: "false" }) {
+  const cfg = testConfig({ DRY_RUN: "true", ...env });
   let v = view([coin("ENA", { ret24hPct: 25, ret7dPct: 43 }, px), coin("SUI", { ret24hPct: 12, ret7dPct: 40 }), coin("BTC", { ret24hPct: 1, ret7dPct: 2 }, 80000)]);
   const feed = { view: () => v, refresh: async () => {}, refreshTickers: async () => {}, lastRefreshAt: NOW } as unknown as MarketFeed;
   const client: SystemOne = {
