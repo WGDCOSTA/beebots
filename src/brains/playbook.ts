@@ -24,6 +24,17 @@ const BeePlan = z.object({
   lessons: z.array(z.string()).max(10).default([]),
   message: z.string().default(""),
   decidedAt: z.number(),
+  // The method the brains chose for this bee to specialise in: a built-in style, or any lab skill with its params.
+  // Absent = the bee's own style. The engine adopts it the next time the bee is flat (engine.ts).
+  specialization: z
+    .object({
+      kind: z.enum(["style", "skill"]),
+      id: z.string().max(80),
+      params: z.record(z.number()).default({}),
+      reason: z.string().default(""),
+      decidedAt: z.number().optional(),
+    })
+    .optional(),
   // The coins the brains chose for this bee (brains/watchlist.ts). Absent = the style's normal coin choice.
   watchlist: z
     .array(z.object({ coin: z.string(), reason: z.string().default(""), probation: z.boolean().default(false), addedAt: z.number().optional() }))

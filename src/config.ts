@@ -176,6 +176,10 @@ const EnvSchema = z.object({
   LAB_SIGNALS: bool(false),
   // Let the brains choose each bee's coins (a watchlist in the playbook). The owner's coins and the style still limit it.
   BRAIN_WATCHLIST: bool(true),
+  // Let the brains choose each bee's specialisation: any style or any backtested lab skill (bees/skill.ts). The bee
+  // switches method only when flat, and not more often than SPECIALIZE_MIN_HOURS. Risk rules never change.
+  SPECIALIZATION: bool(true),
+  SPECIALIZE_MIN_HOURS: num(6),
   // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
   COACH_INTERVAL_MIN: num(0),
   COACH_MAX_CALLS_DAY: num(12),
@@ -302,7 +306,7 @@ export interface Config {
   alertWebhookUrl?: string;
   /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bee thinks with. */
   brains: { creds: BrainCreds; slots: Record<BeeId, BrainId> };
-  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; coachIntervalMin: number; coachMaxCallsDay: number };
+  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; specialization: boolean; specializeMinHours: number; coachIntervalMin: number; coachMaxCallsDay: number };
   evolution: {
     survival: boolean;
     dangerPct: number;
@@ -464,6 +468,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       skillsDirs: [...e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean), `${e.LAB_DIR.replace(/\/+$/, "")}/learned`],
       signals: e.LAB_SIGNALS,
       watchlist: e.BRAIN_WATCHLIST,
+      specialization: e.SPECIALIZATION,
+      specializeMinHours: Math.max(0, e.SPECIALIZE_MIN_HOURS),
       coachIntervalMin: Math.max(0, e.COACH_INTERVAL_MIN),
       coachMaxCallsDay: Math.max(0, e.COACH_MAX_CALLS_DAY),
     },
@@ -517,6 +523,7 @@ export function labEnv(env: NodeJS.ProcessEnv = process.env, settings: Settings 
     playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,
     skillsDirs: [...e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean), `${e.LAB_DIR.replace(/\/+$/, "")}/learned`],
     watchlist: e.BRAIN_WATCHLIST,
+    specialization: e.SPECIALIZATION,
     takerFeeRate: e.TAKER_FEE_RATE,
     maxLeverage: e.MAX_LEVERAGE,
   };

@@ -184,6 +184,41 @@ start with fresh paper money after a restart; only the last bees can be removed,
 in the leaderboard, the "Challengers" card, the lab and the councils; the Hive shows the main three. Outside paper
 trading an extra bee needs its own exchange keys in `.env` (`BEE4_OKX_DEMO_API_KEY`, …) or it sits out.
 
+## Autonomy: each bee chooses its own method
+
+With `SPECIALIZATION=true` (the default) a bee's brains are free to choose **the method it trades**
+(`src/brains/specialization.ts`), in paper, demo and live alike:
+
+- **Options:** keep the current method; any built-in style its market allows (Breakout, Trend, Momentum; Macro for the
+  macro squad); or **any lab skill** with a positive out-of-sample score and 40%+ stability, including skills a bee
+  wrote itself and imported ones. The council, the coach (on the bee's real results) and survival councils (by vote,
+  in danger too) can all switch it. Every switch is written to the bee's diary in the hive mind.
+- **A skill as the method** (`src/bees/skill.ts`): the skill runs live on each coin's latest closed 1h candles, exactly
+  as in the lab. Jev is offered the coins where it signals (`SMA_CROSS_LONG_BTC`, …) plus `WAIT`; positioned, `HOLD`,
+  `TAKE_PROFIT`, or `EXIT` when the method goes flat or flips. Stops use the skill's ATR multiple.
+- **When:** the engine adopts a new method only while the bee holds nothing, and keeps each method at least
+  `SPECIALIZE_MIN_HOURS` (6). The active method survives restarts and shows on each bee's card (`METHOD …`).
+- **What never changes:** Jev decides every tick, and the risk layer (leverage ≤ `MAX_LEVERAGE`, stops, daily caps,
+  survival sizing) has the last word. Autonomy is over the method, not over the risk.
+
+## Graph memory (graphify-style)
+
+The hive mind works like [graphify](https://github.com/Graphify-Labs/graphify) for trading (`src/graph/memory.ts`):
+
+- **Confidence on every link:** EXTRACTED (measured: trades, backtests, configuration), INFERRED (a brain's
+  conclusion: lessons, adoptions, recommendations) and AMBIGUOUS (facts that disagree: the lab says a skill works on a
+  coin, the bee's real trades there lose). Brains are told to weigh facts first.
+- **Communities** (weighted label propagation) and **god nodes** (the most connected entities).
+- **Scoped recall:** each brain gets the slice of the graph around its bee, the coins it trades or watches and its
+  method (best-first, strong and fresh facts first, 20 nodes), not the whole graph. Its context has its newest
+  lessons, its **memories**, its record, that slice, and the conflicts that concern it.
+- **Consolidation without forgetting:** every 6 h (and after each coach round) a bee's older lessons are folded into
+  one memory per community, written by its own brain at low effort (a rules digest without one). Originals stay,
+  marked consolidated, so nothing is lost and the prompt stays small.
+- **Speed:** routine upkeep (coach, memories) runs Claude at low effort, rescue councils at high effort.
+- **Reads:** `GET /hive-mind/query?q=…`, `/hive-mind/path?from=…&to=…`, `/hive-mind/explain?node=…`,
+  `/hive-mind/report` (HIVE_REPORT.md), the Lab page's "Ask the hive mind", and `pnpm lab query|path|explain|report|remember`.
+
 ## The macro squad
 
 Extra bees can trade gold, oil and stocks instead of crypto (Admin → Bees → Market, or "Form the macro squad"). Their

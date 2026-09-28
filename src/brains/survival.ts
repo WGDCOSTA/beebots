@@ -20,6 +20,7 @@ import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
 import { BRAIN_INFO, BRAINS, type BrainId, type LlmClient } from "./llm.js";
 import { loadPlaybook, savePlaybook, type PlaybookSkill } from "./playbook.js";
+import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
 import { LIQUID_TOP, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, watchInput, watchlistSize, type CoinInfo, type WatchItem } from "./watchlist.js";
 
 const Answer = z.object({
@@ -28,13 +29,14 @@ const Answer = z.object({
   lesson: z.string().max(300),
   message: z.string().max(400),
   coins: WatchPicks.default([]),
+  specialization: SpecializationPick.optional(),
 });
 type AnswerT = z.infer<typeof Answer>;
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["skills", "newSkillJson", "lesson", "message", "coins"],
+  required: ["skills", "newSkillJson", "lesson", "message", "coins", "specialization"],
   properties: {
     skills: {
       type: "array",
@@ -45,6 +47,7 @@ const SCHEMA = {
     lesson: { type: "string", description: "One lesson (max 300 chars)" },
     message: { type: "string", description: "One message to the other bees (max 400 chars)" },
     coins: WATCHLIST_SCHEMA,
+    specialization: SPECIALIZATION_SCHEMA,
   },
 } as const;
 
@@ -112,6 +115,7 @@ export interface CouncilOutcome {
   newSkills: Array<{ id: string; accepted: boolean; why: string }>;
   lessons: string[];
   coins?: string[];
+  method?: string;
 }
 
 /** Lab history cached for `bar`, or two seeded synthetic markets when there is none. */
@@ -223,6 +227,12 @@ export class SurvivalCouncil {
     const watch = this.o.watchlist
       ? watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe, ranking, adoptedSkills: current.map((s) => s.id), record: hive.tradeRecord })
       : null;
+    const prevSpec = pb?.bees[bee.slot]?.specialization;
+    const methods = methodOptions({
+      market: bee.market ?? "crypto",
+      current: prevSpec ? { kind: prevSpec.kind, id: prevSpec.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
+      ranking,
+    });
     const answers: Array<{ brain: BrainId; a: AnswerT }> = [];
     for (const b of brains) {
       const client = this.o.clients[b]!;
@@ -236,6 +246,7 @@ export class SurvivalCouncil {
         watch?.candidates.length
           ? `${WATCHLIST_PROMPT}${inDanger ? " Survival first: pick only liquid coins where the bee's skills held up, no experiments." : ""}`
           : "Leave coins empty.",
+        `${SPECIALIZATION_PROMPT}${inDanger ? " Its life is at stake: if its current method is what is failing, switching to a robust, stable method is a real option." : ""}`,
         answers.length ? "Other brains on this council already answered (see teammates): combine the best of their advice with your own view, or say why you disagree." : "",
         "Write one lesson worth remembering and one short message to the other bees. Paper trading only; not financial advice.",
       ]
@@ -252,11 +263,12 @@ export class SurvivalCouncil {
             : { id };
         }),
         ...(watch?.candidates.length ? { currentWatchlist: pb?.bees[bee.slot]?.watchlist?.map((w) => w.coin) ?? [], watchlistSize: watchSize, coinCandidates: watch.evidence } : {}),
-        teammates: answers.map((x) => ({ brain: BRAIN_INFO[x.brain].label, skills: x.a.skills, coins: x.a.coins?.map((c) => c.coin) ?? [], lesson: x.a.lesson })),
+        methodOptions: methods,
+        teammates: answers.map((x) => ({ brain: BRAIN_INFO[x.brain].label, skills: x.a.skills, coins: x.a.coins?.map((c) => c.coin) ?? [], method: x.a.specialization ?? null, lesson: x.a.lesson })),
         hive,
       });
       try {
-        const r = await client.json({ system, user, schema: SCHEMA, name: "survival_council", validate: Answer, maxTokens: 12000 });
+        const r = await client.json({ system, user, schema: SCHEMA, name: "survival_council", validate: Answer, maxTokens: 12000, effort: inDanger ? "high" : "medium" });
         answers.push({ brain: b, a: { ...r.data, coins: r.data.coins ?? [] } });
       } catch (err) {
         log.warn("survival council: brain failed", { bee: bee.slot, brain: b, err: safeError(err) });
@@ -321,6 +333,24 @@ export class SurvivalCouncil {
     }
     const msg = answers.map((x) => x.a.message.trim()).find(Boolean);
     if (msg) graph.post(beeId, "hive", msg, { brains: answers.map((x) => x.brain).join("+"), source: `${reason} council` });
+    // Specialisation: the method most brains picked (the bee's own brain breaks a tie); "keep" votes keep it.
+    const votes = new Map<string, { n: number; pick: ReturnType<typeof resolvePick> }>();
+    answers.forEach(({ a }, i) => {
+      const pick = resolvePick(a.specialization, methods, this.now());
+      if (!pick) return;
+      const k = `${pick.kind}:${pick.id}`;
+      const e = votes.get(k) ?? { n: 0, pick };
+      e.n += 1 + (i === 0 ? 0.1 : 0);
+      votes.set(k, e);
+    });
+    const keepVotes = answers.filter(({ a }) => !resolvePick(a.specialization, methods, this.now())).length;
+    const top = [...votes.values()].sort((x, y) => y.n - x.n)[0];
+    const newSpec = top && top.n > keepVotes ? top.pick : null;
+    if (newSpec) {
+      graph.unlink(beeId, "specialises_in");
+      graph.link(beeId, "specialises_in", newSpec.kind === "skill" ? skillNode(newSpec.id) : graph.upsert("style", newSpec.id, newSpec.id), 1, { reason: newSpec.reason, source: `${reason} council` });
+      graph.learn(beeId, `Specialisation (${reason} council): ${newSpec.kind} ${newSpec.id}. ${newSpec.reason}`, [], { source: `${reason} council`, kind: "diary" });
+    }
     let watchlist: WatchItem[] | undefined;
     if (watch?.candidates.length) {
       const liquid = universe.map((c) => c.coin);
@@ -342,12 +372,13 @@ export class SurvivalCouncil {
         message: msg ?? latest.bees[bee.slot]?.message ?? "",
         decidedAt: this.now(),
         ...((watchlist ?? latest.bees[bee.slot]?.watchlist) ? { watchlist: watchlist ?? latest.bees[bee.slot]!.watchlist } : {}),
+        ...((newSpec ?? latest.bees[bee.slot]?.specialization) ? { specialization: newSpec ?? latest.bees[bee.slot]!.specialization } : {}),
       };
       latest.updatedAt = this.now();
       savePlaybook(this.o.playbookPath, latest);
     }
     log.info("survival council held", { bee: bee.slot, reason, brains: answers.map((x) => x.brain).join("+"), skills: skills.map((s) => s.id).join(","), newSkills: newSkills.map((n) => `${n.id}:${n.accepted}`).join(",") });
-    return { bee: bee.slot, reason, brains: answers.map((x) => x.brain), skills, newSkills, lessons, ...(watchlist ? { coins: watchlist.map((w) => w.coin) } : {}) };
+    return { bee: bee.slot, reason, brains: answers.map((x) => x.brain), skills, newSkills, lessons, ...(watchlist ? { coins: watchlist.map((w) => w.coin) } : {}), ...(newSpec ? { method: `${newSpec.kind} ${newSpec.id}` } : {}) };
   }
 }
 

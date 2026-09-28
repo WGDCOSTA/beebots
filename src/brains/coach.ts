@@ -9,6 +9,8 @@
 import { z } from "zod";
 import type { Db } from "../db.js";
 import { beeNode, brainNode, contextFor, ingestFills, skillNode } from "../graph/hive-mind.js";
+import { consolidate } from "../graph/memory.js";
+import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
 import type { KnowledgeGraph } from "../graph/graph.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
@@ -20,6 +22,16 @@ import type { BeeId } from "../config.js";
 import { watchInput, type CoinInfo, type WatchItem } from "./watchlist.js";
 
 const INGEST_MS = 5 * 60_000;
+/** How often each bee's older lessons are folded into memories (graph/memory.ts). */
+const CONSOLIDATE_MS = 6 * 3_600_000;
+
+const MemoryAnswer = z.object({ memory: z.string().max(1200) });
+const MEMORY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["memory"],
+  properties: { memory: { type: "string", description: "One compact memory (max 1200 chars) that keeps every lesson still useful, merges duplicates, drops what the newer lessons contradict" } },
+} as const;
 const DAY = 86_400_000;
 
 const Answer = z.object({
@@ -27,12 +39,13 @@ const Answer = z.object({
   lesson: z.string().max(300),
   message: z.string().max(400),
   watchlist: z.object({ drop: z.array(z.string().max(20)).max(12), add: z.array(z.string().max(20)).max(3), reason: z.string().max(300) }).optional(),
+  specialization: SpecializationPick.optional(),
 });
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["weights", "lesson", "message", "watchlist"],
+  required: ["weights", "lesson", "message", "watchlist", "specialization"],
   properties: {
     weights: {
       type: "array",
@@ -41,6 +54,7 @@ const SCHEMA = {
     },
     lesson: { type: "string", description: "One lesson from this period (max 300 chars), empty if nothing new" },
     message: { type: "string", description: "One message to the other bees (max 400 chars), empty to stay quiet" },
+    specialization: SPECIALIZATION_SCHEMA,
     watchlist: {
       type: "object",
       additionalProperties: false,
@@ -84,6 +98,8 @@ export interface CoachOpts {
   ranking?: () => Ranking | null;
   /** How many coins a bee may hold. */
   watchSize?: (slot: BeeId) => number;
+  /** SPECIALIZATION: the review may also switch the bee's method on its real results. */
+  specialization?: boolean;
 }
 
 export class Coach {
@@ -99,6 +115,7 @@ export class Coach {
   start(): void {
     this.ingest();
     this.timers.push(setInterval(() => this.ingest(), INGEST_MS));
+    this.timers.push(setInterval(() => void this.consolidateAll(), CONSOLIDATE_MS));
     if (this.o.intervalMin > 0) {
       this.timers.push(setInterval(() => void this.reflectAll(), this.o.intervalMin * 60_000));
     }
@@ -153,12 +170,47 @@ export class Coach {
     for (const w of plan.watchlist ?? []) this.o.graph.link(beeId, "watches", this.o.graph.upsert("coin", w.coin, w.coin), 1, { reason: w.reason, probation: w.probation });
   }
 
+  /**
+   * Fold each bee's older lessons into memories so its context stays small without forgetting. Its own brain writes
+   * the memory (low effort, within the daily cap); without one, a rules digest does.
+   */
+  async consolidateAll(): Promise<number> {
+    let folded = 0;
+    for (const bee of this.o.bees) {
+      const client = this.o.clients[bee.brain];
+      try {
+        folded += await consolidate(this.o.graph, beeNode(bee.slot), {
+          summarize:
+            client && this.budget()
+              ? async (previous, lessons) => {
+                  const r = await client.json({
+                    system: `You keep the long-term memory of ${bee.name}, a paper-trading bee. Merge its lessons into one compact memory it will read before every decision.`,
+                    user: JSON.stringify({ previousMemory: previous, lessons }),
+                    schema: MEMORY_SCHEMA,
+                    name: "memory",
+                    validate: MemoryAnswer,
+                    maxTokens: 4000,
+                    effort: "low",
+                  });
+                  return r.data.memory;
+                }
+              : undefined,
+        });
+      } catch (err) {
+        log.warn("memory consolidation failed", { bee: bee.slot, err: safeError(err) });
+      }
+    }
+    if (folded) log.info("hive mind: lessons folded into memories", { folded });
+    return folded;
+  }
+
   async reflectAll(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
       this.ingest();
       for (const bee of this.o.bees) await this.reflect(bee);
+      await this.consolidateAll();
     } finally {
       this.running = false;
     }
@@ -176,11 +228,21 @@ export class Coach {
     const watch = this.o.watchlist && plan.watchlist?.length
       ? watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe: this.o.universe?.() ?? [], ranking: this.o.ranking?.() ?? null, adoptedSkills: plan.skills.map((s) => s.id), record: hive.tradeRecord })
       : null;
+    const methods = this.o.specialization
+      ? methodOptions({
+          market: bee.market ?? "crypto",
+          current: plan.specialization ? { kind: plan.specialization.kind, id: plan.specialization.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
+          ranking: this.o.ranking?.() ?? null,
+        })
+      : null;
     const system = [
       `You are ${b.label} (${b.vendor}), the strategic brain of ${bee.name}, a paper-trading bee on OKX perpetual futures (style: ${bee.style}).`,
       "This is a periodic review. Re-weight the skills the bee already uses, based on how the bee really did and what the hive knows.",
       "Small samples are noisy: move weights gradually unless the evidence is strong. You may drop a skill (weight 0); you cannot add new ones.",
       "Write at most one lesson worth remembering, and optionally one short message to the other bees. Paper only, not financial advice.",
+      this.o.specialization
+        ? `Self-management: judge the bee's current METHOD on its real results (last24h, tradeRecord, conflicts). ${SPECIALIZATION_PROMPT}`
+        : "Set specialization.kind to 'keep'.",
       watch
         ? "Review the watchlist too: drop a coin that keeps losing or went illiquid; add at most one coin from coinCandidates with a concrete reason (it trades at half size until your next review keeps it). Leave both lists empty to keep it."
         : "Leave watchlist.drop and watchlist.add empty.",
@@ -190,10 +252,11 @@ export class Coach {
       adopted: plan.skills.map((s) => ({ id: s.id, weight: s.weight, labScore: s.score, why: s.reason })),
       last24h: this.performance(bee.slot),
       ...(watch && plan.watchlist ? { watchlist: plan.watchlist, watchlistSize: size, coinCandidates: watch.evidence } : {}),
+      ...(methods ? { methodOptions: methods } : {}),
       hive,
     });
     try {
-      const r = await client.json({ system, user, schema: SCHEMA, name: "coach_review", validate: Answer, maxTokens: 8000 });
+      const r = await client.json({ system, user, schema: SCHEMA, name: "coach_review", validate: Answer, maxTokens: 8000, effort: "low" });
       const next = new Map(r.data.weights.map((w) => [w.id, w.weight]));
       const kept = plan.skills.map((s) => ({ ...s, weight: next.has(s.id) ? next.get(s.id)! : s.weight })).filter((s) => s.weight > 0);
       if (kept.length) {
@@ -213,6 +276,14 @@ export class Coach {
       if (r.data.message.trim()) {
         this.o.graph.post(beeId, "hive", r.data.message.trim(), { brain: bee.brain, source: "coach" });
         plan.message = r.data.message.trim();
+      }
+      // Self-management: the brain may switch the bee's method on its real results (adopted when the bee is flat).
+      const newSpec = methods ? resolvePick(r.data.specialization, methods, this.now()) : null;
+      if (newSpec) {
+        plan.specialization = newSpec;
+        this.o.graph.unlink(beeNode(bee.slot), "specialises_in");
+        this.o.graph.link(beeNode(bee.slot), "specialises_in", newSpec.kind === "skill" ? skillNode(newSpec.id) : this.o.graph.upsert("style", newSpec.id, newSpec.id), 1, { reason: newSpec.reason, source: "coach" });
+        this.o.graph.learn(beeNode(bee.slot), `Specialisation: switched to ${newSpec.kind} ${newSpec.id}. ${newSpec.reason}`, [], { brain: bee.brain, source: "coach", kind: "diary" });
       }
       if (watch && plan.watchlist && r.data.watchlist) {
         plan.watchlist = reviewWatchlist(plan.watchlist, r.data.watchlist, watch.candidates, size, this.now());

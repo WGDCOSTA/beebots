@@ -451,6 +451,17 @@ export function LabPage() {
         </section>
 
         <section>
+          <h2>Ask the hive mind</h2>
+          <p className="dim small">
+            Graphify-style recall: the slice of the graph about your words, each link marked as a measured fact (EXTRACTED), a brain's conclusion (INFERRED) or facts that
+            disagree. The report lists the god nodes, communities, surprising connections, each bee's specialisation and its memories.
+          </p>
+          <div className="pcard">
+            <HiveQuery />
+          </div>
+        </section>
+
+        <section>
           <h2>Latest from the hive</h2>
           <div className="pcard">{graph ? <HiveFeed graph={graph} /> : <p className="dim">–</p>}</div>
         </section>
@@ -473,5 +484,49 @@ export function PageNav({ current }: { current: "lab" | "admin" }) {
         Admin
       </a>
     </nav>
+  );
+}
+
+/** A question to the hive mind (/hive-mind/query) and its report (/hive-mind/report). */
+function HiveQuery() {
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState<{ focus: string[]; nodes: Array<{ id: string; type: string; label: string }>; edges: Array<{ src: string; rel: string; dst: string; w: number; confidence: string }> } | null>(null);
+  const [report, setReport] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch("/hive-mind/report", { cache: "no-store" })
+      .then((r) => (r.ok ? r.text() : null))
+      .then(setReport)
+      .catch(() => setReport(null));
+  }, []);
+  const ask = async () => setRes(await getJson(`/hive-mind/query?q=${encodeURIComponent(q)}`));
+  const label = (id: string) => res?.nodes.find((n) => n.id === id)?.label ?? id;
+  return (
+    <div className="hive-query">
+      <div className="row-actions">
+        <input className="pinput" placeholder="e.g. SOL breakout, bee3, donchian…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void ask()} />
+        <button className="pbtn" disabled={!q.trim()} onClick={() => void ask()}>
+          Ask
+        </button>
+      </div>
+      {res && (
+        <div className="hq-result mono small">
+          {res.focus.length === 0 ? (
+            <p className="dim">Nothing in the graph matches those words.</p>
+          ) : (
+            res.edges.map((e, i) => (
+              <div key={i} className={`hq-edge conf-${e.confidence.toLowerCase()}`}>
+                <span>{label(e.src)}</span> <em>-{e.rel}-&gt;</em> <span>{label(e.dst)}</span> <span className="dim">w {e.w}</span> <b>{e.confidence}</b>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+      {report && (
+        <details className="hq-report">
+          <summary>Hive report</summary>
+          <pre className="mono small">{report}</pre>
+        </details>
+      )}
+    </div>
   );
 }

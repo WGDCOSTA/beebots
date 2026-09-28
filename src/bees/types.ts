@@ -1,6 +1,6 @@
 import type { BeeId, BeeKnobs, Config } from "../config.js";
 import type { StyleId } from "../settings.js";
-import type { CoinStats, MarketView } from "../market/types.js";
+import type { Candle, CoinStats, MarketView } from "../market/types.js";
 import type { SessionInfo } from "../market/sessions.js";
 
 export type Side = "long" | "short";
@@ -95,6 +95,8 @@ export interface BeeContext {
   now: number;
   /** Unrealised P&L of the open position, in R (null when flat). */
   uplR: number | null;
+  /** Latest 1h candles of a coin (oldest first), for brains that run lab skills live. */
+  candles?: (instId: string) => Candle[];
   /** Positions this bee may hold at once (1, or more once its performance earned multi-orders). */
   slots?: number;
   /** Macro bees: a coin's trading session right now (market/sessions.ts). Absent for crypto bees. */
@@ -102,8 +104,8 @@ export interface BeeContext {
 }
 
 export interface BeeBrain {
-  /** A crypto style, or "macro" for the macro squad (stocks, commodities). */
-  id: StyleId | "macro";
+  /** A crypto style, "macro" for the macro squad, or "skill" for a bee specialised in a lab skill (bees/skill.ts). */
+  id: StyleId | "macro" | "skill";
   /** Condensed from strategies/<BEE>.md; sent to Jev as the question instructions. */
   strategy: string;
   convictionLabels: readonly [string, string, string, string];

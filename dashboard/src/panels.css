@@ -923,3 +923,39 @@
   white-space: pre;
   user-select: all;
 }
+
+/* Ask the hive mind */
+.hive-query .pinput {
+  flex: 1;
+}
+.hq-result {
+  margin-top: 0.6rem;
+  display: grid;
+  gap: 0.2rem;
+}
+.hq-edge em {
+  font-style: normal;
+  color: var(--muted);
+}
+.hq-edge b {
+  margin-left: 0.4rem;
+  font-size: 0.7em;
+  font-weight: 700;
+}
+.hq-edge.conf-extracted b {
+  color: #3fcf3f;
+}
+.hq-edge.conf-inferred b {
+  color: #9085e9;
+}
+.hq-edge.conf-ambiguous b {
+  color: #fab219;
+}
+.hq-report {
+  margin-top: 0.8rem;
+}
+.hq-report pre {
+  white-space: pre-wrap;
+  max-height: 24rem;
+  overflow: auto;
+}
