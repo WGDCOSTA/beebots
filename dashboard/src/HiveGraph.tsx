@@ -1,119 +1,79 @@
-// The hive mind as a force-directed graph (plain SVG, no library). Node type is encoded twice: a validated categorical
-// colour (fixed order, dark surface) and a shape, and the legend doubles as the type filter. Hover shows a node's
-// details and lights its neighbours; click pins it and lists its links. A table view carries the same data.
-import { useMemo, useState } from "react";
-import type { GraphJson, GraphLink, GraphNode } from "./panelTypes";
+// The hive mind as an interactive graph on React Flow. d3-force does the physics (kinds pulled to rings, links as springs,
+// collision so nothing overlaps; drag a node and the rest reacts), React Flow does pan, zoom, minimap and hit-testing.
+// Node kind is encoded twice, a validated categorical colour and a shape; link confidence is encoded by line style
+// (fact = solid, inference = dashed, disputed = dotted) so it survives without colour. Hover a node for details, click to
+// pin it and light its links, double-click to isolate its neighbourhood. A table view carries the same data.
+import { Background, BackgroundVariant, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, applyNodeChanges, getStraightPath, useInternalNode, useReactFlow } from "@xyflow/react";
+import type { Edge, EdgeProps, Node, NodeChange, NodeProps } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { forceCollide, forceLink, forceManyBody, forceRadial, forceSimulation, forceX, forceY } from "d3-force";
+import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { GraphJson } from "./panelTypes";
+import { CONFIDENCES, KIND, KINDS, confidenceOf, degrees, freshIds, matches, seedPosition, titleOf, visibleGraph } from "./hiveGraphModel";
+import type { Confidence, KindId, RawLink, RawNode } from "./hiveGraphModel";
 
-/** Categorical slots 1-6 of the validated dark palette, in fixed order (checked against #13121a: all six pass). */
-export const NODE_TYPES = [
-  { id: "brain", label: "Brains", color: "#3987e5", shape: "square" },
-  { id: "coin", label: "Coins", color: "#d95926", shape: "circle" },
-  { id: "skill", label: "Skills", color: "#199e70", shape: "diamond" },
-  { id: "bee", label: "Bees", color: "#c98500", shape: "circle-lg" },
-  { id: "note", label: "Lessons & messages", color: "#d55181", shape: "triangle" },
-  { id: "family", label: "Families", color: "#008300", shape: "ring" },
-] as const;
-type TypeId = (typeof NODE_TYPES)[number]["id"];
-const TYPE_OF = (n: GraphNode): TypeId | null => (n.type === "lesson" || n.type === "message" ? "note" : NODE_TYPES.some((t) => t.id === n.type) ? (n.type as TypeId) : null);
-const META = Object.fromEntries(NODE_TYPES.map((t) => [t.id, t])) as Record<TypeId, (typeof NODE_TYPES)[number]>;
+/** Kept for callers that only need the legend entries. */
+export const NODE_TYPES = KINDS;
 
-const W = 900;
-const H = 560;
+interface HData extends Record<string, unknown> {
+  kind: KindId;
+  label: string;
+  size: number;
+  showLabel: boolean;
+  dim: boolean;
+  hit: boolean;
+  fresh: boolean;
+  pinned: boolean;
+}
+type HNode = Node<HData, "hive">;
+interface EData extends Record<string, unknown> {
+  conf: Confidence;
+  state: "lit" | "dim" | "";
+  w: number;
+}
+type HEdge = Edge<EData, "float">;
 
-interface Placed {
-  n: GraphNode;
-  t: TypeId;
-  x: number;
-  y: number;
+const SIZE: Record<KindId, number> = { bee: 34, brain: 22, skill: 16, coin: 18, style: 20, note: 12, memory: 14, family: 20 };
+const nodeSize = (kind: KindId, degree: number) => Math.round(SIZE[kind] + Math.min(14, Math.sqrt(degree) * 1.6));
+
+function HiveNode({ data }: NodeProps<HNode>) {
+  const k = KIND[data.kind];
+  return (
+    <div className={`hgn hgn-${data.kind} ${data.dim ? "faded" : ""} ${data.hit ? "hit" : ""} ${data.fresh ? "fresh" : ""} ${data.pinned ? "pinned" : ""}`} style={{ width: data.size, height: data.size, ["--k" as string]: k.color }}>
+      <Handle type="target" position={Position.Top} className="hgn-h" isConnectable={false} />
+      <Handle type="source" position={Position.Bottom} className="hgn-h" isConnectable={false} />
+      <span className="hgn-mark" />
+      {(data.showLabel || data.hit || data.pinned) && <span className="hgn-label">{data.label.length > 24 ? `${data.label.slice(0, 23)}…` : data.label}</span>}
+    </div>
+  );
 }
 
-/** Deterministic force layout (Fruchterman-Reingold with gravity). */
-function layout(nodes: Array<{ n: GraphNode; t: TypeId }>, links: GraphLink[]): Placed[] {
-  const N = nodes.length;
-  if (!N) return [];
-  const idx = new Map(nodes.map((x, i) => [x.n.id, i]));
-  const order = NODE_TYPES.map((t) => t.id);
-  const pos = nodes.map((x, i) => {
-    const ring = order.indexOf(x.t);
-    const a = (i / N) * Math.PI * 2 + ring;
-    const r = 80 + ring * 30;
-    return { x: W / 2 + Math.cos(a) * r, y: H / 2 + Math.sin(a) * r * 0.7 };
-  });
-  const edges = links.map((l) => [idx.get(l.source), idx.get(l.target)]).filter((e): e is [number, number] => e[0] !== undefined && e[1] !== undefined);
-  const k = Math.sqrt((W * H) / N) * 0.95;
-  let temp = W / 8;
-  for (let it = 0; it < 320; it++) {
-    const dx = new Float64Array(N);
-    const dy = new Float64Array(N);
-    for (let i = 0; i < N; i++) {
-      for (let j = i + 1; j < N; j++) {
-        let ex = pos[i]!.x - pos[j]!.x;
-        let ey = pos[i]!.y - pos[j]!.y;
-        let d2 = ex * ex + ey * ey;
-        if (d2 < 0.01) {
-          ex = (i - j) * 0.1;
-          ey = 0.1;
-          d2 = ex * ex + ey * ey;
-        }
-        const f = (k * k) / d2;
-        dx[i] = dx[i]! + ex * f;
-        dy[i] = dy[i]! + ey * f;
-        dx[j] = dx[j]! - (ex * f);
-        dy[j] = dy[j]! - (ey * f);
-      }
-    }
-    for (const [a, b] of edges) {
-      const ex = pos[a]!.x - pos[b]!.x;
-      const ey = pos[a]!.y - pos[b]!.y;
-      const d = Math.sqrt(ex * ex + ey * ey) || 0.1;
-      // Softer springs than textbook FR: a coin linked to every skill must not pull them all into one knot.
-      const f = (d / k) * 0.35;
-      dx[a] = dx[a]! - (ex * f);
-      dy[a] = dy[a]! - (ey * f);
-      dx[b] = dx[b]! + ex * f;
-      dy[b] = dy[b]! + ey * f;
-    }
-    for (let i = 0; i < N; i++) {
-      dx[i] = dx[i]! + (W / 2 - pos[i]!.x) * 0.03;
-      dy[i] = dy[i]! + (H / 2 - pos[i]!.y) * 0.05;
-      const d = Math.sqrt(dx[i]! ** 2 + dy[i]! ** 2) || 1;
-      pos[i]!.x += (dx[i]! / d) * Math.min(d, temp);
-      pos[i]!.y += (dy[i]! / d) * Math.min(d, temp);
-    }
-    temp = Math.max(1, temp * 0.985);
-  }
-  // Fit into the frame with a margin.
-  const xs = pos.map((p) => p.x);
-  const ys = pos.map((p) => p.y);
-  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const m = 40;
-  const sx = (W - 2 * m) / Math.max(1, x1 - x0);
-  const sy = (H - 2 * m) / Math.max(1, y1 - y0);
-  const s = Math.min(sx, sy, 3);
-  return nodes.map((x, i) => ({ ...x, x: m + (pos[i]!.x - x0) * s + (W - 2 * m - (x1 - x0) * s) / 2, y: m + (pos[i]!.y - y0) * s + (H - 2 * m - (y1 - y0) * s) / 2 }));
+/** A straight link between node centres, so links do not depend on where the handles sit. */
+function FloatEdge({ id, source, target, data }: EdgeProps<HEdge>) {
+  const a = useInternalNode(source);
+  const b = useInternalNode(target);
+  if (!a || !b || !data) return null;
+  const c = (n: typeof a) => ({ x: n.internals.positionAbsolute.x + (n.measured.width ?? 0) / 2, y: n.internals.positionAbsolute.y + (n.measured.height ?? 0) / 2 });
+  const p = c(a);
+  const q = c(b);
+  const [path] = getStraightPath({ sourceX: p.x, sourceY: p.y, targetX: q.x, targetY: q.y });
+  return <path id={id} d={path} className={`hge hge-${data.conf.toLowerCase()} ${data.state}`} style={{ strokeWidth: 0.8 + Math.min(2.2, data.w) }} fill="none" />;
 }
 
-function Mark({ t, x, y, active }: { t: TypeId; x: number; y: number; active: boolean }) {
-  const c = META[t].color;
-  const ring = { stroke: "var(--card)", strokeWidth: 2 };
-  const r = active ? 1.35 : 1;
-  switch (META[t].shape) {
-    case "square":
-      return <rect x={x - 7 * r} y={y - 7 * r} width={14 * r} height={14 * r} rx={3} fill={c} {...ring} />;
-    case "diamond":
-      return <path d={`M${x},${y - 7 * r} L${x + 7 * r},${y} L${x},${y + 7 * r} L${x - 7 * r},${y} Z`} fill={c} {...ring} />;
-    case "triangle":
-      return <path d={`M${x},${y - 6 * r} L${x + 6 * r},${y + 5 * r} L${x - 6 * r},${y + 5 * r} Z`} fill={c} {...ring} />;
-    case "ring":
-      return <circle cx={x} cy={y} r={7 * r} fill="var(--card)" stroke={c} strokeWidth={3} />;
-    case "circle-lg":
-      return <circle cx={x} cy={y} r={11 * r} fill={c} {...ring} />;
-    default:
-      return <circle cx={x} cy={y} r={6 * r} fill={c} {...ring} />;
-  }
-}
+const nodeTypes = { hive: HiveNode };
+const edgeTypes = { float: FloatEdge };
 
-function nodeDetails(n: GraphNode): Array<[string, string]> {
+interface Sim extends SimulationNodeDatum {
+  id: string;
+  kind: KindId;
+  r: number;
+}
+type SimLink = SimulationLinkDatum<Sim> & { w: number };
+
+const stamp = (t: number) => new Date(t).toISOString().slice(0, 16).replace("T", " ");
+
+function details(n: RawNode): Array<[string, string]> {
   const skip = new Set(["id", "type", "label", "created_at", "updated_at", "text"]);
   const rows: Array<[string, string]> = [];
   if (n.text) rows.push(["text", String(n.text)]);
@@ -121,66 +81,251 @@ function nodeDetails(n: GraphNode): Array<[string, string]> {
     if (skip.has(k) || v === null || v === undefined || v === "") continue;
     rows.push([k, typeof v === "object" ? JSON.stringify(v) : String(v)]);
   }
-  rows.push(["updated", new Date(n.updated_at).toISOString().slice(0, 16).replace("T", " ")]);
+  rows.push(["updated", stamp(n.updated_at)]);
   return rows.slice(0, 12);
 }
 
-export function HiveGraph({ graph }: { graph: GraphJson }) {
-  const [hidden, setHidden] = useState<Set<TypeId>>(() => new Set<TypeId>(["family"]));
+function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void }) {
+  const rf = useReactFlow<HNode, HEdge>();
+  const [hiddenKinds, setHiddenKinds] = useState<Set<KindId>>(() => new Set<KindId>(["family"]));
+  const [hiddenConf, setHiddenConf] = useState<Set<Confidence>>(() => new Set());
+  const [query, setQuery] = useState("");
+  const [ego, setEgo] = useState<string | null>(null);
+  const [hops, setHops] = useState(2);
   const [hover, setHover] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
+  const [live, setLive] = useState(true);
   const [table, setTable] = useState(false);
+  const [nodes, setNodes] = useState<HNode[]>([]);
 
-  const typed = useMemo(() => graph.nodes.map((n) => ({ n, t: TYPE_OF(n) })).filter((x): x is { n: GraphNode; t: TypeId } => x.t !== null), [graph]);
-  const visible = useMemo(() => typed.filter((x) => !hidden.has(x.t)), [typed, hidden]);
-  const ids = useMemo(() => new Set(visible.map((x) => x.n.id)), [visible]);
-  const links = useMemo(() => graph.links.filter((l) => ids.has(l.source) && ids.has(l.target)), [graph, ids]);
-  const placed = useMemo(() => layout(visible, links), [visible, links]);
-  const at = useMemo(() => new Map(placed.map((p) => [p.n.id, p])), [placed]);
-  const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
-  // Skills a bee adopts are always labelled; the rest show their name on hover (33 labels at once is noise).
-  const adopted = useMemo(() => new Set(graph.links.filter((l) => l.relation === "adopts").map((l) => l.target)), [graph]);
-  const counts = useMemo(() => Object.fromEntries(NODE_TYPES.map((t) => [t.id, typed.filter((x) => x.t === t.id).length])), [typed]);
+  // Live off freezes what is on screen; live on follows the poll.
+  const frozen = useRef(graph);
+  if (live) frozen.current = graph;
+  const g = frozen.current;
+
+  const prev = useRef<readonly RawNode[] | null>(null);
+  const [fresh, setFresh] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const f = freshIds(prev.current, g.nodes as RawNode[]);
+    prev.current = g.nodes as RawNode[];
+    if (!f.size) return;
+    setFresh(f);
+    const t = setTimeout(() => setFresh(new Set()), 6000);
+    return () => clearTimeout(t);
+  }, [g]);
+
+  const raw = g.nodes as RawNode[];
+  const rawLinks = g.links as RawLink[];
+  const byId = useMemo(() => new Map(raw.map((n) => [n.id, n])), [raw]);
+  const view = useMemo(() => visibleGraph(raw, rawLinks, { hiddenKinds, hiddenConf, ego, hops }), [raw, rawLinks, hiddenKinds, hiddenConf, ego, hops]);
+  const deg = useMemo(() => degrees(view.links), [view.links]);
+  const adopted = useMemo(() => new Set(rawLinks.filter((l) => l.relation === "adopts").map((l) => l.target)), [rawLinks]);
+  const counts = useMemo(() => {
+    const c = Object.fromEntries(KINDS.map((k) => [k.id, 0])) as Record<KindId, number>;
+    for (const n of visibleGraph(raw, rawLinks, { hiddenKinds: new Set(), hiddenConf: new Set(), ego: null, hops: 1 }).nodes) c[n.kind]++;
+    return c;
+  }, [raw, rawLinks]);
+  const confCounts = useMemo(() => {
+    const c: Record<Confidence, number> = { EXTRACTED: 0, INFERRED: 0, AMBIGUOUS: 0 };
+    for (const l of rawLinks) c[confidenceOf(l)]++;
+    return c;
+  }, [rawLinks]);
 
   const focus = hover ?? pinned;
-  const neighbours = useMemo(() => {
+  const related = useMemo(() => {
     if (!focus) return null;
     const s = new Set([focus]);
-    for (const l of links) {
+    for (const l of view.links) {
       if (l.source === focus) s.add(l.target);
       if (l.target === focus) s.add(l.source);
     }
     return s;
-  }, [focus, links]);
-  const pinnedLinks = pinned ? graph.links.filter((l) => l.source === pinned || l.target === pinned) : [];
-  const hoverNode = hover ? at.get(hover) : null;
+  }, [focus, view.links]);
+  const hits = useMemo(() => (query.trim() ? new Set(view.nodes.filter((n) => matches(n, query)).map((n) => n.id)) : null), [query, view.nodes]);
 
-  const toggle = (t: TypeId) =>
-    setHidden((h) => {
-      const n = new Set(h);
-      if (n.has(t)) n.delete(t);
-      else n.add(t);
-      return n;
+  // ---- physics -----------------------------------------------------------------------------------------------
+  const pos = useRef(new Map<string, { x: number; y: number }>());
+  const sim = useRef<Simulation<Sim, SimLink> | null>(null);
+  const simNodes = useRef<Sim[]>([]);
+  const raf = useRef(0);
+  const style = useRef({ deg, related, hits, fresh, pinned, adopted, focus });
+  style.current = { deg, related, hits, fresh, pinned, adopted, focus };
+
+  /** Rebuild the node list from the physics positions and the current highlight state, keeping React Flow's measurements. */
+  const sync = useCallback(() => {
+    const s = style.current;
+    setNodes((old) => {
+      const had = new Map(old.map((n) => [n.id, n]));
+      return view.nodes.map((n) => {
+        const p = pos.current.get(n.id) ?? { x: 0, y: 0 };
+        const size = nodeSize(n.kind, s.deg.get(n.id) ?? 0);
+        const data: HData = {
+          kind: n.kind,
+          label: titleOf(n),
+          size,
+          showLabel: n.kind === "bee" || n.kind === "brain" || n.kind === "coin" || n.kind === "style" || s.adopted.has(n.id) || (s.focus !== null && (s.related?.has(n.id) ?? false)),
+          dim: (s.related !== null && !s.related.has(n.id)) || (s.hits !== null && !s.hits.has(n.id)),
+          hit: s.hits?.has(n.id) ?? false,
+          fresh: s.fresh.has(n.id),
+          pinned: s.pinned === n.id,
+        };
+        return { ...had.get(n.id), id: n.id, type: "hive", origin: [0.5, 0.5], position: { x: p.x, y: p.y }, data, draggable: true } as HNode;
+      });
     });
+  }, [view.nodes]);
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
 
-  if (!graph.nodes.length) return <p className="dim">The hive mind is empty. Run the lab and the council (Admin → Lab) and it fills in.</p>;
+  const schedule = useCallback(() => {
+    if (raf.current) return;
+    raf.current = requestAnimationFrame(() => {
+      raf.current = 0;
+      for (const n of simNodes.current) pos.current.set(n.id, { x: n.x ?? 0, y: n.y ?? 0 });
+      syncRef.current();
+    });
+  }, []);
+
+  useEffect(() => {
+    sim.current?.stop();
+    const existing = pos.current;
+    const count = new Map<KindId, number>();
+    const idx = new Map<KindId, number>();
+    for (const n of view.nodes) count.set(n.kind, (count.get(n.kind) ?? 0) + 1);
+    const ns: Sim[] = view.nodes.map((n) => {
+      const i = idx.get(n.kind) ?? 0;
+      idx.set(n.kind, i + 1);
+      const p = existing.get(n.id) ?? seedPosition(n.kind, i, count.get(n.kind) ?? 1);
+      return { id: n.id, kind: n.kind, r: nodeSize(n.kind, deg.get(n.id) ?? 0) / 2, x: p.x, y: p.y };
+    });
+    simNodes.current = ns;
+    const links: SimLink[] = view.links.map((l) => ({ source: l.source, target: l.target, w: Math.max(0.2, Number(l.weight) || 0.5) }));
+    const s = forceSimulation<Sim>(ns)
+      .force("link", forceLink<Sim, SimLink>(links).id((n) => n.id).distance(95).strength(0.1))
+      .force("charge", forceManyBody<Sim>().strength((n) => -110 - n.r * 8).distanceMax(420))
+      .force("collide", forceCollide<Sim>().radius((n) => n.r + 8))
+      .force("radial", forceRadial<Sim>((n) => KIND[n.kind].radius, 0, 0).strength((n) => (n.kind === "bee" ? 0.4 : 0.05)))
+      .force("x", forceX<Sim>(0).strength(0.015))
+      .force("y", forceY<Sim>(0).strength(0.015))
+      .alpha(existing.size ? 0.35 : 1)
+      .alphaDecay(0.03);
+    sim.current = s;
+    const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still) {
+      s.stop();
+      s.tick(300);
+      schedule();
+    } else s.on("tick", schedule);
+    schedule();
+    const t = setTimeout(() => void rf.fitView({ padding: 0.15, duration: 500, maxZoom: 1.2 }), still ? 50 : 900);
+    return () => {
+      clearTimeout(t);
+      s.stop();
+      cancelAnimationFrame(raf.current);
+      raf.current = 0;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.nodes, view.links]);
+
+  useEffect(() => syncRef.current(), [related, hits, fresh, pinned, focus]);
+
+  const onNodesChange = useCallback((changes: NodeChange<HNode>[]) => {
+    const rest: NodeChange<HNode>[] = [];
+    for (const c of changes) {
+      if (c.type === "position") {
+        const sn = simNodes.current.find((n) => n.id === c.id);
+        if (!sn) continue;
+        if (c.dragging && c.position) {
+          sn.fx = c.position.x;
+          sn.fy = c.position.y;
+          sim.current?.alphaTarget(0.25).restart();
+        } else if (c.dragging === false) {
+          sn.fx = null;
+          sn.fy = null;
+          sim.current?.alphaTarget(0);
+        }
+        continue;
+      }
+      rest.push(c);
+    }
+    if (rest.length) setNodes((ns) => applyNodeChanges(rest, ns));
+  }, []);
+
+  const edges = useMemo<HEdge[]>(
+    () =>
+      view.links.map((l, i) => {
+        const conf = confidenceOf(l);
+        const on = focus !== null && (l.source === focus || l.target === focus);
+        return { id: `${l.source}>${l.target}>${l.relation}>${i}`, source: l.source, target: l.target, type: "float", data: { conf, state: on ? "lit" : focus !== null || hits !== null ? "dim" : "", w: Number(l.weight) || 0.5 } } as HEdge;
+      }),
+    [view.links, focus, hits],
+  );
+
+  const toggleKind = (k: KindId) => setHiddenKinds((h) => (h.has(k) ? new Set([...h].filter((x) => x !== k)) : new Set([...h, k])));
+  const toggleConf = (c: Confidence) => setHiddenConf((h) => (h.has(c) ? new Set([...h].filter((x) => x !== c)) : new Set([...h, c])));
+  const goTo = (ids: string[]) => void rf.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.4, duration: 500, maxZoom: 1.6 });
+
+  if (!raw.length) return <p className="dim">The hive mind is empty. Run the lab and the council (Admin → Lab) and it fills in.</p>;
+
+  const hoverNode = hover ? byId.get(hover) : null;
+  const pin = pinned ? byId.get(pinned) : null;
+  const pinLinks = pinned ? rawLinks.filter((l) => l.source === pinned || l.target === pinned) : [];
 
   return (
     <div className="hg">
       <div className="hg-bar">
-        <div className="hg-legend" role="group" aria-label="Node types (click to show or hide)">
-          {NODE_TYPES.map((t) => (
-            <button key={t.id} className={`hg-key ${hidden.has(t.id) ? "off" : ""}`} onClick={() => toggle(t.id)} aria-pressed={!hidden.has(t.id)}>
-              <svg width="16" height="16" aria-hidden>
-                <Mark t={t.id} x={8} y={8} active={false} />
-              </svg>
-              {t.label} <span className="dim num">{counts[t.id]}</span>
+        <div className="hg-legend" role="group" aria-label="Node kinds (click to show or hide)">
+          {KINDS.map((k) => (
+            <button key={k.id} className={`hg-key ${hiddenKinds.has(k.id) ? "off" : ""}`} onClick={() => toggleKind(k.id)} aria-pressed={!hiddenKinds.has(k.id)}>
+              <span className={`hgn-mark hgn-${k.id} hg-swatch`} style={{ ["--k" as string]: k.color }} aria-hidden />
+              {k.label} <span className="dim num">{counts[k.id]}</span>
             </button>
           ))}
         </div>
-        <button className="pbtn ghost small" onClick={() => setTable((x) => !x)}>
-          {table ? "Graph view" : "Table view"}
-        </button>
+        <div className="hg-tools">
+          <input className="pinput hg-search" type="search" placeholder="Search nodes…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && hits && goTo([...hits])} aria-label="Search the hive mind" />
+          <button className={`pbtn small ${live ? "" : "ghost"}`} onClick={() => setLive((x) => !x)} aria-pressed={live} title="Follow the 30 s refresh, or freeze the picture">
+            {live ? "Live" : "Paused"}
+          </button>
+          {onRefresh && (
+            <button className="pbtn ghost small" onClick={onRefresh}>
+              Refresh
+            </button>
+          )}
+          <button className="pbtn ghost small" onClick={() => setTable((x) => !x)}>
+            {table ? "Graph view" : "Table view"}
+          </button>
+        </div>
+      </div>
+      <div className="hg-bar hg-sub">
+        <div className="hg-legend" role="group" aria-label="Link confidence">
+          {CONFIDENCES.map((c) => (
+            <button key={c} className={`hg-key ${hiddenConf.has(c) ? "off" : ""}`} onClick={() => toggleConf(c)} aria-pressed={!hiddenConf.has(c)} title={c === "EXTRACTED" ? "Measured: a trade, a backtest, a setting" : c === "INFERRED" ? "Concluded by a brain: a lesson, an adoption" : "Facts that disagree"}>
+              <svg width="26" height="8" aria-hidden>
+                <line x1="1" y1="4" x2="25" y2="4" className={`hge hge-${c.toLowerCase()}`} />
+              </svg>
+              {c.toLowerCase()} <span className="dim num">{confCounts[c]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="hg-tools">
+          {ego ? (
+            <>
+              <span className="dim">Neighbourhood of {byId.get(ego)?.label ?? ego}</span>
+              <select className="pinput" value={hops} onChange={(e) => setHops(Number(e.target.value))} aria-label="Hops from the node">
+                {[1, 2, 3].map((h) => (
+                  <option key={h} value={h}>
+                    {h} hop{h > 1 ? "s" : ""}
+                  </option>
+                ))}
+              </select>
+              <button className="pbtn ghost small" onClick={() => setEgo(null)}>
+                Show all
+              </button>
+            </>
+          ) : (
+            <span className="dim">Hover for details · click to pin · double-click to isolate a neighbourhood</span>
+          )}
+        </div>
       </div>
 
       {table ? (
@@ -188,97 +333,103 @@ export function HiveGraph({ graph }: { graph: GraphJson }) {
           <table className="ptable">
             <thead>
               <tr>
-                <th>Type</th>
+                <th>Kind</th>
                 <th>Node</th>
                 <th className="r">Links</th>
                 <th>Updated</th>
               </tr>
             </thead>
             <tbody>
-              {visible.map(({ n, t }) => (
-                <tr key={n.id}>
-                  <td>{META[t].label}</td>
-                  <td>{n.text ? String(n.text) : n.label}</td>
-                  <td className="r num">{graph.links.filter((l) => l.source === n.id || l.target === n.id).length}</td>
-                  <td className="num dim">{new Date(n.updated_at).toISOString().slice(0, 16).replace("T", " ")}</td>
-                </tr>
-              ))}
+              {view.nodes
+                .filter((n) => !hits || hits.has(n.id))
+                .map((n) => (
+                  <tr key={n.id}>
+                    <td>{KIND[n.kind].label}</td>
+                    <td>{titleOf(n)}</td>
+                    <td className="r num">{deg.get(n.id) ?? 0}</td>
+                    <td className="num dim">{stamp(n.updated_at)}</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
       ) : (
         <div className="hg-stage">
-          <svg viewBox={`0 0 ${W} ${H}`} className="hg-svg" role="img" aria-label="Hive mind knowledge graph" onClick={() => setPinned(null)}>
-            {links.map((l, i) => {
-              const a = at.get(l.source)!;
-              const b = at.get(l.target)!;
-              const lit = neighbours && neighbours.has(l.source) && neighbours.has(l.target) && (l.source === focus || l.target === focus);
-              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`hg-edge ${lit ? "lit" : neighbours ? "dim" : ""}`} />;
-            })}
-            {placed.map((p) => {
-              const on = !neighbours || neighbours.has(p.n.id);
-              const labelled = p.t === "bee" || p.t === "brain" || p.t === "coin" || adopted.has(p.n.id) || (focus !== null && neighbours?.has(p.n.id));
-              return (
-                <g
-                  key={p.n.id}
-                  className={`hg-node ${on ? "" : "faded"}`}
-                  tabIndex={0}
-                  onPointerEnter={() => setHover(p.n.id)}
-                  onPointerLeave={() => setHover(null)}
-                  onFocus={() => setHover(p.n.id)}
-                  onBlur={() => setHover(null)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPinned(p.n.id);
-                  }}
-                >
-                  <circle cx={p.x} cy={p.y} r={14} fill="transparent" />
-                  <Mark t={p.t} x={p.x} y={p.y} active={focus === p.n.id} />
-                  {labelled && p.t !== "note" && (
-                    <text x={p.x + 12} y={p.y + 4} className="hg-label">
-                      {p.n.label.length > 22 ? `${p.n.label.slice(0, 21)}…` : p.n.label}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-          {hoverNode && (
-            <div className="hg-tip" style={{ left: `${(hoverNode.x / W) * 100}%`, top: `${(hoverNode.y / H) * 100}%` }}>
-              <strong>{hoverNode.n.text ? String(hoverNode.n.text).slice(0, 160) : hoverNode.n.label}</strong>
+          <ReactFlow<HNode, HEdge>
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onNodesChange={onNodesChange}
+            onNodeMouseEnter={(_, n) => setHover(n.id)}
+            onNodeMouseLeave={() => setHover(null)}
+            onNodeClick={(_, n) => setPinned((p) => (p === n.id ? null : n.id))}
+            onNodeDoubleClick={(_, n) => {
+              setEgo(n.id);
+              setPinned(n.id);
+            }}
+            onPaneClick={() => setPinned(null)}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            minZoom={0.15}
+            maxZoom={2.5}
+            colorMode="dark"
+            proOptions={{ hideAttribution: true }}
+            onlyRenderVisibleElements={raw.length > 400}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
+            <Controls showInteractive={false} />
+            <MiniMap pannable zoomable nodeColor={(n) => KIND[(n.data as HData).kind].color} maskColor="rgba(10,10,16,.7)" />
+          </ReactFlow>
+          {hoverNode && hover !== pinned && (
+            <div className="hg-tip" role="status">
+              <strong>{titleOf(hoverNode).slice(0, 200)}</strong>
               <span className="dim">
-                {META[hoverNode.t].label} · {links.filter((l) => l.source === hoverNode.n.id || l.target === hoverNode.n.id).length} links
+                {KIND[kindOfNode(hoverNode)].label} · {deg.get(hoverNode.id) ?? 0} links · {stamp(hoverNode.updated_at)}
               </span>
             </div>
           )}
         </div>
       )}
 
-      {pinned && byId.get(pinned) && (
+      {pin && (
         <div className="hg-detail">
           <div className="hg-detail-head">
-            <strong>{byId.get(pinned)!.label}</strong>
-            <button className="pbtn ghost small" onClick={() => setPinned(null)}>
-              Close
-            </button>
+            <strong>{pin.label}</strong>
+            <span className="hg-detail-actions">
+              <button className="pbtn ghost small" onClick={() => goTo([pin.id])}>
+                Centre
+              </button>
+              <button className="pbtn ghost small" onClick={() => setEgo(pin.id)}>
+                Isolate
+              </button>
+              <button className="pbtn ghost small" onClick={() => setPinned(null)}>
+                Close
+              </button>
+            </span>
           </div>
           <dl className="kv">
-            {nodeDetails(byId.get(pinned)!).map(([k, v]) => (
+            {details(pin).map(([k, v]) => (
               <div key={k}>
                 <dt>{k}</dt>
                 <dd>{v}</dd>
               </div>
             ))}
           </dl>
-          <div className="eyebrow">Links</div>
+          <div className="eyebrow">Links ({pinLinks.length})</div>
           <ul className="hg-links">
-            {pinnedLinks.slice(0, 40).map((l, i) => {
+            {pinLinks.slice(0, 40).map((l, i) => {
               const out = l.source === pinned;
-              const other = byId.get(out ? l.target : l.source);
+              const otherId = out ? l.target : l.source;
+              const other = byId.get(otherId);
+              const conf = confidenceOf(l);
               return (
                 <li key={i}>
-                  <span className="dim">{out ? `${l.relation} →` : `← ${l.relation}`}</span> {other?.text ? String(other.text).slice(0, 90) : (other?.label ?? (out ? l.target : l.source))}{" "}
-                  <span className="num dim">{Number(l.weight).toFixed(2)}</span>
+                  <span className="dim">{out ? `${l.relation} →` : `← ${l.relation}`}</span>{" "}
+                  <button className="hg-jump" onClick={() => (setPinned(otherId), goTo([otherId]))}>
+                    {other ? titleOf(other).slice(0, 90) : otherId}
+                  </button>{" "}
+                  <span className={`hg-conf hg-conf-${conf.toLowerCase()}`}>{conf.toLowerCase()}</span> <span className="num dim">{Number(l.weight).toFixed(2)}</span>
                 </li>
               );
             })}
@@ -286,5 +437,17 @@ export function HiveGraph({ graph }: { graph: GraphJson }) {
         </div>
       )}
     </div>
+  );
+}
+
+function kindOfNode(n: RawNode): KindId {
+  return n.type === "lesson" || n.type === "message" ? "note" : n.type in KIND ? (n.type as KindId) : "note";
+}
+
+export function HiveGraph({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void }) {
+  return (
+    <ReactFlowProvider>
+      <Canvas graph={graph} onRefresh={onRefresh} />
+    </ReactFlowProvider>
   );
 }

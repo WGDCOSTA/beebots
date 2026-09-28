@@ -373,48 +373,163 @@
   opacity: 0.45;
   text-decoration: line-through;
 }
+.hg-sub {
+  margin-top: -2px;
+}
+.hg-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+}
+.hg-tools .hg-search {
+  width: 180px;
+  padding: 5px 10px;
+}
 .hg-stage {
   position: relative;
-}
-.hg-svg {
-  width: 100%;
-  height: auto;
-  display: block;
+  height: min(72vh, 680px);
+  min-height: 420px;
   background: var(--card-2);
   border-radius: 10px;
+  overflow: hidden;
 }
-.hg-edge {
+.hg-stage .react-flow {
+  --xy-background-color: var(--card-2);
+  --xy-background-pattern-dots-color-default: #2a2838;
+  --xy-node-background-color: transparent;
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-color: var(--text-2);
+  --xy-controls-button-border-color: var(--line);
+  --xy-minimap-background-color: var(--card);
+}
+.hg-stage .react-flow__node {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.hg-stage .react-flow__minimap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.hge {
   stroke: var(--axis);
-  stroke-width: 1;
-  opacity: 0.55;
+  opacity: 0.6;
+  transition: opacity 0.15s;
 }
-.hg-edge.lit {
+.hge-inferred {
+  stroke-dasharray: 6 4;
+}
+.hge-ambiguous {
+  stroke: var(--warning);
+  stroke-dasharray: 1.5 4;
+  stroke-linecap: round;
+}
+.hge.lit {
   stroke: var(--text-2);
   opacity: 1;
-  stroke-width: 1.5;
 }
-.hg-edge.dim {
-  opacity: 0.12;
+.hge-ambiguous.lit {
+  stroke: var(--warning);
 }
-.hg-node {
-  cursor: pointer;
-  outline: none;
+.hge.dim {
+  opacity: 0.08;
 }
-.hg-node.faded {
-  opacity: 0.2;
+.hgn {
+  position: relative;
+  cursor: grab;
+  transition: opacity 0.15s;
 }
-.hg-label {
-  fill: var(--text-2);
-  font-size: 11px;
+.hgn.faded {
+  opacity: 0.18;
+}
+.hgn-h {
+  opacity: 0;
   pointer-events: none;
-  paint-order: stroke;
-  stroke: var(--card-2);
-  stroke-width: 3px;
+}
+.hgn-mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--k);
+  box-shadow: 0 0 0 2px var(--card-2);
+}
+.hgn-bee .hgn-mark,
+.hgn-coin .hgn-mark {
+  border-radius: 50%;
+}
+.hgn-brain .hgn-mark,
+.hgn-memory .hgn-mark {
+  border-radius: 3px;
+}
+.hgn-skill .hgn-mark {
+  transform: rotate(45deg) scale(0.75);
+  border-radius: 2px;
+}
+.hgn-note .hgn-mark {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  box-shadow: none;
+}
+.hgn-style .hgn-mark {
+  clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+  box-shadow: none;
+}
+.hgn-family .hgn-mark {
+  background: var(--card-2);
+  border: 3px solid var(--k);
+  border-radius: 50%;
+  box-shadow: none;
+}
+.hgn-memory .hgn-mark {
+  background: transparent;
+  border: 2px solid var(--k);
+}
+.hg-swatch {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.hgn.hit .hgn-mark,
+.hgn.pinned .hgn-mark {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.hgn.fresh .hgn-mark {
+  animation: hgn-pulse 1.4s ease-out 4;
+}
+@keyframes hgn-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--k);
+  }
+  100% {
+    box-shadow: 0 0 0 16px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hgn.fresh .hgn-mark {
+    animation: none;
+    outline: 2px dashed var(--k);
+    outline-offset: 2px;
+  }
+}
+.hgn-label {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-2);
+  pointer-events: none;
+  text-shadow: 0 0 3px var(--card-2), 0 0 3px var(--card-2), 0 0 6px var(--card-2);
 }
 .hg-tip {
   position: absolute;
-  transform: translate(14px, -50%);
-  max-width: 320px;
+  left: 12px;
+  bottom: 12px;
+  max-width: min(360px, 60%);
   pointer-events: none;
   background: var(--page);
   border: 1px solid var(--line);
@@ -424,8 +539,33 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  z-index: 2;
+  z-index: 5;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+.hg-detail-actions {
+  display: flex;
+  gap: 6px;
+}
+.hg-jump {
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.hg-conf {
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--muted);
+}
+.hg-conf-ambiguous {
+  color: var(--warning);
+  border-color: var(--warning);
 }
 .hg-detail {
   margin-top: 12px;

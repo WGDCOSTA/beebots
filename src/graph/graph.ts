@@ -8,6 +8,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { confidenceOf } from "./memory.js";
 
 export const NODE_TYPES = ["bee", "brain", "skill", "family", "coin", "lesson", "message", "run", "regime", "style", "memory"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -206,7 +207,7 @@ export class KnowledgeGraph {
       multigraph: false,
       graph: { name: "beebots hive mind", exportedAt: this.now() },
       nodes: nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, ...n.props, created_at: n.createdAt, updated_at: n.updatedAt })),
-      links: links.map((e) => ({ source: e.src, target: e.dst, relation: e.rel, weight: e.weight, count: e.count, ...e.props, updated_at: e.updatedAt })),
+      links: links.map((e) => ({ source: e.src, target: e.dst, relation: e.rel, weight: e.weight, count: e.count, confidence: confidenceOf(e), ...e.props, updated_at: e.updatedAt })),
     };
   }
 }

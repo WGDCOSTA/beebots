@@ -130,7 +130,7 @@ seeded synthetic markets for offline runs; they exercise the machinery and prove
 ## The hive mind
 
 A SQLite knowledge graph (`GRAPH_PATH`). Node types: `bee`, `brain`, `skill`, `family`, `coin`, `lesson`, `message`,
-`run`. Edges include `thinks_with`, `adopts`, `recommends`, `ranked`, `performs_on`, `in_family`, `traded` (real P&L per
+`run`, `regime`, `style`, `memory`. Edges include `thinks_with`, `adopts`, `recommends`, `ranked`, `performs_on`, `in_family`, `traded` (real P&L per
 coin, from the engine's fills), `learned`, `said`, `to`, `about`.
 
 - **Memory.** Every council and coach round starts from `contextFor(bee)`: its own lessons, its real trade record,
@@ -392,8 +392,12 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
   - the last ranking, sortable and filterable by family, with a diverging score bar; click a skill to see every
     out-of-sample fold and the parameters picked on the past;
   - each bee's playbook: its brain, the skills it leans on and their weights, its message to the hive and lessons;
-  - the hive-mind graph (force layout; node type shown by colour and shape, the legend filters types; hover for
-    details, click to pin a node and list its links; a table view carries the same data);
+  - the hive-mind graph, built on React Flow with d3-force physics: bees, brains, skills, coins, styles, lessons,
+    messages and memories, each with its own colour and shape; drag a node and the rest reacts; pan, zoom and minimap.
+    Links show their confidence by line style (solid = measured fact, dashed = a brain's inference, dotted = disputed)
+    and the legend filters kinds and confidence. Hover for details, click to pin a node and list its links (each link
+    jumps to the other end), double-click to isolate its neighbourhood (1-3 hops), search highlights matches, Live
+    follows the 30 s refresh (new nodes pulse) or freezes the picture. A table view carries the same data;
   - the latest messages and lessons.
 - **`#/admin` – Admin** (owner password, the same gate and 15-minute lockout as joining the Hive):
   - **Overview**: mode, keys, brains, hive-mind size, the current lab job, restart;
