@@ -104,6 +104,10 @@ services:
       SESSION_FLATTEN_MIN: ${SESSION_FLATTEN_MIN:-}
       REWARDS_IN_LIVE: ${REWARDS_IN_LIVE:-}
       MAX_POSITIONS_PER_BEE: ${MAX_POSITIONS_PER_BEE:-}
+      RATCHET: ${RATCHET:-}
+      RATCHET_LOCK: ${RATCHET_LOCK:-}
+      RATCHET_HUG: ${RATCHET_HUG:-}
+      RATCHET_STYLES: ${RATCHET_STYLES:-}
       LAB_DIR: /data/lab
       GRAPH_PATH: /data/lab/hive-mind.sqlite
     volumes:

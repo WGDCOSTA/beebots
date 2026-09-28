@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ANTHROPIC_PROFILE, BRAINS, hasAnthropicLogin, type BrainCreds, type BrainId } from "./brains/llm.js";
+import { parseHug, parseLock, type HugRung, type LockRung } from "./bees/ratchet.js";
 import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
 /**
@@ -180,6 +181,13 @@ const EnvSchema = z.object({
   // switches method only when flat, and not more often than SPECIALIZE_MIN_HOURS. Risk rules never change.
   SPECIALIZATION: bool(true),
   SPECIALIZE_MIN_HOURS: num(6),
+  // ---- Dynamic profit-locking ratchet (bees/ratchet.ts) ----
+  // Hard profit floor ("gain%:keep" rungs) and runner hug ("gain%:ATR multiple" rungs) on top of each style's stops,
+  // for the styles listed in RATCHET_STYLES. Stops only ever tighten.
+  RATCHET: bool(true),
+  RATCHET_LOCK: str("2.5:0.5,5:0.65"),
+  RATCHET_HUG: str("2.5:1.2,5:0.8,8:0.6"),
+  RATCHET_STYLES: str("bizzy,boozy,macro,skill"),
   // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
   COACH_INTERVAL_MIN: num(0),
   COACH_MAX_CALLS_DAY: num(12),
@@ -280,6 +288,8 @@ export interface Config {
     takerFeeRate: number;
   };
   universe: { min24hVolUsd: number; allowNonCrypto: boolean };
+  /** Dynamic profit-locking ratchet: rungs, and the brain ids (styles, "skill") it applies to. */
+  ratchet: { enabled: boolean; lock: LockRung[]; hug: HugRung[]; styles: string[] };
   /** The macro squad: gates, the session rule and where the learned calendar lives. */
   macro: {
     min24hVolUsd: number;
@@ -436,6 +446,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       takerFeeRate: e.TAKER_FEE_RATE,
     },
     universe: { min24hVolUsd: e.MIN_24H_VOL_USD, allowNonCrypto: e.ALLOW_NON_CRYPTO },
+    ratchet: {
+      enabled: e.RATCHET,
+      lock: parseLock(e.RATCHET_LOCK),
+      hug: parseHug(e.RATCHET_HUG),
+      styles: e.RATCHET_STYLES.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+    },
     macro: {
       min24hVolUsd: Math.max(0, e.MACRO_MIN_24H_VOL_USD),
       spreadGateBps: Math.max(0, e.MACRO_SPREAD_GATE_BPS as number),

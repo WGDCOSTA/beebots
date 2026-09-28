@@ -4,6 +4,7 @@ import { macro } from "./bees/macro.js";
 import { skillBrain } from "./bees/skill.js";
 import type { Skill } from "./lab/skills/types.js";
 import { STYLES } from "./settings.js";
+import { dynamicRatchetStop } from "./bees/ratchet.js";
 import { allPositions, maxNotionalUsd, minutesSince, positionNotional, profitLockStop, uplUsd } from "./bees/common.js";
 import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Menu, type Position, type Side } from "./bees/types.js";
 import type { BeeId, Config } from "./config.js";
@@ -469,8 +470,14 @@ export class Engine {
       const cand = profitLockStop(p.side, p.entryPx, p.peakPx!, brain.profitLock);
       if (cand !== null && Number.isFinite(cand)) ratchetStop(p, cand);
     }
+    // Dynamic profit-locking ratchet (bees/ratchet.ts): hard floor plus ATR runner hug, for the opted-in styles.
+    const rc = this.d.cfg.ratchet;
+    const ratchetOn = rc.enabled && rc.styles.includes(brain.id);
+    if (p && ratchetOn && t?.mid) this.applyRatchet(p, t.mid);
     // The same trailing and profit lock for every leg, each seen by the brain as if it were the main position.
     for (const l of bee.legs ?? []) {
+      const lm0 = view.tickers.get(l.instId)?.mid;
+      if (ratchetOn && lm0) this.applyRatchet(l, lm0);
       const lm = view.tickers.get(l.instId)?.mid;
       if (brain.trail) {
         const cand = brain.trail(this.legCtx(id, l, now));
@@ -482,6 +489,15 @@ export class Engine {
         if (cand !== null && Number.isFinite(cand)) ratchetStop(l, cand);
       }
     }
+  }
+
+  /** Track the peak and tighten the stop to the ratchet's candidate, if any. */
+  private applyRatchet(p: Position, mid: number): void {
+    const rc = this.d.cfg.ratchet;
+    if (p.peakPx == null || (p.side === "long" ? mid > p.peakPx : mid < p.peakPx)) p.peakPx = mid;
+    const atr = this.d.feed.view().stats.get(p.instId)?.atr14Pct ?? null;
+    const cand = dynamicRatchetStop(p.side, p.entryPx, p.peakPx, atr, rc.lock, rc.hug);
+    if (cand !== null && Number.isFinite(cand)) ratchetStop(p, cand);
   }
 
   private async decide(id: BeeId, now: number): Promise<void> {
