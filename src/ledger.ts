@@ -33,6 +33,8 @@ export interface LedgerFill {
   feeUsd: number;
   ctVal: number;
   ts: number;
+  /** Multi-orders: this fill opens a new extra position ("leg") instead of the main one. */
+  leg?: boolean;
 }
 
 /** Apply a fill to the bee's books. Returns realised P&L (before fees). */
@@ -45,6 +47,11 @@ export function applyFill(bee: BeeState, f: LedgerFill): number {
   bee.totals.feesUsd += f.feeUsd;
   bee.lastOrderAt = f.ts;
   bee.totals.orders++;
+
+  // Multi-orders: a fill on a leg's coin, or one that opens a new leg, goes to the legs.
+  const legs = bee.legs ?? [];
+  const legIdx = legs.findIndex((l) => l.instId === f.instId);
+  if (legIdx >= 0 || (f.leg && p?.instId !== f.instId)) return applyLegFill(bee, f, dir, legIdx);
 
   if (!p) {
     bee.position = newPosition(f, dir);
@@ -82,6 +89,41 @@ export function applyFill(bee: BeeState, f: LedgerFill): number {
   return realised;
 }
 
+/** When the main position is gone but legs remain, the oldest leg becomes the main one. The engine calls this between orders (never mid-switch). */
+export function promoteLeg(bee: BeeState): boolean {
+  if (bee.position || !bee.legs?.length) return false;
+  bee.position = bee.legs.shift()!;
+  bee.flatSince = null;
+  return true;
+}
+
+/** A fill on an extra position: open it, add to it, reduce or close it. Returns realised P&L (before fees). */
+function applyLegFill(bee: BeeState, f: LedgerFill, dir: number, idx: number): number {
+  const legs = (bee.legs ??= []);
+  if (idx < 0) {
+    legs.push(newPosition(f, dir));
+    return 0;
+  }
+  const l = legs[idx]!;
+  const lDir = l.side === "long" ? 1 : -1;
+  if (dir === lDir) {
+    const total = l.contracts + f.contracts;
+    l.entryPx = (l.entryPx * l.contracts + f.px * f.contracts) / total;
+    l.contracts = total;
+    const initStop = l.initialStopPx ?? l.stopPx;
+    if (initStop !== null && initStop !== undefined) l.riskUsd = sizedRiskUsd(total, f.ctVal, l.entryPx, initStop);
+    return 0;
+  }
+  const closed = Math.min(l.contracts, f.contracts);
+  const realised = lDir * (f.px - l.entryPx) * closed * f.ctVal;
+  bee.cashUsd += realised;
+  bee.totals.realisedUsd += realised;
+  l.riskUsd = l.contracts > 0 ? l.riskUsd * ((l.contracts - closed) / l.contracts) : 0;
+  l.contracts = Number((l.contracts - closed).toFixed(8));
+  if (l.contracts <= 0) legs.splice(idx, 1);
+  return realised;
+}
+
 /** USD lost if the whole position exits at `stopPx` from its average entry. */
 export function sizedRiskUsd(contracts: number, ctVal: number, entryPx: number, stopPx: number): number {
   return Math.abs(contracts * ctVal * (entryPx - stopPx));
@@ -105,10 +147,15 @@ export function applyFunding(bee: BeeState, amountUsd: number): void {
   bee.totals.fundingUsd += amountUsd;
 }
 
-/** Mark to market at `markPx`. */
-export function mark(bee: BeeState, markPx: number | undefined, ctVal: number | undefined): void {
+/**
+ * Mark to market at `markPx` (the main position's price). `legsUplUsd` is the unrealised P&L of the extra positions
+ * (multi-orders), marked by the caller at their own prices.
+ */
+export function mark(bee: BeeState, markPx: number | undefined, ctVal: number | undefined, legsUplUsd = 0): void {
   const p = bee.position;
-  bee.uplUsd = p && markPx && ctVal ? uplUsd(p, markPx, ctVal) : bee.position ? bee.uplUsd : 0;
+  const main = p && markPx && ctVal ? uplUsd(p, markPx, ctVal) : p ? (bee.mainUplUsd ?? bee.uplUsd - legsUplUsd) : 0;
+  bee.mainUplUsd = main;
+  bee.uplUsd = main + legsUplUsd;
   bee.equityUsd = bee.cashUsd + bee.uplUsd;
 }
 

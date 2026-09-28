@@ -121,3 +121,50 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
     </header>
   );
 }
+
+const BRAIN_NAME: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi" };
+
+/** The engine's intelligence at a glance: which brains are online and which features shape the bees right now. */
+export function SystemBar({ snap }: { snap: Snapshot | null }) {
+  const s = snap?.system;
+  if (!s) return null;
+  const flag = (on: boolean, label: string, title: string, detail?: string) => (
+    <span className={`sys-flag ${on ? "on" : ""}`} title={title}>
+      <i />
+      {label}
+      {detail ? <em>{detail}</em> : null}
+    </span>
+  );
+  const up = s.brains.filter((b) => b.online).length;
+  return (
+    <div className="sysbar num" role="status">
+      <span className="sys-group">
+        <span className="sys-key">DECIDER</span>
+        <span className="sys-val">Jev {s.jevModel}</span>
+        <em>tick {Math.round((snap?.tickMs ?? 0) / 1000)}s</em>
+      </span>
+      <span className="sys-group" title="Strategic brains: they pick skills and coins; Jev still makes every trade decision">
+        <span className="sys-key">BRAINS {up}/3</span>
+        {s.brains.map((b) => (
+          <span key={b.id} className={`sys-flag ${b.online ? "on" : ""}`} title={b.online ? `${b.model}` : "no key or sign-in: rules pick"}>
+            <i />
+            {BRAIN_NAME[b.id] ?? b.id}
+          </span>
+        ))}
+      </span>
+      <span className="sys-group">
+        <span className="sys-key">INTEL</span>
+        {flag(s.labSignals, "lab votes", "Jev sees each bee's backtested skill vote per coin")}
+        {flag(s.watchlist, "AI watchlists", "Brains choose each bee's coins from lab evidence")}
+        {flag(s.survival, "survival", "Health tiers, smaller size in danger, rescue councils")}
+        {flag(s.rewards, "rewards", "Points and levels unlock skills, brains, limits")}
+        {flag(s.maxPositions > 1 && s.rewards, "multi-orders", "Top performers hold several positions inside one leverage cap", `≤${s.maxPositions}`)}
+      </span>
+      <span className="sys-group">
+        <span className="sys-key">RISK</span>
+        <span className="sys-val">≤{s.maxLeverage}x lev</span>
+        {flag(s.macroTrading, "macro squad", s.macroTrading ? "Stocks and commodities trade in verified sessions" : "Macro bees watch and learn only (ALLOW_NON_CRYPTO off)", s.macroBees ? String(s.macroBees) : undefined)}
+      </span>
+    </div>
+  );
+}

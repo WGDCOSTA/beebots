@@ -78,6 +78,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   num("SURVIVAL_MAX_CALLS_DAY", "evolution", "Council calls per day", "Hard cap on survival and reward council LLM calls per UTC day.", 0, 200),
   { key: "REWARDS", group: "evolution", label: "Rewards", help: "Daily points for gains, levels, and prizes: more skills, skill writing, extra brains, bigger limits.", type: "bool" },
   num("REWARD_MAX_LIMIT_BOOST", "evolution", "Max limit boost", "Largest share a reward adds to max position size (0.5 = +50%). Leverage is never raised.", 0, 1, 0.05),
+  num("MAX_POSITIONS_PER_BEE", "evolution", "Max positions per bee", "Multi-orders: level 3 earns 2 positions, level 5 earns 3, on different coins inside one leverage cap. 1 = off.", 1, 5),
   { key: "REWARDS_IN_LIVE", group: "evolution", label: "Limit boosts with real money", help: "Off: in live mode rewards unlock skills and brains, never bigger limits.", type: "bool" },
   // risk
   num("MAX_LEVERAGE", "risk", "Max leverage", "Never above 2x (hard rule).", 0.1, 2, 0.1),

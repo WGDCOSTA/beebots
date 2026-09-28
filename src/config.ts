@@ -190,6 +190,9 @@ const EnvSchema = z.object({
   REWARD_MAX_LIMIT_BOOST: num(0.5),
   // Limit boosts with real money too (off: in live mode rewards unlock skills and brains, never bigger limits).
   REWARDS_IN_LIVE: bool(false),
+  // Multi-orders: top bees (level 3: 2 positions, level 5: 3) may hold several positions on different coins, all
+  // inside one leverage cap. 1 turns multi-orders off.
+  MAX_POSITIONS_PER_BEE: num(3),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
   ALERT_WEBHOOK_URL: opt,
 });
@@ -309,6 +312,8 @@ export interface Config {
     maxLimitBoost: number;
     /** Whether reward limit boosts apply in this mode. */
     boostLimits: boolean;
+    /** Most positions a bee may hold at once (multi-orders perk). */
+    maxPositions: number;
   };
 }
 
@@ -470,6 +475,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       rewards: e.REWARDS,
       maxLimitBoost: e.REWARD_MAX_LIMIT_BOOST,
       boostLimits: mode !== "live" || e.REWARDS_IN_LIVE,
+      maxPositions: Math.max(1, Math.min(5, Math.floor(e.MAX_POSITIONS_PER_BEE))),
     },
   };
 }
