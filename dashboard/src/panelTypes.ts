@@ -120,10 +120,28 @@ export interface AdminState {
   hasSettingsFile: boolean;
   pendingRestart: boolean;
   keys: Record<KeyName, { set: boolean; source: "env" | "settings" | null }>;
-  bees: Array<{ slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; image: boolean; brain: string | null; extra: boolean; running: boolean; flat: boolean }> | null;
+  bees: Array<{ slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; image: boolean; brain: string | null; market?: string; extra: boolean; running: boolean; flat: boolean }> | null;
   maxBees: number;
   /** Coins with a live X-Perp right now ([] before the market loads: free text then). */
   coins: string[];
+  /** Stocks and commodities with a live X-Perp (the macro squad's picker). */
+  macroCoins: { commodities: string[]; stocks: string[] };
+  markets: Array<{ id: string; label: string; blurb: string }>;
+  /** The trading hours the engine is learning (market/sessions.ts). */
+  sessions: {
+    watchedHours: number;
+    allowNonCrypto: boolean;
+    noOpenMin: number;
+    coins: Array<{
+      coin: string;
+      kind: string;
+      verifiedPct: number;
+      openHoursPerWeek: number;
+      meanSpreadBp: number | null;
+      grid: string[];
+      now: { status: "open" | "closed" | "unverified"; closesInMin: number | null; opensInMin: number | null };
+    }>;
+  } | null;
   evolution: { survival: boolean; rewards: boolean; board: import("./types").EvolutionRow[] } | null;
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;

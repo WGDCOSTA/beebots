@@ -165,6 +165,12 @@ start with fresh paper money after a restart; only the last bees can be removed,
 in the leaderboard, the "Challengers" card, the lab and the councils; the Hive shows the main three. Outside paper
 trading an extra bee needs its own exchange keys in `.env` (`BEE4_OKX_DEMO_API_KEY`, …) or it sits out.
 
+## The macro squad
+
+Extra bees can trade gold, oil and stocks instead of crypto (Admin → Bees → Market, or "Form the macro squad"). Their
+councils, coach and watchlists stay inside their market, and they open only in trading hours the engine has verified
+from the market. See [MACRO_SQUAD.md](MACRO_SQUAD.md).
+
 ## Survival mode
 
 Every bee knows it can die. Its **health** is equity as a % of its start:

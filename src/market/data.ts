@@ -17,11 +17,12 @@ export type NewsSource = (coins: string[]) => Promise<Map<string, NewsReading> |
 
 export interface FeedOpts {
   min24hVolUsd: number;
-  allowNonCrypto: boolean;
   /** The widest spread gate of any bee (boozy's), used for the shared universe. */
   spreadGateBps: number;
   /** Coins that always get stats + 4h trend data (breezy's majors). */
   trendCoins: string[];
+  /** Macro bees exist: gate stocks and commodities too (their own volume and spread gates) and keep their stats. */
+  macro?: { min24hVolUsd: number; spreadGateBps: number } | null;
 }
 
 const HOUR = 3_600_000;
@@ -72,6 +73,7 @@ export class MarketFeed {
   private c1h = new Map<string, Candle[]>();
   private gated: string[] = [];
   private spreadBlocked: string[] = [];
+  private macro: string[] = [];
   private oiHistory = new Map<string, Array<[number, number]>>();
   private fundingHist = new Map<string, { at: number; rates: number[] }>();
   private instrumentsAt = 0;
@@ -94,6 +96,7 @@ export class MarketFeed {
       stats: this.stats,
       gated: this.gated,
       spreadBlocked: this.spreadBlocked,
+      macro: this.macro,
       newsAvailable: this.newsAvailable,
     };
   }
@@ -132,13 +135,18 @@ export class MarketFeed {
     }
     const [tickers, oi] = await Promise.all([this.api.tickers(), this.api.openInterest()]);
     this.tickers = tickers;
+    // The crypto bees' universe is crypto only; stocks and commodities are the macro squad's (their own gates).
     const u = gateUniverse(this.instruments.values(), tickers, {
       min24hVolUsd: this.opts.min24hVolUsd,
       spreadGateBps: this.opts.spreadGateBps,
-      allowNonCrypto: this.opts.allowNonCrypto,
+      allowNonCrypto: false,
+      kinds: ["crypto"],
     });
     this.gated = u.tradable;
     this.spreadBlocked = u.spreadBlocked;
+    this.macro = this.opts.macro
+      ? gateUniverse(this.instruments.values(), tickers, { ...this.opts.macro, allowNonCrypto: true, kinds: ["stock", "commodity"] }).tradable
+      : [];
 
     for (const [id, v] of oi) {
       const h = this.oiHistory.get(id) ?? [];
@@ -148,7 +156,7 @@ export class MarketFeed {
     }
 
     const trendIds = this.opts.trendCoins.map((c) => this.instIdForCoin(c)).filter((x): x is string => !!x);
-    const want = [...new Set([...this.gated, ...trendIds, ...this.heldInstIds()])].filter((id) => this.instruments.has(id) && tickers.has(id));
+    const want = [...new Set([...this.gated, ...this.macro, ...trendIds, ...this.heldInstIds()])].filter((id) => this.instruments.has(id) && tickers.has(id));
 
     const next = new Map<string, CoinStats>();
     const nextC1h = new Map<string, Candle[]>();

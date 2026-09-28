@@ -50,6 +50,8 @@ export function App() {
   const stalled = feed.lastEventAt > 0 && Date.now() - feed.lastEventAt > 15_000;
   const blocked = feed.snap?.market.spreadBlocked ?? [];
   const extras = ALL_BEES.filter((b) => !BEE_NAMES.includes(b));
+  const macroSquad = extras.filter((b) => beeMeta(b).squad === "macro");
+  const challengers = extras.filter((b) => beeMeta(b).squad !== "macro");
 
   return (
     <div className="app">
@@ -92,34 +94,8 @@ export function App() {
               );
             })}
           </section>
-          {extras.length > 0 && (
-            <section className="rail-card challengers">
-              <div className="rail-head">
-                <span className="eyebrow">Challengers</span>
-                <a className="dim" href="#/lab">
-                  evolution ↗
-                </a>
-              </div>
-              {extras.map((name) => {
-                const b = feed.bees[name];
-                const m = beeMeta(name);
-                const t = b?.evo ? TIER_INFO[b.evo.tier] : null;
-                return (
-                  <div className="ch-row" key={name} style={{ ["--bee" as string]: m.color }}>
-                    <span className="ch-dot" aria-hidden />
-                    <span className="ch-name">{m.short}</span>
-                    <span className={`ch-pos num ${b?.position ? b.position.side : "dim"}`}>{b?.position ? `${b.position.side === "long" ? "▲" : "▼"} ${b.position.coin}` : "flat"}</span>
-                    <span className={`num ${b && b.pnlUsd >= 0 ? "good" : "bad"}`}>{b ? `${b.pnlPct >= 0 ? "+" : ""}${b.pnlPct.toFixed(1)}%` : "–"}</span>
-                    {t && (
-                      <span className={`ch-tier ${t.tone}`} title={`${t.label} · level ${b!.evo!.level}`}>
-                        {t.icon} L{b!.evo!.level}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
-          )}
+          {challengers.length > 0 && <SquadCard title="Challengers" bees={challengers} feed={feed} />}
+          {macroSquad.length > 0 && <SquadCard title="Macro squad" hint="gold · oil · stocks" bees={macroSquad} feed={feed} />}
           <Ticker decisions={feed.decisions} perMin={feed.decisionTimes.length} />
           {blocked.length > 0 && (
             <section className="rail-card blocked">
@@ -137,5 +113,40 @@ export function App() {
       </main>
       <Toasts toasts={feed.toasts} />
     </div>
+  );
+}
+
+/** A rail card for a group of extra bees: the crypto challengers, or the macro squad (stocks and commodities). */
+function SquadCard({ title, hint, bees, feed }: { title: string; hint?: string; bees: string[]; feed: ReturnType<typeof useFeed> }) {
+  return (
+    <section className="rail-card challengers">
+      <div className="rail-head">
+        <span className="eyebrow">
+          {title}
+          {hint && <span className="dim small"> · {hint}</span>}
+        </span>
+        <a className="dim" href="#/lab">
+          evolution ↗
+        </a>
+      </div>
+      {bees.map((name) => {
+        const b = feed.bees[name];
+        const m = beeMeta(name);
+        const t = b?.evo ? TIER_INFO[b.evo.tier] : null;
+        return (
+          <div className="ch-row" key={name} style={{ ["--bee" as string]: m.color }}>
+            <span className="ch-dot" aria-hidden />
+            <span className="ch-name">{m.short}</span>
+            <span className={`ch-pos num ${b?.position ? b.position.side : "dim"}`}>{b?.position ? `${b.position.side === "long" ? "▲" : "▼"} ${b.position.coin}` : "flat"}</span>
+            <span className={`num ${b && b.pnlUsd >= 0 ? "good" : "bad"}`}>{b ? `${b.pnlPct >= 0 ? "+" : ""}${b.pnlPct.toFixed(1)}%` : "–"}</span>
+            {t && (
+              <span className={`ch-tier ${t.tone}`} title={`${t.label} · level ${b!.evo!.level}`}>
+                {t.icon} L{b!.evo!.level}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }

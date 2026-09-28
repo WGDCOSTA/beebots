@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BRAINS, type BrainCreds, type BrainId } from "./brains/llm.js";
-import { STYLE_INFO, STYLES, type Settings, type StyleId } from "./settings.js";
+import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
 /**
  * The three main bee slots (the live dashboard's columns, Setup, the Hive). Each one trades one of the three styles
@@ -103,7 +103,13 @@ const EnvSchema = z.object({
   LIVE_SIZE_MULTIPLIER: num(0.25),
   LIVE_RAMP_HOURS: num(2),
   MIN_24H_VOL_USD: num(1_000_000),
+  // Master switch for the macro squad (stocks, commodities): off = macro bees watch and learn but never open.
   ALLOW_NON_CRYPTO: bool(false),
+  // Macro squad gates: stocks and gold trade far less than crypto on OKX, so they get their own volume and spread gates.
+  MACRO_MIN_24H_VOL_USD: num(200_000),
+  MACRO_SPREAD_GATE_BPS: num(15),
+  // No new position this close (minutes) to a session's end; the calendar is learned from the market (sessions.ts).
+  SESSION_NO_OPEN_MIN: num(30),
   TAKER_FEE_RATE: num(0.0005),
 
   BREEZY_MIN_OPEN_PROB: num(0.7),
@@ -225,6 +231,9 @@ export interface SlotProfile {
   coins: string[];
   /** Made on the Setup page (never shown with the original bees' art). */
   fromSetup: boolean;
+  /** What it trades, and the squad it races in (crypto, or macro: stocks and commodities). */
+  market: MarketId;
+  squad: "crypto" | "macro";
 }
 
 export interface Config {
@@ -255,6 +264,8 @@ export interface Config {
     takerFeeRate: number;
   };
   universe: { min24hVolUsd: number; allowNonCrypto: boolean };
+  /** The macro squad: gates, the session rule and where the learned calendar lives. */
+  macro: { min24hVolUsd: number; spreadGateBps: number; noOpenMin: number; sessionsPath: string };
   /** Knobs per trading style. */
   bees: Record<StyleId, BeeKnobs>;
   breezy: { minOpenProb: number; minSizeUsd: number };
@@ -313,9 +324,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   allIds.forEach((id, i) => {
     const b = settings?.bees[i];
     const style = b?.style ?? DEFAULT_SLOTS[id as (typeof BEES)[number]] ?? "boozy";
+    // The main three are always crypto (Setup, the Hive and the live columns are about crypto).
+    const market: MarketId = i < BEES.length ? "crypto" : (b?.market ?? "crypto");
     slots[id] = b
-      ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true }
-      : { style, name: STYLE_INFO[style].name, tagline: STYLE_INFO[style].tagline, customImage: false, rules: "", coins: [], fromSetup: false };
+      ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true, market, squad: squadOf(market) }
+      : { style, name: STYLE_INFO[style].name, tagline: STYLE_INFO[style].tagline, customImage: false, rules: "", coins: [], fromSetup: false, market, squad: squadOf(market) };
   });
 
   const creds: Partial<Record<BeeId, OkxCreds>> = {};
@@ -394,6 +407,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       takerFeeRate: e.TAKER_FEE_RATE,
     },
     universe: { min24hVolUsd: e.MIN_24H_VOL_USD, allowNonCrypto: e.ALLOW_NON_CRYPTO },
+    macro: {
+      min24hVolUsd: Math.max(0, e.MACRO_MIN_24H_VOL_USD),
+      spreadGateBps: Math.max(0, e.MACRO_SPREAD_GATE_BPS),
+      noOpenMin: Math.max(0, e.SESSION_NO_OPEN_MIN),
+      sessionsPath: `${e.LAB_DIR.replace(/\/+$/, "")}/sessions.json`,
+    },
     bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy") },
     breezy: { minOpenProb: e.BREEZY_MIN_OPEN_PROB, minSizeUsd: e.BREEZY_MIN_SIZE_USD },
     bizzy: { sizeFraction: e.BIZZY_SIZE_FRACTION, universeSize: e.BIZZY_UNIVERSE_SIZE, timeStopMinutes: e.BIZZY_TIME_STOP_MINUTES },

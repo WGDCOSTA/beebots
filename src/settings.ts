@@ -9,6 +9,22 @@ export const STYLES = ["bizzy", "breezy", "boozy"] as const;
 /** A trading style is one of the three built-in strategies, named after the bee that first traded it. */
 export type StyleId = (typeof STYLES)[number];
 
+/**
+ * What a bee trades. The main three and every bee by default: crypto. Extra bees may join the macro squad instead:
+ * commodities (gold, silver, oil), stocks (stocks and ETFs) or macro (both). Non-crypto trading also needs
+ * ALLOW_NON_CRYPTO=true and a verified open session (market/sessions.ts).
+ */
+export const MARKETS = ["crypto", "commodities", "stocks", "macro"] as const;
+export type MarketId = (typeof MARKETS)[number];
+export const MARKET_INFO: Record<MarketId, { label: string; blurb: string }> = {
+  crypto: { label: "Crypto", blurb: "Crypto X-Perps, 24/7." },
+  commodities: { label: "Commodities", blurb: "Gold (XAU), silver (XAG), WTI and Brent oil (CL, BZ). Session hours apply." },
+  stocks: { label: "Stocks & ETFs", blurb: "NVDA, TSLA, MSTR, SPY, QQQ, SOXL and more. Session hours and gaps apply." },
+  macro: { label: "Macro (both)", blurb: "Commodities and stocks together." },
+};
+/** The squad a bee races in: crypto, or the macro squad. */
+export const squadOf = (m: MarketId): "crypto" | "macro" => (m === "crypto" ? "crypto" : "macro");
+
 export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: string; tagline: string }> = {
   bizzy: {
     label: "Breakout",
@@ -69,6 +85,8 @@ const BeeSchema = z.object({
     .default([]),
   /** What the bee looks like (used for its portrait). */
   look: z.string().trim().max(400).optional(),
+  /** What it trades (extra bees only; absent = crypto, and the main three are always crypto). */
+  market: z.enum(MARKETS).optional(),
   /** Extra bees: the LLM brain chosen when the bee was added (main bees use BEE1_BRAIN..BEE3_BRAIN). */
   brain: z.enum(["openai", "claude", "kimi"]).optional(),
   /** true once a portrait has been generated for this bee (served from the data volume). */

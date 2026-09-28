@@ -174,7 +174,7 @@ export class Coach {
     const hive = contextFor(this.o.graph, bee.slot);
     const size = this.o.watchSize?.(bee.slot) ?? 3;
     const watch = this.o.watchlist && plan.watchlist?.length
-      ? watchInput({ style: bee.style, ownerCoins: bee.coins, universe: this.o.universe?.() ?? [], ranking: this.o.ranking?.() ?? null, adoptedSkills: plan.skills.map((s) => s.id), record: hive.tradeRecord })
+      ? watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe: this.o.universe?.() ?? [], ranking: this.o.ranking?.() ?? null, adoptedSkills: plan.skills.map((s) => s.id), record: hive.tradeRecord })
       : null;
     const system = [
       `You are ${b.label} (${b.vendor}), the strategic brain of ${bee.name}, a paper-trading bee on OKX perpetual futures (style: ${bee.style}).`,

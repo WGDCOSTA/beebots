@@ -175,6 +175,9 @@ export interface BeeMeta {
   img: string;
   color: string;
   glow: string;
+  /** What it trades and the squad it races in (crypto, or macro: stocks and commodities). */
+  market?: string;
+  squad?: "crypto" | "macro";
 }
 
 /** Colours belong to the slot, so two bees on the same style still look different. Filled in from /profile at load. */
@@ -189,7 +192,7 @@ export interface Profile {
   mode: "dry" | "demo" | "live";
   links: { sponsor: string; code: string } | null;
   /** img null: a Setup-made bee without its portrait (the dashboard shows the placeholder mark). */
-  bees: Array<{ id: BeeName; name: string; tagline: string; style: string; styleLabel: string; rules?: string; coins?: string[]; img: string | null }>;
+  bees: Array<{ id: BeeName; name: string; tagline: string; style: string; styleLabel: string; rules?: string; coins?: string[]; img: string | null; market?: string; squad?: "crypto" | "macro" }>;
 }
 
 export const PROFILE: { links: Profile["links"] } = { links: null };
@@ -224,6 +227,8 @@ export function applyProfile(p: Profile): void {
     m.rules = b.rules ?? "";
     m.coins = b.coins ?? [];
     m.img = b.img ?? BEE_MARK_URL;
+    m.market = b.market ?? "crypto";
+    m.squad = b.squad ?? "crypto";
   }
 }
 

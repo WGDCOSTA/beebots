@@ -88,6 +88,10 @@ services:
       SURVIVAL_MAX_CALLS_DAY: ${SURVIVAL_MAX_CALLS_DAY:-}
       REWARDS: ${REWARDS:-}
       REWARD_MAX_LIMIT_BOOST: ${REWARD_MAX_LIMIT_BOOST:-}
+      # Macro squad (stocks, gold, oil): gates and the session rule. ALLOW_NON_CRYPTO is the master switch.
+      MACRO_MIN_24H_VOL_USD: ${MACRO_MIN_24H_VOL_USD:-}
+      MACRO_SPREAD_GATE_BPS: ${MACRO_SPREAD_GATE_BPS:-}
+      SESSION_NO_OPEN_MIN: ${SESSION_NO_OPEN_MIN:-}
       REWARDS_IN_LIVE: ${REWARDS_IN_LIVE:-}
       LAB_DIR: /data/lab
       GRAPH_PATH: /data/lab/hive-mind.sqlite

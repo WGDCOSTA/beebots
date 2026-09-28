@@ -13,6 +13,8 @@ import type { Tier } from "../evolution.js";
 import type { Ranking } from "../lab/tournament.js";
 import { coinOfDataset } from "../graph/hive-mind.js";
 import type { MarketView } from "../market/types.js";
+import { kindOf } from "../market/kinds.js";
+import { marketKinds } from "../market/sessions.js";
 
 export const BIZZY_COINS = ["BTC", "ETH", "SOL", "HYPE"];
 export const BREEZY_COINS = ["BTC", "ETH"];
@@ -64,13 +66,18 @@ export function candidateCoins(o: {
   ranking: Ranking | null;
   traded: string[];
   limit?: number;
+  /** What the bee trades (crypto by default): macro bees only ever get stocks/commodities of their market. */
+  market?: string;
 }): string[] {
   if (o.ownerCoins.length) return [...new Set(o.ownerCoins.map((c) => c.toUpperCase()))];
-  const fixed = styleCoins(o.style);
+  const market = o.market ?? "crypto";
+  const fixed = market === "crypto" ? styleCoins(o.style) : null;
   if (fixed) return fixed;
-  const liquid = [...o.universe].sort((a, b) => b.vol24hUsd - a.vol24hUsd).slice(0, o.limit ?? 30).map((c) => c.coin);
-  const lab = (o.ranking?.datasets ?? []).map((d) => coinOfDataset(d.id)).filter((c) => !/^SYN\d/.test(c));
-  return [...new Set([...liquid, ...lab, ...o.traded.map((c) => c.toUpperCase())])];
+  const kinds = marketKinds(market);
+  const ok = (c: string) => kinds.includes(kindOf(c));
+  const liquid = [...o.universe].filter((c) => ok(c.coin)).sort((a, b) => b.vol24hUsd - a.vol24hUsd).slice(0, o.limit ?? 30).map((c) => c.coin);
+  const lab = (o.ranking?.datasets ?? []).map((d) => coinOfDataset(d.id)).filter((c) => !/^SYN\d/.test(c) && ok(c));
+  return [...new Set([...liquid, ...lab, ...o.traded.map((c) => c.toUpperCase()).filter(ok)])];
 }
 
 /** The evidence a brain sees for each candidate. */
@@ -155,12 +162,14 @@ export function effectiveWatchlist(o: {
   tier: Tier | null;
   /** Gated coins, most liquid first. */
   liquid: string[];
+  market?: string;
 }): { coins: string[]; probation: string[] } | null {
   if (!o.enabled || !o.picks?.length) return null;
   let items = o.picks;
   if (o.ownerCoins.length) items = items.filter((i) => o.ownerCoins.includes(i.coin));
-  const fixed = styleCoins(o.style);
+  const fixed = (o.market ?? "crypto") === "crypto" ? styleCoins(o.style) : null;
   if (fixed) items = items.filter((i) => fixed.includes(i.coin));
+  else items = items.filter((i) => marketKinds(o.market ?? "crypto").includes(kindOf(i.coin)));
   // Survival: in danger only the most liquid coins stay on, and no coin on trial.
   if (o.tier === "danger" || o.tier === "critical") {
     const safe = new Set(o.liquid.slice(0, LIQUID_TOP));
@@ -173,13 +182,14 @@ export function effectiveWatchlist(o: {
 /** Candidates and evidence for one bee, in one call (council, coach and survival council share it). */
 export function watchInput(o: {
   style: string;
+  market?: string;
   ownerCoins: string[];
   universe: CoinInfo[];
   ranking: Ranking | null;
   adoptedSkills: string[];
   record: Array<{ coin: string; netUsd: number; trades: number; winRatePct: number | null }>;
 }): { candidates: string[]; evidence: CoinEvidence[] } {
-  const candidates = candidateCoins({ style: o.style, ownerCoins: o.ownerCoins, universe: o.universe, ranking: o.ranking, traded: o.record.map((r) => r.coin) });
+  const candidates = candidateCoins({ style: o.style, market: o.market, ownerCoins: o.ownerCoins, universe: o.universe, ranking: o.ranking, traded: o.record.map((r) => r.coin) });
   return { candidates, evidence: coinEvidence({ candidates, ranking: o.ranking, adoptedSkills: o.adoptedSkills, record: o.record, universe: o.universe }) };
 }
 
@@ -191,7 +201,7 @@ export const WATCHLIST_PROMPT =
 /** The live facts about the gated coins (most liquid first), for the brains' evidence. */
 export function coinInfos(view: MarketView, limit = 40): CoinInfo[] {
   const out: CoinInfo[] = [];
-  for (const instId of view.gated.slice(0, limit)) {
+  for (const instId of [...view.gated.slice(0, limit), ...view.macro.slice(0, limit)]) {
     const s = view.stats.get(instId);
     if (s) out.push({ coin: s.coin.toUpperCase(), vol24hUsd: s.vol24hUsd, ret7dPct: s.ret7dPct, spreadBp: s.spreadBp, atrPct: s.atr14Pct });
   }

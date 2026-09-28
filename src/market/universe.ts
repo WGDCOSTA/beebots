@@ -1,3 +1,4 @@
+import type { Kind } from "./kinds.js";
 import type { Instrument, Ticker } from "./types.js";
 
 export interface UniverseResult {
@@ -13,6 +14,8 @@ export interface GateOpts {
   min24hVolUsd: number;
   spreadGateBps: number;
   allowNonCrypto: boolean;
+  /** Only these kinds pass (overrides allowNonCrypto). The crypto bees' list is crypto; the macro list is stocks + commodities. */
+  kinds?: Kind[];
 }
 
 /** Hard rule 5: discover, never hard-code. Live, X-Perp, not TEST*, crypto unless allowed, volume and spread gates. */
@@ -27,7 +30,7 @@ export function gateUniverse(instruments: Iterable<Instrument>, tickers: Map<str
       continue;
     }
     if (i.kind === "test") continue;
-    if (i.kind !== "crypto" && !g.allowNonCrypto) continue;
+    if (g.kinds ? !g.kinds.includes(i.kind) : i.kind !== "crypto" && !g.allowNonCrypto) continue;
     const t = tickers.get(i.instId);
     if (!t || !(t.vol24hUsd >= g.min24hVolUsd)) continue;
     if (!(t.spreadBp <= g.spreadGateBps)) {

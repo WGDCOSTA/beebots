@@ -59,6 +59,14 @@ describe("watchlist candidates and limits", () => {
     expect(any).toEqual(["BTC", "ETH", "SOL", "DOGE", "ARB"]);
   });
 
+  it("a macro bee's candidates are only stocks or commodities of its market", () => {
+    const universe = [...UNIVERSE, info("XAU", 50), info("NVDA", 5), info("CL", 20)];
+    expect(candidateCoins({ universe, ranking: null, traded: ["SOL", "XAG"], style: "boozy", ownerCoins: [], market: "commodities" })).toEqual(["XAU", "CL", "XAG"]);
+    expect(candidateCoins({ universe, ranking: null, traded: [], style: "breezy", ownerCoins: [], market: "stocks" })).toEqual(["NVDA"]);
+    const picks = [item("XAU"), item("BTC")];
+    expect(effectiveWatchlist({ enabled: true, picks, style: "boozy", ownerCoins: [], tier: null, liquid: [], market: "commodities" })).toEqual({ coins: ["XAU"], probation: [] });
+  });
+
   it("size grows with the level and shrinks to 3 in danger", () => {
     expect(watchlistSize(0, "healthy")).toBe(3);
     expect(watchlistSize(3, "thriving")).toBe(6);

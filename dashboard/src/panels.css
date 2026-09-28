@@ -890,3 +890,17 @@
   border-style: dashed;
   opacity: 0.8;
 }
+
+/* Trading hours learned for the macro squad */
+.sessions-card {
+  margin-top: 1rem;
+}
+.sessions-card tr.clickable {
+  cursor: pointer;
+}
+.session-grid {
+  margin: 0.25rem 0;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  overflow-x: auto;
+}
