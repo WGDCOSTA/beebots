@@ -197,6 +197,29 @@ const EnvSchema = z.object({
   RATCHET_LOCK: str("2.5:0.5,5:0.65"),
   RATCHET_HUG: str("2.5:1.2,5:0.8,8:0.6"),
   RATCHET_STYLES: str("bizzy,boozy,macro,skill"),
+  // ---- The scalper (bees/scalp.ts; phases 2 and 3) ----
+  // Off by default. Even on, a bee only scalps when its brains chose the "scalp" method AND the strategy lab's latest
+  // report on real 1-minute data (pnpm lab scalp) found an edge after costs (SCALP_REQUIRE_LAB). Entries are maker limits.
+  SCALP: bool(false),
+  SCALP_REQUIRE_LAB: bool(true),
+  SCALP_LAB_MAX_AGE_DAYS: num(14),
+  SCALP_COINS: str("BTC,ETH"),
+  SCALP_MAKER_FEE: num(0.0002),
+  // Fast loop for scalping bees (code only, no Jev call), and how long a maker order may wait for its fill.
+  SCALP_TICK_MS: num(2000),
+  SCALP_MAKER_WAIT_S: num(8),
+  SCALP_EXIT_WAIT_S: num(3),
+  // Jev sets a mandate (a coin, a bias, a trade budget, a lifetime) at most every SCALP_MANDATE_MIN minutes.
+  SCALP_MANDATE_MIN: num(10),
+  SCALP_MANDATE_MINUTES: num(30),
+  SCALP_MANDATE_TRADES: num(20),
+  SCALP_MAX_TRADES_PER_DAY: num(60),
+  SCALP_FEE_BUDGET_USD_DAY: num(3),
+  SCALP_SPREAD_GATE_BPS: num(1.5),
+  SCALP_SIZE_FRAC: num(0.5),
+  // Circuit breaker: this many losses in a row pause the bee for SCALP_PAUSE_MIN minutes.
+  SCALP_MAX_LOSS_STREAK: num(4),
+  SCALP_PAUSE_MIN: num(30),
   // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
   COACH_INTERVAL_MIN: num(0),
   COACH_MAX_CALLS_DAY: num(12),
@@ -303,6 +326,24 @@ export interface Config {
   universe: { min24hVolUsd: number; allowNonCrypto: boolean };
   /** Dynamic profit-locking ratchet: rungs, and the brain ids (styles, "skill") it applies to. */
   ratchet: { enabled: boolean; lock: LockRung[]; hug: HugRung[]; styles: string[] };
+  /** The scalper (bees/scalp.ts). `enabled` is only the master switch: the lab gate and the brains' choice come on top. */
+  scalp: {
+    enabled: boolean;
+    requireLab: boolean;
+    labMaxAgeDays: number;
+    coins: string[];
+    makerFee: number;
+    tickMs: number;
+    makerWaitMs: number;
+    exitWaitMs: number;
+    mandateMin: number;
+    mandateMinutes: number;
+    mandateTrades: number;
+    sizeFrac: number;
+    maxLossStreak: number;
+    pauseMin: number;
+    knobs: BeeKnobs;
+  };
   /** The macro squad: gates, the session rule and where the learned calendar lives. */
   macro: {
     min24hVolUsd: number;
@@ -480,6 +521,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       hug: parseHug(e.RATCHET_HUG),
       styles: e.RATCHET_STYLES.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
     },
+    scalp: {
+      enabled: e.SCALP,
+      // With real money the lab gate cannot be switched off.
+      requireLab: e.SCALP_REQUIRE_LAB || mode === "live",
+      labMaxAgeDays: Math.max(1, e.SCALP_LAB_MAX_AGE_DAYS),
+      coins: e.SCALP_COINS.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
+      makerFee: Math.max(0, e.SCALP_MAKER_FEE),
+      tickMs: Math.max(500, e.SCALP_TICK_MS),
+      makerWaitMs: Math.max(1000, e.SCALP_MAKER_WAIT_S * 1000),
+      exitWaitMs: Math.max(1000, e.SCALP_EXIT_WAIT_S * 1000),
+      mandateMin: Math.max(1, e.SCALP_MANDATE_MIN),
+      mandateMinutes: Math.max(1, e.SCALP_MANDATE_MINUTES),
+      mandateTrades: Math.max(1, Math.round(e.SCALP_MANDATE_TRADES)),
+      sizeFrac: Math.max(0.05, Math.min(1, e.SCALP_SIZE_FRAC)),
+      maxLossStreak: Math.max(1, Math.round(e.SCALP_MAX_LOSS_STREAK)),
+      pauseMin: Math.max(1, e.SCALP_PAUSE_MIN),
+      knobs: { maxTradesPerDay: Math.max(1, Math.round(e.SCALP_MAX_TRADES_PER_DAY)), feeBudgetUsdDay: Math.max(0, e.SCALP_FEE_BUDGET_USD_DAY), spreadGateBps: Math.max(0, e.SCALP_SPREAD_GATE_BPS), cooldownMinutes: 0, stopAtrMult: 1.5, maxFlatMinutes: 1440 },
+    },
     macro: {
       min24hVolUsd: Math.max(0, e.MACRO_MIN_24H_VOL_USD),
       spreadGateBps: Math.max(0, e.MACRO_SPREAD_GATE_BPS as number),
@@ -568,6 +627,7 @@ export function labEnv(env: NodeJS.ProcessEnv = process.env, settings: Settings 
     skillsDirs: [...e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean), `${e.LAB_DIR.replace(/\/+$/, "")}/learned`],
     watchlist: e.BRAIN_WATCHLIST,
     specialization: e.SPECIALIZATION,
+    scalp: e.SCALP,
     takerFeeRate: e.TAKER_FEE_RATE,
     maxLeverage: e.MAX_LEVERAGE,
   };

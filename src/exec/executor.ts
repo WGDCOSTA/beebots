@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Instrument, Ticker } from "../market/types.js";
 import type { OkxCli } from "../okx/cli.js";
 import { safeError } from "../redact.js";
-import { formatSz } from "./sizing.js";
+import { formatPx, formatSz, roundToTick } from "./sizing.js";
 
 export interface OrderReq {
   instId: string;
@@ -12,6 +12,15 @@ export interface OrderReq {
   reduceOnly: boolean;
   clOrdId: string;
 }
+
+/** A resting limit order (maker). It waits up to `waitMs` for a fill, then is cancelled: nothing is left on the book. */
+export interface LimitReq extends OrderReq {
+  px: number;
+  waitMs: number;
+}
+
+/** The limit order did not fill within its wait (not an error: nothing traded, nothing rests). */
+export const UNFILLED = "UNFILLED";
 
 export type OrderResult =
   | { ok: true; ordId: string | null; contracts: number; avgPx: number; feeUsd: number; ts: number }
@@ -35,6 +44,11 @@ export interface Executor {
   readonly kind: "sim" | "okx";
   init(bee: BeeId): Promise<void>;
   market(bee: BeeId, req: OrderReq): Promise<OrderResult>;
+  /**
+   * Maker execution: a post-only limit at `req.px`, waited on and then cancelled. Optional: an executor without it
+   * cannot run the scalper, which never crosses to a taker fill to make up for a missed maker one.
+   */
+  limit?(bee: BeeId, req: LimitReq): Promise<OrderResult>;
   positions(bee: BeeId): Promise<ExchangePosition[] | null>;
   fundingBills(bee: BeeId): Promise<FundingBill[] | null>;
   /** Fees OKX charged for these order ids (USD, positive = paid). */
@@ -44,13 +58,55 @@ export interface Executor {
 /**
  * MODE=dry: real market data, simulated taker fills at the touch (mid +/- half spread), no OKX private calls.
  */
+export interface SimLimitOpts {
+  makerFeeRate?: number;
+  /** A resting limit fills only when the market trades THROUGH it by this many bp (queue-position haircut; the lab's model). */
+  throughBps?: number;
+  pollMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+  /** Called between polls so the market view moves (the engine passes the feed's ticker refresh). */
+  refresh?: () => Promise<void>;
+}
+
 export class SimExecutor implements Executor {
   readonly kind = "sim" as const;
   constructor(
     private market_: () => { tickers: Map<string, Ticker>; instruments: Map<string, Instrument> },
     private takerFeeRate: number,
     private now: () => number = Date.now,
+    private lim: SimLimitOpts = {},
   ) {}
+
+  /**
+   * Paper maker fills, pessimistic on purpose. A post-only buy at or above the ask (a sell at or below the bid) would
+   * cross the book and is refused, as on OKX. Otherwise it fills only when the market trades through the price by
+   * `throughBps` (an ask, bid or last beyond it): touching the price is not a fill. Paper still cannot see queue
+   * position or adverse selection, so a paper maker fill rate is an upper bound, not a forecast.
+   */
+  async limit(_bee: BeeId, req: LimitReq): Promise<OrderResult> {
+    const { tickers, instruments } = this.market_();
+    const t0 = tickers.get(req.instId);
+    const inst = instruments.get(req.instId);
+    if (!t0 || !inst) return { ok: false, error: { code: "SIM", message: "no ticker" }, state: "rejected" };
+    const buy = req.side === "buy";
+    if (buy ? t0.ask > 0 && req.px >= t0.ask : t0.bid > 0 && req.px <= t0.bid) return { ok: false, error: { code: "POST_ONLY", message: "would cross the book" }, state: "rejected" };
+    const through = Math.max(inst.tickSz, (req.px * (this.lim.throughBps ?? 0.5)) / 1e4);
+    const sleep = this.lim.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const start = this.now();
+    for (;;) {
+      const t = this.market_().tickers.get(req.instId);
+      if (t) {
+        const hit = buy ? t.ask <= req.px - through || t.last <= req.px - through : t.bid >= req.px + through || t.last >= req.px + through;
+        if (hit) {
+          const feeUsd = req.contracts * inst.ctVal * req.px * (this.lim.makerFeeRate ?? this.takerFeeRate);
+          return { ok: true, ordId: null, contracts: req.contracts, avgPx: req.px, feeUsd, ts: this.now() };
+        }
+      }
+      if (this.now() - start >= req.waitMs) return { ok: false, error: { code: UNFILLED, message: "not filled within the wait" }, state: "rejected" };
+      await sleep(this.lim.pollMs ?? 1000);
+      await this.lim.refresh?.();
+    }
+  }
 
   async init(): Promise<void> {}
 
@@ -76,6 +132,8 @@ export class SimExecutor implements Executor {
 }
 
 type Row = Record<string, string>;
+/** clOrdId prefix of every scalper limit order: what init() may cancel after a crash. */
+export const SCALP_PREFIX = "sc";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -105,6 +163,19 @@ export class OkxExecutor implements Executor {
     if (cfg?.posMode && cfg.posMode !== "net_mode") {
       log.info("setting net position mode", { bee });
       await this.run(bee, ["account", "set-position-mode", "--posMode", "net_mode"]);
+    }
+    // A crash mid-wait can leave a maker order resting. Only the scalper's own (clOrdId "sc...") are cancelled: an
+    // order placed by hand in the sub-account is not ours to touch.
+    try {
+      const open = await this.run<Row[]>(bee, ["futures", "orders"]);
+      for (const o of open) {
+        if (o.clOrdId?.startsWith(SCALP_PREFIX) && o.instId) {
+          log.warn("cancelling a leftover scalper order", { bee, instId: o.instId });
+          await this.run(bee, ["futures", "cancel", o.instId, "--clOrdId", o.clOrdId]).catch((err) => log.warn("leftover cancel failed", { bee, err: safeError(err) }));
+        }
+      }
+    } catch (err) {
+      log.warn("could not list open orders at start", { bee, err: safeError(err) });
     }
   }
 
@@ -145,6 +216,54 @@ export class OkxExecutor implements Executor {
         await sleep(300);
       }
       return { ok: false, error: { code: "UNCONFIRMED", message: "fill not confirmed; reconciliation will settle it" }, state: "unknown" };
+    } catch (err) {
+      return { ok: false, error: safeError(err), state: "unknown" };
+    }
+  }
+
+  /**
+   * Post-only limit through the CLI: place, poll the order, and on timeout cancel it and read its final state (a
+   * partial fill, or one that landed while cancelling, is reported as the fill it is). If anything is uncertain the
+   * result is "unknown" so reconciliation settles it; a resting order is never knowingly left behind.
+   */
+  async limit(bee: BeeId, req: LimitReq): Promise<OrderResult> {
+    const inst = this.instrument(req.instId);
+    if (!inst) return { ok: false, error: { code: "INST", message: "unknown instrument" }, state: "rejected" };
+    const fill = (o: Row, ack?: Row): OrderResult => ({ ok: true, ordId: o.ordId ?? ack?.ordId ?? null, contracts: Number(o.accFillSz), avgPx: Number(o.avgPx), feeUsd: -Number(o.fee || 0), ts: Number(o.uTime || o.cTime || Date.now()) });
+    try {
+      if (!req.reduceOnly) await this.ensureLeverage(bee, req.instId);
+      const px = roundToTick(req.px, inst.tickSz, req.side);
+      const args = ["futures", "place", "--instId", req.instId, "--side", req.side, "--ordType", "post_only", "--px", formatPx(px, inst), "--sz", formatSz(req.contracts, inst), "--tdMode", "isolated", "--clOrdId", req.clOrdId];
+      if (req.reduceOnly) args.push("--reduceOnly");
+      const [ack] = await this.run<Row[]>(bee, args);
+      if (!ack || (ack.sCode && ack.sCode !== "0")) return { ok: false, error: { code: ack?.sCode ?? "NOACK", message: ack?.sMsg ?? "no ack" }, state: "rejected" };
+      const get = async (): Promise<Row | undefined> => {
+        try {
+          return (await this.run<Row[]>(bee, ["futures", "get", "--instId", req.instId, "--clOrdId", req.clOrdId]))[0];
+        } catch (err) {
+          log.warn("limit poll failed", { bee, err: safeError(err) });
+          return undefined;
+        }
+      };
+      const deadline = Date.now() + req.waitMs;
+      for (;;) {
+        const o = await get();
+        if (o?.state === "filled") return fill(o, ack);
+        // post_only that would have crossed is cancelled by the exchange at once; a cancel with a fill is a partial
+        if (o && (o.state === "canceled" || o.state === "mmp_canceled")) return Number(o.accFillSz) > 0 ? fill(o, ack) : { ok: false, error: { code: "POST_ONLY", message: "cancelled by the exchange (would have crossed)" }, state: "rejected" };
+        if (Date.now() >= deadline) break;
+        await sleep(500);
+      }
+      await this.run(bee, ["futures", "cancel", req.instId, "--clOrdId", req.clOrdId]).catch((err) => log.warn("limit cancel failed", { bee, err: safeError(err) }));
+      let last: Row | undefined;
+      for (let i = 0; i < 4; i++) {
+        last = await get();
+        if (last && (last.state === "canceled" || last.state === "filled" || last.state === "mmp_canceled")) break;
+        await sleep(300);
+      }
+      if (last && Number(last.accFillSz) > 0) return fill(last, ack);
+      if (last && (last.state === "canceled" || last.state === "mmp_canceled")) return { ok: false, error: { code: UNFILLED, message: "not filled within the wait" }, state: "rejected" };
+      return { ok: false, error: { code: "UNCONFIRMED", message: "limit order state unknown after cancel; reconciliation will settle it" }, state: "unknown" };
     } catch (err) {
       return { ok: false, error: safeError(err), state: "unknown" };
     }

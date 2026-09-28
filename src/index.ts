@@ -13,6 +13,7 @@ import { OkxExecutor, SimExecutor, type Executor } from "./exec/executor.js";
 import { checkJevKey, Jev } from "./jev.js";
 import { log, setLogLevel } from "./log.js";
 import { MarketFeed } from "./market/data.js";
+import { loadScalpReport, scalpGate } from "./lab/scalp.js";
 import { checkOkxAccount } from "./okx/account.js";
 import { createOkxCli } from "./okx/cli.js";
 import { createNewsSource } from "./okx/news.js";
@@ -143,7 +144,7 @@ async function main() {
 
   const exec: Executor =
     cfg.mode === "dry"
-      ? new SimExecutor(() => feed.view(), cfg.risk.takerFeeRate)
+      ? new SimExecutor(() => feed.view(), cfg.risk.takerFeeRate, Date.now, { makerFeeRate: cfg.scalp.makerFee, refresh: () => feed.refreshTickers() })
       : new OkxExecutor(cli, cfg.creds, demo, (id) => feed.view().instruments.get(id), cfg.risk.maxLeverage);
 
   const startOfDay = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
@@ -232,6 +233,10 @@ async function main() {
   cmc?.start();
   const cmcState = () => cmc?.get() ?? null;
   const mood = () => marketMood(cmcState());
+  // The scalper's gate: the strategy lab's latest report on real 1-minute data (pnpm lab scalp), read fresh each time so a
+  // new report opens or closes it without a restart.
+  const scalpLabGate = () => scalpGate(loadScalpReport(cfg.lab.dir), Date.now(), cfg.scalp.labMaxAgeDays);
+  const scalpOn = () => cfg.scalp.enabled && (!cfg.scalp.requireLab || scalpLabGate().open);
   survival = new SurvivalCouncil({
     graph,
     evolution,
@@ -245,6 +250,7 @@ async function main() {
     watchlist: cfg.lab.watchlist,
     universe: () => coinInfos(feed.view(), 40, cmcState()),
     market: mood,
+    scalp: scalpOn,
   });
 
   // Trading hours of stocks and commodities, learned from their tickers every minute (market/sessions.ts). Always on,
@@ -273,6 +279,7 @@ async function main() {
     cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
     sessions: () => sessions.calendar,
     cmc: cmcState,
+    scalpGate: scalpLabGate,
     ...(cfg.lab.watchlist ? { watchlist: (id: BeeId) => playbook.get()?.bees[id]?.watchlist ?? null } : {}),
     ...(cfg.lab.specialization ? { specialization: (id: BeeId) => playbook.get()?.bees[id]?.specialization ?? null, skillById: (sid: string) => skillMap.get(sid) } : {}),
     ...(signals
@@ -292,6 +299,7 @@ async function main() {
     watchlist: cfg.lab.watchlist,
     universe: () => coinInfos(feed.view(), 40, cmcState()),
     market: mood,
+    scalp: scalpOn,
     ranking: readRanking,
     watchSize: (id) => watchlistSize(evolution.bees[id]?.level ?? 0, evolution.bees[id]?.tier ?? null),
     specialization: cfg.lab.specialization,

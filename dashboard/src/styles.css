@@ -2291,3 +2291,13 @@ textarea.setup-input {
     grid-column: 2;
   }
 }
+
+.chip-t.scalp {
+  letter-spacing: 0.04em;
+}
+.chip-t.scalp.good {
+  color: var(--good-text);
+}
+.chip-t.scalp.bad {
+  color: var(--critical-text);
+}

@@ -28,3 +28,18 @@ export function roundToLot(contracts: number, inst: Pick<Instrument, "lotSz">): 
 export function formatSz(contracts: number, inst: Pick<Instrument, "lotSz">): string {
   return contracts.toFixed(decimals(inst.lotSz));
 }
+
+/**
+ * Round a limit price to the instrument's tick, staying passive: a buy rounds DOWN and a sell rounds UP, so rounding
+ * can never push a resting order across the book.
+ */
+export function roundToTick(px: number, tickSz: number, side: "buy" | "sell"): number {
+  if (!(tickSz > 0)) return px;
+  const n = px / tickSz;
+  const ticks = side === "buy" ? Math.floor(n + 1e-9) : Math.ceil(n - 1e-9);
+  return Number((ticks * tickSz).toFixed(decimals(tickSz)));
+}
+
+export function formatPx(px: number, inst: Pick<Instrument, "tickSz">): string {
+  return px.toFixed(decimals(inst.tickSz));
+}

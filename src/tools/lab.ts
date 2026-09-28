@@ -28,7 +28,7 @@ import { BEES, labEnv, MAX_BEES, slotId, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
 import { consolidate, explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "../graph/memory.js";
-import { buildScalpReport, saveScalpReport, scalpGate, scalpReportMarkdown, type CostModel } from "../lab/scalp.js";
+import { buildScalpReport, loadScalpReport, saveScalpReport, scalpGate, scalpReportMarkdown, type CostModel } from "../lab/scalp.js";
 import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
 import { skillRegistry, type Skill } from "../lab/skills/index.js";
 import { rankingTable, runTournament, type Ranking } from "../lab/tournament.js";
@@ -267,7 +267,7 @@ async function cmdCouncil(ranking?: Ranking) {
   const graph = new KnowledgeGraph(env.graphPath);
   const clients = makeClients(env.creds);
   // No live market here: coin candidates come from the owner's coins, the style, the lab's datasets and the bee's record.
-  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist, pickMethod: env.specialization, market: loadMood(env.dir) });
+  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist, pickMethod: env.specialization, market: loadMood(env.dir), scalp: env.scalp && scalpGate(loadScalpReport(env.dir)).open });
   savePlaybook(env.playbookPath, res.playbook);
   graph.close();
   for (const l of res.log) {

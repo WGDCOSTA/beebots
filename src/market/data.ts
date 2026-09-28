@@ -101,6 +101,30 @@ export class MarketFeed {
     };
   }
 
+  /** Confirmed 1-minute candles per coin for the scalper, refreshed on demand (refreshScalp). */
+  private c1m = new Map<string, { at: number; bars: Candle[] }>();
+
+  /** Confirmed 1-minute candles (oldest first) of a coin the scalper follows, or []. */
+  candles1m(instId: string): Candle[] {
+    return this.c1m.get(instId)?.bars ?? [];
+  }
+
+  /** Refresh the 1-minute candles of the coins the scalper follows (at most every 10 s each: the REST layer's own TTL). */
+  async refreshScalp(instIds: string[], now = Date.now()): Promise<void> {
+    await Promise.all(
+      instIds.map(async (id) => {
+        const c = this.c1m.get(id);
+        if (c && now - c.at < 10_000) return;
+        try {
+          const bars = await this.api.candles(id, "1m", 150);
+          this.c1m.set(id, { at: now, bars: bars.filter((x) => x.confirmed) });
+        } catch (err) {
+          log.warn("1m candles failed", { instId: id, err: safeError(err) });
+        }
+      }),
+    );
+  }
+
   /** 1h candles (oldest first, up to 200) from the last refresh, or [] for a coin without stats. */
   candles1h(instId: string): Candle[] {
     return this.c1h.get(instId) ?? [];

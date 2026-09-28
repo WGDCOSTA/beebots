@@ -28,8 +28,8 @@ export interface MethodOptions {
 }
 
 /** What a bee may specialise in: its market's styles, and the lab's positive, reasonably stable skills. */
-export function methodOptions(o: { market: string; current: MethodOptions["current"]; ranking: Ranking | null; extraSkills?: string[]; limit?: number }): MethodOptions {
-  const styles = o.market === "crypto" ? ["bizzy", "breezy", "boozy"] : ["macro"];
+export function methodOptions(o: { market: string; current: MethodOptions["current"]; ranking: Ranking | null; extraSkills?: string[]; limit?: number; /** Styles offered on top (the scalper, only while the lab gate is open). */ extraStyles?: string[] }): MethodOptions {
+  const styles = [...(o.market === "crypto" ? ["bizzy", "breezy", "boozy"] : ["macro"]), ...(o.market === "crypto" ? (o.extraStyles ?? []) : [])];
   const skills = (o.ranking?.results ?? [])
     .filter((r) => r.family !== "benchmark" && r.score > 0 && r.stabilityPct >= 40)
     .slice(0, o.limit ?? 10)
