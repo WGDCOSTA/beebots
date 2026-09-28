@@ -11,10 +11,10 @@
 //
 // Rules are the same code the live scalp brain runs (bees/scalp.ts), so a lab verdict describes what would trade.
 // Everything here is paper: public history in, numbers out. No exchange account, no orders.
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Candle } from "../market/types.js";
+import { dataHash } from "./hash.js";
 import * as S from "./series.js";
 import type { Params } from "./skills/types.js";
 
@@ -501,17 +501,6 @@ export interface ScalpReport {
   results: RuleResult[];
   /** Instruments (dataset ids) with at least one rule that passed, and the best of those rules per instrument. */
   verdict: { edge: boolean; passing: Array<{ dataset: string; ruleId: string; params: Params; netBps: number; trades: number }>; note: string };
-}
-
-export function dataHash(c: Candle[]): string {
-  const h = createHash("sha256");
-  h.update(`${c.length}:${c[0]?.ts}:${c[c.length - 1]?.ts}:`);
-  // Every 50th bar plus the total: cheap, and any refetch that changes history changes it.
-  let sum = 0;
-  for (let i = 0; i < c.length; i += 50) h.update(`${c[i]!.o},${c[i]!.c};`);
-  for (const x of c) sum += x.c;
-  h.update(String(sum));
-  return h.digest("hex").slice(0, 16);
 }
 
 export function buildScalpReport(sets: Array<{ id: string; candles: Candle[]; synthetic?: boolean }>, rules: ScalpRule[] = SCALP_RULES, o: Partial<ScalpEvalOpts> = {}, now = Date.now()): ScalpReport {
