@@ -374,6 +374,7 @@ export function LabPage() {
   const [evo, setEvo] = useState<Snapshot["evolution"] | null>(null);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -398,7 +399,7 @@ export function LabPage() {
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [reload]);
 
   const best = ranking?.results.find((r) => r.family !== "benchmark");
   const bh = ranking?.results.find((r) => r.skillId === "buy_hold");
@@ -447,7 +448,7 @@ export function LabPage() {
         <section>
           <h2>Hive mind</h2>
           <p className="dim small">Bees, their brains, skills, coins, lessons and messages. Hover a node for details, click to pin it and see its links.</p>
-          <div className="pcard">{graph ? <HiveGraph graph={graph} /> : <p className="dim">{loaded ? "No graph yet." : "Loading…"}</p>}</div>
+          <div className="pcard">{graph ? <HiveGraph graph={graph} onRefresh={() => setReload((n) => n + 1)} /> : <p className="dim">{loaded ? "No graph yet." : "Loading…"}</p>}</div>
         </section>
 
         <section>
