@@ -31,6 +31,8 @@ export interface EvolutionOpts {
   /** Limit boosts also apply with real money. */
   boostLimits: boolean;
   startEquityUsd: number;
+  /** A bee's own start (its wallet), when bees start with different money; default startEquityUsd. */
+  startOf?: (id: BeeId) => number;
   /** Most positions a bee may hold at once (MAX_POSITIONS_PER_BEE). */
   maxPositions?: number;
 }
@@ -123,6 +125,10 @@ export class Evolution {
     return this.o;
   }
 
+  private start(id: BeeId): number {
+    return this.o.startOf?.(id) ?? this.o.startEquityUsd;
+  }
+
   private ensure(id: BeeId, bee: BeeState, now: number): BeeEvolution {
     this.bees[id] ??= {
       points: 0,
@@ -166,7 +172,7 @@ export class Evolution {
     const rolled: Array<{ id: BeeId; e: BeeEvolution; pnlPct: number; day: string }> = [];
     for (const [id, bee] of all) {
       const e = this.ensure(id, bee, now);
-      e.health = (bee.equityUsd / this.o.startEquityUsd) * 100;
+      e.health = (bee.equityUsd / this.start(id)) * 100;
       e.peakEquityUsd = Math.max(e.peakEquityUsd, bee.equityUsd);
       const tier = tierFor(e.health, bee.cap === "retired", this.o);
       if (tier !== e.tier) {
@@ -216,7 +222,7 @@ export class Evolution {
     e.points = Math.floor(e.points / 2);
     e.level = levelFor(e.points);
     e.tier = "healthy";
-    e.health = (equityUsd / this.o.startEquityUsd) * 100;
+    e.health = (equityUsd / this.start(id)) * 100;
     e.peakEquityUsd = equityUsd;
     e.dayKey = dayKey(now);
     e.dayStartEquityUsd = equityUsd;

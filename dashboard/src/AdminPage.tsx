@@ -1,9 +1,10 @@
 // #/admin: everything the owner configures, behind the owner password (the same one as joining the Hive).
 // The password lives only in this page's memory; every call sends it and the engine checks it (with a lockout).
-// The trading mode, LIVE_ACK and exchange keys are not here on purpose: real money stays an .env decision.
+// The trading mode and LIVE_ACK are not here on purpose: real money stays an .env decision. Each bee's wallet and OKX
+// sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
-import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type KeyName } from "./panelTypes";
+import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
@@ -208,7 +209,171 @@ function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
   );
 }
 
-type BeeDraft = { slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; brain: string; market: string; extra: boolean; running: boolean; flat: boolean; isNew?: boolean };
+type ExchangeDraft = { kind: ExchangeKind; apiKey: string; secretKey: string; passphrase: string };
+type BeeDraft = {
+  slot: string;
+  name: string;
+  tagline: string;
+  rules: string;
+  coins: string[];
+  style: string;
+  brain: string;
+  market: string;
+  extra: boolean;
+  running: boolean;
+  flat: boolean;
+  isNew?: boolean;
+  walletUsd: number | "";
+  /** Keys typed for this bee (never loaded from the server), the last check, and what it was run on. */
+  exchange: ExchangeDraft | null;
+  check: ExchangeCheck | null;
+  checkedFor: string | null;
+};
+
+const exchangeFilled = (x: ExchangeDraft | null): x is ExchangeDraft => !!x && x.apiKey.trim().length >= 8 && x.secretKey.trim().length >= 8 && x.passphrase.length > 0;
+const checkSig = (b: BeeDraft) => (b.exchange ? `${b.exchange.kind}|${b.exchange.apiKey}|${b.exchange.secretKey}|${b.exchange.passphrase}|${b.walletUsd}` : "");
+
+/** Why a bee cannot be saved yet (null = ready): its wallet, and its exchange account when one is needed or typed. */
+function beeBlocker(b: BeeDraft, s: AdminState): string | null {
+  if (!b.name.trim()) return "Name it";
+  if (b.extra && b.isNew && !(typeof b.walletUsd === "number" && b.walletUsd >= 10)) return "Set its wallet (at least $10)";
+  if (exchangeFilled(b.exchange)) {
+    if (!b.check || b.checkedFor !== checkSig(b)) return "Test its exchange connection";
+    if (!b.check.ready) return "Its exchange check did not pass";
+  } else if (b.isNew && s.exchangeRequired) return `Connect its OKX ${s.exchangeRequired} sub-account`;
+  return null;
+}
+
+const usd0 = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+/** Step 2 of creating a bee (and later, replacing its keys): its wallet and its OKX sub-account, checked live. */
+function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState; password: string; onChange: (patch: Partial<BeeDraft>) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState(!!b.isNew);
+  const status = s.bees?.find((x) => x.slot === b.slot)?.exchange;
+  const kind: ExchangeKind = b.exchange?.kind ?? s.exchangeRequired ?? "demo";
+  const x: ExchangeDraft = b.exchange ?? { kind, apiKey: "", secretKey: "", passphrase: "" };
+  const setX = (patch: Partial<ExchangeDraft>) => onChange({ exchange: { ...x, ...patch } });
+  const walletEditable = b.extra && (b.isNew || !b.running);
+  const wallet = typeof b.walletUsd === "number" ? b.walletUsd : 0;
+  const envLocked = status?.[kind]?.source === "env";
+  const fresh = b.check && b.checkedFor === checkSig(b) ? b.check : null;
+  const test = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await adminCall<ExchangeCheck>("exchange/check", password, { ...x, apiKey: x.apiKey.trim(), secretKey: x.secretKey.trim(), walletUsd: wallet || s.defaultWalletUsd, bee: b.slot });
+      onChange({ check: r, checkedFor: checkSig(b) });
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const need = b.isNew && s.exchangeRequired;
+  return (
+    <div className="xstep">
+      <div className="xstep-head">
+        <span className="xstep-num">{b.isNew ? "2" : "₿"}</span>
+        <strong>Wallet &amp; exchange</strong>
+        {need ? <span className="badge">required on {s.exchangeRequired}</span> : b.isNew ? <span className="badge">keys optional on paper</span> : null}
+      </div>
+      <label className="plabel">
+        Wallet (USD it starts with)
+        {walletEditable ? (
+          <input className="pinput num" type="number" min={10} max={1_000_000} step={1} value={b.walletUsd} placeholder={String(s.defaultWalletUsd)} onChange={(e) => onChange({ walletUsd: e.target.value === "" ? "" : Number(e.target.value) })} />
+        ) : (
+          <span className="mono">{usd0(wallet)}</span>
+        )}
+        <span className="dim small">
+          {b.extra
+            ? walletEditable
+              ? "Its paper book, health and death line are measured from this. On OKX the sub-account must hold at least this much USDC."
+              : "Set when the bee was created. Revive keeps it."
+            : "The main three share the start equity (Settings → Risk) so the Hive can compare them."}
+        </span>
+      </label>
+      <div className="xstatus">
+        {(["demo", "live"] as const).map((k) => {
+          const st = status?.[k];
+          return (
+            <span key={k} className={`badge ${st?.set ? "ok" : ""}`} title={st?.checkedAt ? `checked ${when(st.checkedAt)}` : ""}>
+              OKX {k}: {st?.set ? (st.source === "env" ? "✓ .env" : `✓ ${st.balanceUsd !== null ? usd0(st.balanceUsd) : "set"}`) : "not connected"}
+            </span>
+          );
+        })}
+        {!b.isNew && !open && (
+          <button className="pbtn ghost small" disabled={!b.flat} title={b.flat ? "" : "Flat first"} onClick={() => setOpen(true)}>
+            {status?.[kind]?.set ? "Replace keys" : "Connect OKX"}
+          </button>
+        )}
+      </div>
+      {open && (
+        <>
+          <div className="form-grid two">
+            <label className="plabel">
+              OKX environment
+              <select className="pinput" value={x.kind} disabled={!!s.exchangeRequired && !!b.isNew} onChange={(e) => setX({ kind: e.target.value as ExchangeKind })}>
+                <option value="demo">Demo</option>
+                <option value="live">Live (real $)</option>
+              </select>
+            </label>
+            <label className="plabel">
+              Passphrase
+              <input className="pinput mono" type="password" autoComplete="off" value={x.passphrase} disabled={envLocked} onChange={(e) => setX({ passphrase: e.target.value })} />
+            </label>
+          </div>
+          <label className="plabel">
+            API key
+            <input className="pinput mono" type="password" autoComplete="off" value={x.apiKey} disabled={envLocked} placeholder="Read + Trade only, never Withdraw" onChange={(e) => setX({ apiKey: e.target.value })} />
+          </label>
+          <label className="plabel">
+            Secret key
+            <input className="pinput mono" type="password" autoComplete="off" value={x.secretKey} disabled={envLocked} onChange={(e) => setX({ secretKey: e.target.value })} />
+          </label>
+          {envLocked ? (
+            <span className="dim small">This bee's {kind} keys are set in the environment (.env); change them there.</span>
+          ) : (
+            <div className="row-actions compact">
+              <button className="pbtn small" disabled={busy || !exchangeFilled(b.exchange) || !s.exchangeCheck} onClick={() => void test()}>
+                {busy ? "Checking…" : "Test connection & balance"}
+              </button>
+              <span className="dim small">Read-only: no orders, no transfers. Use one OKX sub-account per bee, EEA site.</span>
+            </div>
+          )}
+          {err && <div className="xcheck bad">✗ {err}</div>}
+          {fresh && (
+            <ul className="xcheck">
+              <li className={fresh.ok ? "good" : "bad"}>{fresh.ok ? "✓" : "✗"} Keys answer on OKX {fresh.kind}</li>
+              {fresh.ok && (
+                <>
+                  <li className={fresh.canTrade ? "good" : "bad"}>{fresh.canTrade ? "✓" : "✗"} Trade permission</li>
+                  <li className={fresh.canWithdraw ? "bad" : "good"}>{fresh.canWithdraw ? "✗ Has Withdraw permission" : "✓ No Withdraw permission"}</li>
+                  <li className={fresh.subAccount ? "good" : "bad"}>{fresh.subAccount ? "✓" : "✗"} Its own sub-account</li>
+                  <li className={fresh.usdcUsd !== null && fresh.usdcUsd >= (wallet || s.defaultWalletUsd) ? "good" : "bad"}>
+                    {fresh.usdcUsd !== null && fresh.usdcUsd >= (wallet || s.defaultWalletUsd) ? "✓" : "✗"} Balance {fresh.usdcUsd === null ? "unreadable" : usd0(fresh.usdcUsd)} USDC · wallet {usd0(wallet || s.defaultWalletUsd)}
+                  </li>
+                </>
+              )}
+              {fresh.problems.map((p) => (
+                <li key={p} className="bad">
+                  → {p}
+                </li>
+              ))}
+              {fresh.warnings.map((w) => (
+                <li key={w} className="warn">
+                  ⚠ {w}
+                </li>
+              ))}
+              {fresh.ready && <li className="good strong">Ready: this bee can be created on this account.</li>}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 /** The macro squad preset: a gold bee, an energy bee and a stocks bee (its brains pick the stocks). */
 const MACRO_SQUAD: Array<Pick<BeeDraft, "name" | "tagline" | "rules" | "coins" | "market">> = [
@@ -249,9 +414,26 @@ function CoinPicker({ all, value, onChange }: { all: string[]; value: string[]; 
   );
 }
 
-function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; password: string }) {
   const [bees, setBees] = useState<BeeDraft[] | null>(
-    () => s.bees?.map((b) => ({ slot: b.slot, name: b.name, tagline: b.tagline, rules: b.rules, coins: b.coins, style: b.style, brain: b.brain ?? "openai", market: b.market ?? "crypto", extra: b.extra, running: b.running, flat: b.flat })) ?? null,
+    () =>
+      s.bees?.map((b) => ({
+        slot: b.slot,
+        name: b.name,
+        tagline: b.tagline,
+        rules: b.rules,
+        coins: b.coins,
+        style: b.style,
+        brain: b.brain ?? "openai",
+        market: b.market ?? "crypto",
+        extra: b.extra,
+        running: b.running,
+        flat: b.flat,
+        walletUsd: b.walletUsd,
+        exchange: null,
+        check: null,
+        checkedFor: null,
+      })) ?? null,
   );
   if (!bees) return <div className="pcard">The original three bees run without a Setup file, so there is nothing to edit here. Design your own bees on Setup to customise them.</div>;
   const evo = new Map((s.evolution?.board ?? []).map((r) => [r.bee, r]));
@@ -259,7 +441,24 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
   const add = () =>
     setBees([
       ...bees,
-      { slot: `bee${bees.length + 1}`, name: "", tagline: "", rules: "", coins: [], style: "boozy", brain: ["openai", "claude", "kimi"][bees.length % 3]!, market: "crypto", extra: true, running: false, flat: true, isNew: true },
+      {
+        slot: `bee${bees.length + 1}`,
+        name: "",
+        tagline: "",
+        rules: "",
+        coins: [],
+        style: "boozy",
+        brain: ["openai", "claude", "kimi"][bees.length % 3]!,
+        market: "crypto",
+        extra: true,
+        running: false,
+        flat: true,
+        isNew: true,
+        walletUsd: "",
+        exchange: null,
+        check: null,
+        checkedFor: null,
+      },
     ]);
   const hasSquad = bees.some((b) => b.market !== "crypto");
   const formSquad = () =>
@@ -274,16 +473,32 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
         running: false,
         flat: true,
         isNew: true,
+        walletUsd: "" as const,
+        exchange: null,
+        check: null,
+        checkedFor: null,
       })),
     ]);
   const coinsFor = (m: string) => (m === "crypto" ? s.coins : m === "commodities" ? s.macroCoins.commodities : m === "stocks" ? s.macroCoins.stocks : [...s.macroCoins.commodities, ...s.macroCoins.stocks]);
   const save = () =>
     call(
       "bees",
-      { bees: bees.map((b) => ({ name: b.name.trim(), tagline: b.tagline, rules: b.rules, style: b.style, coins: b.coins, ...(b.extra ? { brain: b.brain, market: b.market } : {}) })) },
+      {
+        bees: bees.map((b) => ({
+          name: b.name.trim(),
+          tagline: b.tagline,
+          rules: b.rules,
+          style: b.style,
+          coins: b.coins,
+          ...(b.extra ? { brain: b.brain, market: b.market, ...(typeof b.walletUsd === "number" ? { walletUsd: b.walletUsd } : {}) } : {}),
+          ...(exchangeFilled(b.exchange) ? { exchange: { ...b.exchange, apiKey: b.exchange.apiKey.trim(), secretKey: b.exchange.secretKey.trim() } } : {}),
+        })),
+      },
       "Bees saved. Restart the engine to apply.",
     );
   const last = bees.length - 1;
+  const blockers = bees.map((b) => beeBlocker(b, s));
+  const firstBlock = blockers.findIndex((x) => x !== null);
   return (
     <>
       <div className="bee-edit-grid">
@@ -316,6 +531,12 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
                   </button>
                 )}
               </div>
+              {b.isNew && (
+                <div className="xstep-head">
+                  <span className="xstep-num">1</span>
+                  <strong>Bee &amp; brain</strong>
+                </div>
+              )}
               <label className="plabel">
                 Name
                 <input className="pinput" value={b.name} maxLength={24} onChange={(ev) => set(i, { name: ev.target.value })} />
@@ -390,6 +611,8 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
                 <textarea className="pinput" rows={4} maxLength={500} value={b.rules} onChange={(ev) => set(i, { rules: ev.target.value })} />
                 <span className="dim small num">{b.rules.length}/500</span>
               </label>
+              <ExchangeStep b={b} s={s} password={password} onChange={(patch) => set(i, patch)} />
+              {b.isNew && <div className={`xready ${blockers[i] ? "" : "ok"}`}>{blockers[i] ? `Before it is created: ${blockers[i]}.` : "✓ Ready to create"}</div>}
               {b.extra && i === last && (
                 <button
                   className="pbtn ghost small"
@@ -421,11 +644,13 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
         )}
       </div>
       <div className="row-actions">
-        <button className="pbtn" disabled={bees.some((b) => !b.name.trim())} onClick={() => void save()}>
-          Save bees
+        <button className="pbtn" disabled={firstBlock >= 0} title={firstBlock >= 0 ? `${bees[firstBlock]!.name || bees[firstBlock]!.slot}: ${blockers[firstBlock]}` : ""} onClick={() => void save()}>
+          {bees.some((b) => b.isNew) ? "Create & save bees" : "Save bees"}
         </button>
         <span className="dim small">
-          Extra bees race here and in the lab; the Hive leaderboard shows the main three. Outside paper trading an extra bee needs its own exchange keys in .env (BEE4_OKX_DEMO_API_KEY, …) or it sits out.
+          {firstBlock >= 0
+            ? `${bees[firstBlock]!.name || bees[firstBlock]!.slot}: ${blockers[firstBlock]}.`
+            : "Extra bees race here and in the lab; the Hive leaderboard shows the main three. A new bee is created only after its wallet is set and, outside paper trading, its OKX sub-account passes the check."}
         </span>
       </div>
       {s.sessions && <SessionsCard sessions={s.sessions} />}
@@ -906,7 +1131,7 @@ export function AdminPage() {
             <div className={busy ? "busy" : ""}>
               {tab === "overview" && <Overview s={s} setTab={setTab} />}
               {tab === "keys" && <KeysTab s={s} call={safeCall} />}
-              {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} />}
+              {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} password={pw} />}
               {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
               {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}
               {tab === "security" && <SecurityTab call={safeCall} />}

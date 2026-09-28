@@ -84,4 +84,5 @@ The flatten fires only in a verified open session; the decision shows `forced by
 - A **lab pack** of session-aware skills (opening-range breakout, gap fade, RSI(2) on SPY) and long history from
   CSV/CCXT imports.
 - A macro news calendar (CPI, FOMC, payrolls) blackout.
-- Outside paper trading each macro bee needs its own OKX keys (`BEE4_OKX_DEMO_API_KEY`, …) like any extra bee.
+- Outside paper trading each macro bee needs its own OKX sub-account, connected and balance-checked when it is created
+  (Admin → Bees → Wallet & exchange), or keys in `.env` (`BEE4_OKX_DEMO_API_KEY`, …), like any extra bee.

@@ -3,8 +3,11 @@
 // - settings on the ADMIN_FIELDS list, stored as overrides in admin.json (the environment still wins, as for Setup);
 // - the Jev / OpenAI / Anthropic / Kimi keys, the three bees and the owner password, in the Setup file;
 // - lab jobs (fetch, run, council, cycle), a coach review now, and an engine restart to apply saved changes.
-// What it cannot: the trading mode, LIVE_ACK and exchange keys stay in the environment, so real money is never one
-// click away. Keys are write-only: the page only ever learns whether one is set, and where from.
+// - each bee's wallet (the money it starts with) and its OKX sub-account keys, checked for permissions and balance
+//   before the bee is created (a bee is never created on keys that fail, or on an account holding less than its wallet).
+// What it cannot: the trading mode and LIVE_ACK stay in the environment, so real money is never one click away, and
+// exchange keys set in the environment win over the panel's. Keys are write-only: the page only ever learns whether
+// one is set, where from, and what the last check found.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { deriveStyle } from "../bees/custom.js";
@@ -19,6 +22,7 @@ import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import { anthropicLoginCommand } from "../brains/llm.js";
 import { BeeSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
+import type { AccountFacts } from "../okx/account.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
 
@@ -83,10 +87,22 @@ export interface AdminOpts {
   registerSkill?: (skill: Skill) => void;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
+  /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
+  okxCheck?: (creds: { apiKey: string; secretKey: string; passphrase: string }, kind: "demo" | "live", walletUsd: number) => Promise<AccountFacts>;
   now?: () => number;
 }
 
 const Str = (max: number) => z.string().trim().max(max);
+const KINDS = ["demo", "live"] as const;
+type Kind = (typeof KINDS)[number];
+const Wallet = z.number().min(10).max(1_000_000);
+const Exchange = z.object({
+  kind: z.enum(KINDS),
+  apiKey: Str(200).min(8),
+  secretKey: Str(200).min(8),
+  passphrase: z.string().min(1).max(200),
+});
+
 const KeysBody = z.object({
   keys: z.record(z.enum(KEY_NAMES), Str(300)).default({}),
   remove: z.array(z.enum(KEY_NAMES)).max(4).default([]),
@@ -101,7 +117,14 @@ const BeeEdit = z.object({
   brain: z.enum(["openai", "claude", "kimi"]).optional(),
   /** Extra bees only: what it trades (the macro squad trades stocks and commodities). */
   market: z.enum(MARKETS).optional(),
+  /** Extra bees only: the money it starts with, set when it is created. */
+  walletUsd: Wallet.optional(),
+  /** OKX sub-account keys to check and save for this bee (new keys, or a replacement while it is flat). */
+  exchange: Exchange.optional(),
 });
+/** bee4 -> 3 */
+const ALL_INDEX = (id: BeeId) => Number(id.slice(3)) - 1;
+const CheckBody = Exchange.extend({ walletUsd: Wallet, bee: z.string().optional() });
 const BeesBody = z.object({ bees: z.array(BeeEdit).min(BEES.length).max(MAX_BEES) });
 const SlotBody = z.object({ bee: z.string() });
 const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
@@ -138,6 +161,32 @@ export class Admin {
 
   private envSet(name: string): boolean {
     return !!(this.o.env[name] ?? "").trim();
+  }
+
+  /** The environment holds this bee's OKX keys for that kind (they win over the panel's). */
+  private envExchange(slot: BeeId, kind: Kind): boolean {
+    const infix = kind === "demo" ? "OKX_DEMO_API" : "OKX_API";
+    return ["KEY", "SECRET", "PASSPHRASE"].some((x) => this.envSet(`${slot.toUpperCase()}_${infix}_${x}`));
+  }
+
+  /** BEE_START_EQUITY_USD as the engine would load it now (environment plus saved overrides). */
+  private defaultWallet(): number {
+    try {
+      return Number(parseEnv(withOverrides(this.o.env, loadOverrides(this.o.settingsPath))).BEE_START_EQUITY_USD);
+    } catch {
+      return Number(parseEnv(this.o.env).BEE_START_EQUITY_USD);
+    }
+  }
+
+  /** What the panel may know about a bee's exchange keys: set?, from where, and the last check. Never a key. */
+  private exchangeView(slot: BeeId, b: Settings["bees"][number]) {
+    return Object.fromEntries(
+      KINDS.map((k) => {
+        const env = this.envExchange(slot, k);
+        const saved = b.okx?.[k];
+        return [k, { set: env || !!saved, source: env ? "env" : saved ? "settings" : null, checkedAt: saved?.checkedAt ?? null, balanceUsd: saved?.balanceUsd ?? null }];
+      }),
+    ) as Record<Kind, { set: boolean; source: "env" | "settings" | null; checkedAt: number | null; balanceUsd: number | null }>;
   }
 
   /** Everything the panel shows. No secret ever leaves here. */
@@ -180,9 +229,15 @@ export class Admin {
             extra: i >= BEES.length,
             running: this.o.runningBees?.().includes(slotId(i)) ?? true,
             flat: this.o.isFlat?.(slotId(i)) ?? true,
+            walletUsd: i >= BEES.length && b.walletUsd ? b.walletUsd : this.defaultWallet(),
+            exchange: this.exchangeView(slotId(i), b),
           }))
         : null,
       maxBees: MAX_BEES,
+      defaultWalletUsd: this.defaultWallet(),
+      /** Outside paper trading a new bee needs checked keys for this kind before it is created. */
+      exchangeRequired: this.o.mode === "dry" ? null : this.o.mode,
+      exchangeCheck: !!this.o.okxCheck,
       coins: this.o.coins?.() ?? [],
       macroCoins: this.o.macroCoins?.() ?? { commodities: [], stocks: [] },
       markets: MARKETS.map((m) => ({ id: m, ...MARKET_INFO[m] })),
@@ -330,6 +385,37 @@ export class Admin {
         }
         const reserved = p.data.bees.find((b) => isReservedName(b.name));
         if (reserved) return send(res, 400, { error: `"${reserved.name}" belongs to an official bee.` });
+        // Wallet and exchange: a new bee is created only with its wallet set and, outside paper trading, with keys
+        // for this mode that pass the account check (Trade, no Withdraw, a sub-account holding at least the wallet).
+        const running = this.o.runningBees?.() ?? [];
+        const okx: Array<Settings["bees"][number]["okx"]> = [];
+        for (const [i, b] of p.data.bees.entries()) {
+          const slot = slotId(i);
+          const old = s.bees[i];
+          const extra = i >= BEES.length;
+          const fresh = !old || !running.includes(slot);
+          if (!extra && b.walletUsd !== undefined && b.walletUsd !== this.defaultWallet())
+            return send(res, 400, { error: `${b.name}: the main three share the start equity (Settings → Risk), so the Hive can compare them.` });
+          const wallet = extra ? (b.walletUsd ?? old?.walletUsd) : this.defaultWallet();
+          if (extra && !old && !b.walletUsd) return send(res, 400, { error: `${b.name}: set its wallet (the money it starts with) before creating it.` });
+          if (extra && old && b.walletUsd !== undefined && b.walletUsd !== (old.walletUsd ?? this.defaultWallet()) && !fresh)
+            return send(res, 400, { error: `${b.name}: the wallet is set when a bee is created. It already trades, so it keeps $${old.walletUsd ?? this.defaultWallet()}.` });
+          let keys = old?.okx;
+          const need = this.o.mode === "dry" ? null : this.o.mode;
+          if (b.exchange) {
+            if (this.envExchange(slot, b.exchange.kind)) return send(res, 409, { error: `${b.name}: its ${b.exchange.kind} keys are set in the environment; change them there.` });
+            if (old && this.o.isFlat && !this.o.isFlat(slot)) return send(res, 409, { error: `${b.name} holds a position: its exchange keys can change once it is flat.` });
+            if (!this.o.okxCheck) return send(res, 503, { error: "The OKX account check is not available on this server." });
+            const f = await this.o.okxCheck(b.exchange, b.exchange.kind, wallet ?? this.defaultWallet());
+            if (f.problems.length) return send(res, 400, { error: `${b.name}: ${f.problems.join(" ")}` });
+            const clash = s.bees.findIndex((o, j) => j !== i && f.uidHash && KINDS.some((k) => o.okx?.[k]?.uidHash === f.uidHash));
+            if (clash >= 0) return send(res, 400, { error: `${b.name}: these keys open the same OKX account as ${s.bees[clash]!.name}. Each bee needs its own sub-account.` });
+            keys = { ...(keys ?? {}), [b.exchange.kind]: { apiKey: b.exchange.apiKey, secretKey: b.exchange.secretKey, passphrase: b.exchange.passphrase, checkedAt: this.now(), balanceUsd: f.usdcUsd, uidHash: f.uidHash } };
+          }
+          if (need && !old && !keys?.[need] && !this.envExchange(slot, need))
+            return send(res, 400, { error: `${b.name}: connect its OKX ${need} sub-account (and check its balance) before creating it.` });
+          okx.push(keys);
+        }
         const added: BeeId[] = [];
         const bees = p.data.bees.map((b, i) => {
           const coins = [...new Set(b.coins)];
@@ -340,6 +426,11 @@ export class Admin {
           const next: Settings["bees"][number] = { ...(old ?? { image: false }), name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins), ...(brain ? { brain } : {}) };
           if (market && market !== "crypto") next.market = market;
           else delete next.market;
+          const wallet = i >= BEES.length ? (b.walletUsd ?? old?.walletUsd) : undefined;
+          if (wallet) next.walletUsd = wallet;
+          else delete next.walletUsd;
+          if (okx[i]) next.okx = okx[i];
+          else delete next.okx;
           return next;
         });
         // A brand-new bee starts with fresh paper money, never with the books of a bee that once had its slot.
@@ -348,6 +439,20 @@ export class Admin {
         this.pending = true;
         log.info("admin: bees saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
         return send(res, 200, this.state());
+      }
+
+      case "/admin/exchange/check": {
+        // Test keys before the bee is created: read-only, nothing saved.
+        const p = CheckBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "kind (demo or live), apiKey, secretKey, passphrase and walletUsd (10 to 1,000,000)" });
+        if (!this.o.okxCheck) return send(res, 503, { error: "The OKX account check is not available on this server." });
+        const f = await this.o.okxCheck(p.data, p.data.kind, p.data.walletUsd);
+        const s = loadSettings(this.o.settingsPath);
+        const self = p.data.bee && isBeeId(p.data.bee) ? ALL_INDEX(p.data.bee) : -1;
+        const clash = s?.bees.findIndex((o, j) => j !== self && !!f.uidHash && KINDS.some((k) => o.okx?.[k]?.uidHash === f.uidHash)) ?? -1;
+        if (clash >= 0) f.problems.push(`These keys open the same OKX account as ${s!.bees[clash]!.name}. Each bee needs its own sub-account.`);
+        log.info("admin: exchange keys checked", { kind: p.data.kind, ok: f.ok && !f.problems.length });
+        return send(res, 200, { ...f, uidHash: undefined, ready: f.ok && !f.problems.length });
       }
 
       case "/admin/anthropic-login": {

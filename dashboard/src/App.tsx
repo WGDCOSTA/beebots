@@ -66,7 +66,7 @@ export function App() {
               name={name}
               bee={bee}
               curve={feed.curves[name]}
-              baseline={baseline}
+              baseline={bee?.startEquityUsd ?? baseline}
               rank={board.indexOf(name) + 1}
               gap={bee ? Math.max(0, leaderEq - bee.equityUsd) : null}
               flash={feed.flashes[name]}

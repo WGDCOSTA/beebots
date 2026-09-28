@@ -258,6 +258,8 @@ export interface SlotProfile {
   /** What it trades, and the squad it races in (crypto, or macro: stocks and commodities). */
   market: MarketId;
   squad: "crypto" | "macro";
+  /** The money this bee starts with (and is revived with): its own wallet, else BEE_START_EQUITY_USD. */
+  startEquityUsd: number;
 }
 
 export interface Config {
@@ -333,6 +335,9 @@ export interface Config {
 
 export class ConfigError extends Error {}
 
+/** The money a bee starts with: its own wallet (extra bees created with one), else BEE_START_EQUITY_USD. */
+export const startEquityOf = (cfg: Pick<Config, "slots" | "risk">, id: BeeId): number => cfg.slots[id]?.startEquityUsd ?? cfg.risk.startEquityUsd;
+
 /** Parse and validate the environment (plus the Setup file, if any). Throws ConfigError listing NAMES only, never values. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Settings | null = null): Config {
   const parsed = EnvSchema.safeParse(env);
@@ -365,35 +370,40 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     const style = b?.style ?? DEFAULT_SLOTS[id as (typeof BEES)[number]] ?? "boozy";
     // The main three are always crypto (Setup, the Hive and the live columns are about crypto).
     const market: MarketId = i < BEES.length ? "crypto" : (b?.market ?? "crypto");
+    // Extra bees have their own wallet; the main three share BEE_START_EQUITY_USD (the Hive compares them).
+    const startEquityUsd = i >= BEES.length && b?.walletUsd ? b.walletUsd : e.BEE_START_EQUITY_USD;
     slots[id] = b
-      ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true, market, squad: squadOf(market) }
-      : { style, name: STYLE_INFO[style].name, tagline: STYLE_INFO[style].tagline, customImage: false, rules: "", coins: [], fromSetup: false, market, squad: squadOf(market) };
+      ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true, market, squad: squadOf(market), startEquityUsd }
+      : { style, name: STYLE_INFO[style].name, tagline: STYLE_INFO[style].tagline, customImage: false, rules: "", coins: [], fromSetup: false, market, squad: squadOf(market), startEquityUsd };
   });
 
   const creds: Partial<Record<BeeId, OkxCreds>> = {};
   if (mode !== "dry") {
     const infix = mode === "demo" ? "OKX_DEMO_API" : "OKX_API";
-    for (const bee of allIds) {
+    allIds.forEach((bee, i) => {
       const p = bee.toUpperCase();
       const extra = !(BEES as readonly string[]).includes(bee);
+      // Keys set when the bee was created (admin panel, checked for balance then), unless the environment has its own.
+      const saved = settings?.bees[i]?.okx?.[mode === "demo" ? "demo" : "live"];
       // Extra bees read their keys straight from the environment (BEE4_OKX_DEMO_API_KEY, ...); without them they sit
       // out demo/live rather than blocking the whole engine.
       const raw = (k: string) => (extra ? (env[k] ?? "").trim() || undefined : (e[k] as string | undefined));
+      const envK = raw(`${p}_${infix}_KEY`);
+      const envS = raw(`${p}_${infix}_SECRET`);
+      const envP = raw(`${p}_${infix}_PASSPHRASE`);
+      const fromEnv = !!(envK || envS || envP);
+      const k = fromEnv ? envK : saved?.apiKey;
+      const s = fromEnv ? envS : saved?.secretKey;
+      const ph = fromEnv ? envP : saved?.passphrase;
       if (extra) {
-        const k = raw(`${p}_${infix}_KEY`);
-        const s = raw(`${p}_${infix}_SECRET`);
-        const ph = raw(`${p}_${infix}_PASSPHRASE`);
         if (k && s && ph) creds[bee] = { apiKey: k, secretKey: s, passphrase: ph };
-        continue;
+        return;
       }
-      const k = e[`${p}_${infix}_KEY`] as string | undefined;
-      const s = e[`${p}_${infix}_SECRET`] as string | undefined;
-      const ph = e[`${p}_${infix}_PASSPHRASE`] as string | undefined;
       if (!k) missing.push(`${p}_${infix}_KEY`);
       if (!s) missing.push(`${p}_${infix}_SECRET`);
       if (!ph) missing.push(`${p}_${infix}_PASSPHRASE`);
       if (k && s && ph) creds[bee] = { apiKey: k, secretKey: s, passphrase: ph };
-    }
+    });
   }
   const skippedBees = mode === "dry" ? [] : allIds.filter((id) => !creds[id]);
   const beeIds = allIds.filter((id) => !skippedBees.includes(id));
