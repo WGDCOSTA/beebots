@@ -1,0 +1,116 @@
+{
+  "symbol": "XAUUSD",
+  "mode": "backtest",
+  "live_trading": false,
+  "frequency": "MODERATE",
+  "base_timeframe": "M5",
+  "timezone": "Etc/UTC",
+  "account": {
+    "initial_balance": 10000
+  },
+  "contract": {
+    "contract_size": 100,
+    "point_size": 0.01,
+    "tick_size": 0.01,
+    "tick_value": 1,
+    "volume_min": 0.01,
+    "volume_step": 0.01,
+    "volume_max": 100,
+    "stop_level_points": 0,
+    "freeze_level_points": 0,
+    "leverage": 100
+  },
+  "costs": {
+    "spread": {
+      "kind": "fixed",
+      "value": 0.3
+    },
+    "slippage": 0.05,
+    "commission_per_lot": 0,
+    "swap_long_per_lot_day": 0,
+    "swap_short_per_lot_day": 0
+  },
+  "normalization": {
+    "mode": "HYBRID",
+    "reference_gold_price": 2500,
+    "atr_period": 14,
+    "price_weight": 0.5,
+    "atr_weight": 0.5,
+    "scale_min": 0.25,
+    "scale_max": 4
+  },
+  "risk": {
+    "max_open_risk_pct": 1,
+    "max_daily_loss_pct": 2,
+    "max_weekly_loss_pct": 4,
+    "max_concurrent_positions": 5,
+    "max_correlated_positions": 3,
+    "reserve_pending_risk": true
+  },
+  "filters": {
+    "spread": {
+      "enabled": true,
+      "max_allowed": 0.6
+    },
+    "sessions": {
+      "enabled": false,
+      "london": true,
+      "new_york": true,
+      "asia": false,
+      "windows": {
+        "london": {
+          "tz": "Europe/London",
+          "start": "08:00",
+          "end": "17:00"
+        },
+        "new_york": {
+          "tz": "America/New_York",
+          "start": "08:00",
+          "end": "17:00"
+        },
+        "asia": {
+          "tz": "Asia/Tokyo",
+          "start": "09:00",
+          "end": "18:00"
+        }
+      }
+    },
+    "news": {
+      "enabled": false,
+      "block_minutes_before": 90,
+      "block_minutes_after": 60,
+      "policies": [
+        "BLOCK_NEW_ENTRIES",
+        "CANCEL_PENDING"
+      ],
+      "reduce_risk_factor": 0.5,
+      "events": []
+    },
+    "weekend": {
+      "enabled": true,
+      "block_new_entries_after": {
+        "day": 5,
+        "time": "18:00"
+      },
+      "market_close": {
+        "day": 5,
+        "time": "22:00"
+      },
+      "cancel_pending_before_close": true,
+      "force_flat_before_close": false,
+      "minutes_before_close": 15
+    }
+  },
+  "duplicate_levels": {
+    "cluster_tolerance": 2,
+    "action": "KEEP_HIGHEST_PRIORITY",
+    "reduce_factor": 0.5
+  },
+  "drawdown_weighting": {
+    "enabled": false,
+    "alpha": 0.5,
+    "epsilon": 0.05,
+    "min_trades": 20
+  },
+  "seed": 1
+}
