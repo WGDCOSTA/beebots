@@ -160,6 +160,23 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
         {flag(s.rewards, "rewards", "Points and levels unlock skills, brains, limits")}
         {flag(s.maxPositions > 1 && s.rewards, "multi-orders", "Top performers hold several positions inside one leverage cap", `≤${s.maxPositions}`)}
       </span>
+      {s.cmc && (
+        <span className="sys-group" title={`CoinMarketCap, updated ${new Date(s.cmc.updatedAt).toLocaleTimeString()}`}>
+          <span className="sys-key">MARKET</span>
+          {s.cmc.fearGreed && (
+            <span className={`sys-val ${s.cmc.fearGreed.value >= 55 ? "up" : s.cmc.fearGreed.value <= 45 ? "down" : ""}`} title="Fear & Greed (0 extreme fear, 100 extreme greed)">
+              F&amp;G {s.cmc.fearGreed.value} <em>{s.cmc.fearGreed.label}</em>
+            </span>
+          )}
+          {s.cmc.btcDominancePct !== null && <span className="sys-val" title="Bitcoin dominance">BTC dom {s.cmc.btcDominancePct}%</span>}
+          {s.cmc.mcapChange24hPct !== null && (
+            <span className={`sys-val ${s.cmc.mcapChange24hPct >= 0 ? "up" : "down"}`} title="Total crypto market cap, 24h change">
+              mcap {s.cmc.mcapChange24hPct >= 0 ? "+" : ""}
+              {s.cmc.mcapChange24hPct}%
+            </span>
+          )}
+        </span>
+      )}
       <span className="sys-group">
         <span className="sys-key">RISK</span>
         <span className="sys-val">≤{s.maxLeverage}x lev</span>

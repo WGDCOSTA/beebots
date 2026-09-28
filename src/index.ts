@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { checkCmcKey, CmcSource, marketMood, saveMood } from "./market/cmc.js";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
@@ -224,6 +225,13 @@ async function main() {
     savedEvolution,
     onEvolution,
   );
+  // CoinMarketCap (optional): market-wide context for Jev, the brains and the dashboard (market/cmc.ts).
+  const cmc = cfg.cmc.apiKey
+    ? new CmcSource({ apiKey: cfg.cmc.apiKey, top: cfg.cmc.top, refreshMin: cfg.cmc.refreshMin, maxCallsDay: cfg.cmc.maxCallsDay, onUpdate: (s) => saveMood(cfg.lab.dir, s) })
+    : null;
+  cmc?.start();
+  const cmcState = () => cmc?.get() ?? null;
+  const mood = () => marketMood(cmcState());
   survival = new SurvivalCouncil({
     graph,
     evolution,
@@ -235,7 +243,8 @@ async function main() {
     onNewSkill: addSkill,
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
     watchlist: cfg.lab.watchlist,
-    universe: () => coinInfos(feed.view()),
+    universe: () => coinInfos(feed.view(), 40, cmcState()),
+    market: mood,
   });
 
   // Trading hours of stocks and commodities, learned from their tickers every minute (market/sessions.ts). Always on,
@@ -263,6 +272,7 @@ async function main() {
   engine = new Engine({
     cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
     sessions: () => sessions.calendar,
+    cmc: cmcState,
     ...(cfg.lab.watchlist ? { watchlist: (id: BeeId) => playbook.get()?.bees[id]?.watchlist ?? null } : {}),
     ...(cfg.lab.specialization ? { specialization: (id: BeeId) => playbook.get()?.bees[id]?.specialization ?? null, skillById: (sid: string) => skillMap.get(sid) } : {}),
     ...(signals
@@ -280,7 +290,8 @@ async function main() {
   const coach = new Coach({
     graph, db, clients, bees: councilBees, playbookPath: cfg.lab.playbookPath, intervalMin: cfg.lab.coachIntervalMin, maxCallsPerDay: cfg.lab.coachMaxCallsDay,
     watchlist: cfg.lab.watchlist,
-    universe: () => coinInfos(feed.view()),
+    universe: () => coinInfos(feed.view(), 40, cmcState()),
+    market: mood,
     ranking: readRanking,
     watchSize: (id) => watchlistSize(evolution.bees[id]?.level ?? 0, evolution.bees[id]?.tier ?? null),
     specialization: cfg.lab.specialization,
@@ -356,6 +367,7 @@ async function main() {
       jev: (k) => checkJevKey(k, cfg.jev.model),
       openai: (k) => checkOpenAiKey(k).then(() => null, (e: Error) => `OpenAI said: ${e.message}`),
       anthropic: (k) => checkClaudeKey(k),
+      coinmarketcap: (k) => checkCmcKey(k),
       kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
     },
     okxCheck: (creds, kind, walletUsd) => checkOkxAccount(cli, creds, kind, walletUsd),
@@ -443,6 +455,7 @@ async function main() {
     for (const t of sessionTimers) clearInterval(t);
     saveSessions();
     coach.stop();
+    cmc?.stop();
     graph.close();
     hive.stop();
     updates.stop();

@@ -96,6 +96,8 @@ export interface CoachOpts {
   /** Live coins (most liquid first) and the latest lab ranking, for the watchlist evidence. */
   universe?: () => CoinInfo[];
   ranking?: () => Ranking | null;
+  /** The market mood (CoinMarketCap), or null. */
+  market?: () => Record<string, unknown> | null;
   /** How many coins a bee may hold. */
   watchSize?: (slot: BeeId) => number;
   /** SPECIALIZATION: the review may also switch the bee's method on its real results. */
@@ -253,6 +255,7 @@ export class Coach {
       last24h: this.performance(bee.slot),
       ...(watch && plan.watchlist ? { watchlist: plan.watchlist, watchlistSize: size, coinCandidates: watch.evidence } : {}),
       ...(methods ? { methodOptions: methods } : {}),
+      ...(this.o.market?.() ? { market: this.o.market() } : {}),
       hive,
     });
     try {

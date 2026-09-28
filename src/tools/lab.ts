@@ -15,6 +15,7 @@
 //   pnpm lab explain <node>                                     a node and its links, with confidence
 //   pnpm lab report                                             HIVE_REPORT.md: god nodes, communities, conflicts, memories
 //   pnpm lab remember                                           fold older lessons into memories now (rules digest)
+import { loadMood } from "../market/cmc.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCouncil, type CouncilBee } from "../brains/council.js";
@@ -234,7 +235,7 @@ async function cmdCouncil(ranking?: Ranking) {
   const graph = new KnowledgeGraph(env.graphPath);
   const clients = makeClients(env.creds);
   // No live market here: coin candidates come from the owner's coins, the style, the lab's datasets and the bee's record.
-  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist, pickMethod: env.specialization });
+  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist, pickMethod: env.specialization, market: loadMood(env.dir) });
   savePlaybook(env.playbookPath, res.playbook);
   graph.close();
   for (const l of res.log) {

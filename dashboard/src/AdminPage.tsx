@@ -23,6 +23,12 @@ const KEY_INFO: Record<KeyName, { label: string; help: string; placeholder: stri
   openai: { label: "OpenAI (ChatGPT)", help: "Bee designs and portraits on Setup, and the ChatGPT brain.", placeholder: "sk-…", removable: true },
   anthropic: { label: "Anthropic (Claude)", help: "The Claude brain. console.anthropic.com", placeholder: "sk-ant-…", removable: true },
   kimi: { label: "Moonshot (Kimi)", help: "The Kimi brain. platform.moonshot.ai", placeholder: "sk-…", removable: true },
+  coinmarketcap: {
+    label: "CoinMarketCap",
+    help: "Market context: Fear & Greed, BTC dominance, market cap, and each coin's rank and all-exchange volume for Jev and the brains. pro.coinmarketcap.com",
+    placeholder: "CMC Pro API key",
+    removable: true,
+  },
 };
 
 const MODE_TEXT: Record<AdminState["mode"], string> = {

@@ -27,21 +27,23 @@ import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
 
 const MAX_BODY = 32 * 1024;
-const KEY_NAMES = ["jev", "openai", "anthropic", "kimi"] as const;
+const KEY_NAMES = ["jev", "openai", "anthropic", "kimi", "coinmarketcap"] as const;
 type KeyName = (typeof KEY_NAMES)[number];
 const KEY_ENV: Record<KeyName, string[]> = {
   jev: ["TYPESAFE_API_KEY"],
   openai: ["OPENAI_API_KEY"],
   anthropic: ["ANTHROPIC_API_KEY"],
   kimi: ["KIMI_API_KEY", "MOONSHOT_API_KEY"],
+  coinmarketcap: ["COINMARKETCAP_API_KEY", "CMC_API_KEY"],
 };
-const KEY_FIELD: Record<KeyName, "jevKey" | "openaiKey" | "anthropicKey" | "kimiKey"> = { jev: "jevKey", openai: "openaiKey", anthropic: "anthropicKey", kimi: "kimiKey" };
+const KEY_FIELD: Record<KeyName, "jevKey" | "openaiKey" | "anthropicKey" | "kimiKey" | "cmcKey"> = { jev: "jevKey", openai: "openaiKey", anthropic: "anthropicKey", kimi: "kimiKey", coinmarketcap: "cmcKey" };
 
 export interface KeyChecks {
   jev(key: string): Promise<string | null>;
   openai(key: string): Promise<string | null>;
   anthropic(key: string): Promise<string | null>;
   kimi(key: string): Promise<string | null>;
+  coinmarketcap(key: string): Promise<string | null>;
 }
 
 export interface AdminOpts {
@@ -105,7 +107,7 @@ const Exchange = z.object({
 
 const KeysBody = z.object({
   keys: z.record(z.enum(KEY_NAMES), Str(300)).default({}),
-  remove: z.array(z.enum(KEY_NAMES)).max(4).default([]),
+  remove: z.array(z.enum(KEY_NAMES)).max(KEY_NAMES.length).default([]),
 });
 const BeeEdit = z.object({
   name: BeeSchema.shape.name,
@@ -337,7 +339,7 @@ export class Admin {
 
       case "/admin/keys": {
         const p = KeysBody.safeParse(body);
-        if (!p.success) return send(res, 400, { error: "keys: text values for jev, openai, anthropic or kimi" });
+        if (!p.success) return send(res, 400, { error: "keys: text values for jev, openai, anthropic, kimi or coinmarketcap" });
         const s = loadSettings(this.o.settingsPath);
         if (!s) return send(res, 409, { error: "This server takes its keys from the environment (.env), so they are changed there." });
         const next: Settings = { ...s };
