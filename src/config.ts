@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BRAINS, type BrainCreds, type BrainId } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, BRAINS, hasAnthropicLogin, type BrainCreds, type BrainId } from "./brains/llm.js";
 import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
 /**
@@ -489,11 +489,13 @@ export function brainCreds(
   settings: Settings | null,
 ): BrainCreds {
   const openai = e.OPENAI_API_KEY ?? settings?.openaiKey;
-  const claude = e.ANTHROPIC_API_KEY ?? settings?.anthropicKey;
+  const claudeKey = e.ANTHROPIC_API_KEY ?? settings?.anthropicKey;
+  // No key: an Anthropic Console sign-in (`ant --profile beebots auth login`) works too.
+  const claude = claudeKey ? { apiKey: claudeKey } : hasAnthropicLogin() ? { profile: ANTHROPIC_PROFILE } : null;
   const kimi = e.KIMI_API_KEY ?? e.MOONSHOT_API_KEY ?? settings?.kimiKey;
   return {
     ...(openai ? { openai: { apiKey: openai, model: e.OPENAI_BRAIN_MODEL } } : {}),
-    ...(claude ? { claude: { apiKey: claude, model: e.CLAUDE_MODEL, effort: e.CLAUDE_EFFORT } } : {}),
+    ...(claude ? { claude: { ...claude, model: e.CLAUDE_MODEL, effort: e.CLAUDE_EFFORT } } : {}),
     ...(kimi ? { kimi: { apiKey: kimi, model: e.KIMI_MODEL, baseUrl: e.KIMI_BASE_URL.replace(/\/+$/, "") } } : {}),
   };
 }

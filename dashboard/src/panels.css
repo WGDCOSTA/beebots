@@ -904,3 +904,22 @@
   line-height: 1.25;
   overflow-x: auto;
 }
+
+/* Claude: sign in with an Anthropic Console account instead of a key */
+.login-box {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border, #333);
+  border-radius: 8px;
+}
+.login-box ol {
+  margin: 0.3rem 0 0.3rem 1.1rem;
+  padding: 0;
+}
+.login-cmd {
+  margin: 0.2rem 0 0.4rem;
+  padding: 0.4rem 0.6rem;
+  overflow-x: auto;
+  white-space: pre;
+  user-select: all;
+}

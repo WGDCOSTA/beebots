@@ -32,12 +32,31 @@ Nothing here trades by itself, and nothing here can bypass a cap, a stop or the 
 | Bee | Brain | Key | Default model |
 |---|---|---|---|
 | bee1 | ChatGPT (OpenAI) | `OPENAI_API_KEY` (the Setup key) | `OPENAI_BRAIN_MODEL=gpt-5.4` |
-| bee2 | Claude (Anthropic) | `ANTHROPIC_API_KEY` | `CLAUDE_MODEL=claude-opus-5` |
+| bee2 | Claude (Anthropic) | `ANTHROPIC_API_KEY`, or an Anthropic Console sign-in (below) | `CLAUDE_MODEL=claude-opus-5` |
 | bee3 | Kimi (Moonshot AI) | `KIMI_API_KEY` or `MOONSHOT_API_KEY` | `KIMI_MODEL=kimi-k2.5` |
 
 Change who thinks with what via `BEE1_BRAIN` / `BEE2_BRAIN` / `BEE3_BRAIN` (`openai`, `claude`, `kimi`). Keys can also be
 entered on the Setup page (Claude and Kimi are optional there and checked with a free call). `pnpm lab keys` checks
 all three.
+
+### Signing Claude in instead of pasting a key
+
+Claude can use an **Anthropic Console sign-in** (OAuth) instead of an API key. The engine image ships the Anthropic CLI
+(`ant`); run this once on the server:
+
+```sh
+docker compose exec engine ant --profile beebots auth login --no-browser
+```
+
+Open the link it prints, sign in at platform.claude.com, choose the organisation (and workspace), and paste the code
+back into the terminal. The sign-in is stored in the data volume (`/data/anthropic`, `ANTHROPIC_CONFIG_DIR`), the SDK
+refreshes it by itself, and usage is billed to that Console organisation like an API key. Check it in **Admin → Keys**
+(or on the Setup page), then restart. A set `ANTHROPIC_API_KEY` wins over the sign-in. Outside Docker, run
+`ant --profile beebots auth login` on the same machine (install `ant` from github.com/anthropics/anthropic-cli).
+
+What is **not** possible: a claude.ai Pro/Max, ChatGPT Plus or Kimi app login. Consumer subscriptions are not for
+powering other apps (Anthropic does not allow claude.ai logins in third-party products), so ChatGPT and Kimi still use
+API keys from platform.openai.com and platform.moonshot.ai.
 
 Every answer is JSON checked against a schema (OpenAI: strict `json_schema`; Claude: structured output with adaptive
 thinking and server-side refusal fallbacks; Kimi: JSON mode plus validation and one retry). A brain that fails or has

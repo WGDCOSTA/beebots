@@ -20,6 +20,8 @@ interface Status {
   closesAt: number;
   secure: boolean;
   serverHasOpenAiKey: boolean;
+  /** Claude without a key: an Anthropic Console sign-in made with the Anthropic CLI on the server. */
+  anthropicLogin?: { command: string; active: boolean };
   styles: StyleInfo[];
 }
 interface Design {
@@ -94,6 +96,7 @@ export function Setup() {
   const [openaiOk, setOpenaiOk] = useState(false);
   // Optional brains: bee2 thinks with Claude, bee3 with Kimi (bee1 with ChatGPT, on the OpenAI key above).
   const [anthropicKey, setAnthropicKey] = useState("");
+  const [anthropicLoginOk, setAnthropicLoginOk] = useState(false);
   const [anthropicOk, setAnthropicOk] = useState(false);
   const [kimiKey, setKimiKey] = useState("");
   const [kimiOk, setKimiOk] = useState(false);
@@ -382,7 +385,7 @@ export function Setup() {
             <p>
               Each main bee can have its own strategic brain: your first bee thinks with ChatGPT (the OpenAI key above), the second with Claude, the
               third with Kimi. The brains pick backtested skills from the strategy lab and write lessons to the hive mind; Jev still makes every
-              trading decision. Leave these empty to use simple rules instead. You can add them later in <code>.env</code>.
+              trading decision. Leave these empty to use simple rules instead. You can add them later in <code>.env</code> or the admin panel.
             </p>
             <div className="setup-row">
               <input
@@ -398,6 +401,26 @@ export function Setup() {
               </button>
             </div>
             {anthropicOk && <p className="setup-ok">✓ Claude key works.</p>}
+            {status?.anthropicLogin && (
+              <details className="setup-login" open={status.anthropicLogin.active || undefined}>
+                <summary>Or sign in to Claude with your Anthropic Console account instead of a key</summary>
+                <p>
+                  Run this on the server, open the link it prints, sign in at platform.claude.com, pick your organisation and paste the code back
+                  into the terminal:
+                </p>
+                <pre className="setup-cmd mono">{status.anthropicLogin.command}</pre>
+                <div className="setup-row">
+                  <button className="ghost" disabled={busy} onClick={() => run(async () => (await post("check-claude-login", {}), setAnthropicLoginOk(true)))}>
+                    Check sign-in
+                  </button>
+                </div>
+                {anthropicLoginOk && <p className="setup-ok">✓ Signed in: Claude will use your Console organisation (billed like an API key).</p>}
+                <p className="dim small">
+                  This is an Anthropic Console (API) sign-in. A claude.ai Pro/Max, ChatGPT Plus or Kimi app login can't power other apps, so ChatGPT
+                  and Kimi still need an API key.
+                </p>
+              </details>
+            )}
             <div className="setup-row">
               <input
                 className="setup-input mono"

@@ -126,6 +126,36 @@ function Overview({ s, setTab }: { s: AdminState; setTab: (t: Tab) => void }) {
   );
 }
 
+/**
+ * Claude without an API key: sign in with an Anthropic Console account. The sign-in runs in the engine container with
+ * the Anthropic CLI (the page cannot do it: the OAuth code comes back to that terminal), then this checks it.
+ */
+function AnthropicLogin({ login, keySet, call }: { login: NonNullable<AdminState["anthropicLogin"]>; keySet: boolean; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  return (
+    <div className="login-box">
+      <div className="small">
+        <strong>Or sign in instead of a key</strong> {login.active ? <span className="badge ok">✓ signed in</span> : null}
+      </div>
+      <ol className="dim small">
+        <li>On the server, run:</li>
+      </ol>
+      <pre className="mono small login-cmd">{login.command}</pre>
+      <ol className="dim small" start={2}>
+        <li>Open the link it prints, sign in with your Anthropic Console account (platform.claude.com), pick the organisation, and paste the code back into the terminal.</li>
+        <li>Check it here, then restart the engine.</li>
+      </ol>
+      <div className="row-actions">
+        <button className="pbtn ghost small" onClick={() => void call("anthropic-login", {}, "Anthropic sign-in works. Restart the engine to use it.")}>
+          Check sign-in
+        </button>
+        <span className="dim small">
+          Uses your Console organisation's API billing, like a key{keySet ? "; the key above wins while it is set" : ""}. A claude.ai Pro/Max login cannot be used by other apps.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
   const [draft, setDraft] = useState<Partial<Record<KeyName, string>>>({});
   return (
@@ -139,8 +169,9 @@ function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
           <div key={k} className="key-row">
             <div className="key-meta">
               <strong>{KEY_INFO[k].label}</strong>
-              <span className={`badge ${st.set ? "ok" : ""}`}>{st.set ? (env ? "✓ set in .env" : "✓ set") : "not set"}</span>
+              <span className={`badge ${st.set ? "ok" : ""}`}>{st.set ? (env ? "✓ set in .env" : st.source === "login" ? "✓ signed in" : "✓ set") : "not set"}</span>
               <div className="dim small">{KEY_INFO[k].help}</div>
+              {k === "anthropic" && s.anthropicLogin && <AnthropicLogin login={s.anthropicLogin} keySet={st.source === "env" || st.source === "settings"} call={call} />}
             </div>
             {env ? (
               <span className="dim small">Change it in the environment (.env), then restart.</span>

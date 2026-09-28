@@ -1,7 +1,11 @@
 // The three LLM brains: ChatGPT (OpenAI), Claude (Anthropic) and Kimi (Moonshot AI). Each one authenticates with its
-// own API key and answers in JSON that is checked against a schema before anything uses it. They never place orders:
-// they pick and weigh backtested skills, write lessons into the hive mind and talk to each other (brains/council.ts,
-// brains/coach.ts). Jev still makes every per-tick decision and the risk layer still has the last word.
+// own API key (Claude may use an Anthropic Console sign-in instead) and answers in JSON that is checked against a
+// schema before anything uses it. They never place orders: they pick and weigh backtested skills, write lessons into
+// the hive mind and talk to each other (brains/council.ts, brains/coach.ts). Jev still makes every per-tick decision
+// and the risk layer still has the last word.
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
 import { safeError } from "../redact.js";
@@ -17,7 +21,11 @@ export const BRAIN_INFO: Record<BrainId, { label: string; vendor: string; keyEnv
 
 export interface BrainCreds {
   openai?: { apiKey: string; model: string };
-  claude?: { apiKey: string; model: string; effort: "low" | "medium" | "high" };
+  /**
+   * An API key, or a sign-in with an Anthropic Console account: `profile` names an `ant auth login` profile (OAuth,
+   * refreshed by the SDK) in ANTHROPIC_CONFIG_DIR. Never a claude.ai (Pro/Max) login: those are not for third-party apps.
+   */
+  claude?: { apiKey?: string; profile?: string; model: string; effort: "low" | "medium" | "high" };
   kimi?: { apiKey: string; model: string; baseUrl: string };
 }
 
@@ -184,12 +192,12 @@ export class ClaudeBrain implements LlmClient {
   readonly brain = "claude" as const;
   private client: Anthropic;
   constructor(
-    apiKey: string,
+    auth: { apiKey?: string; profile?: string },
     readonly model: string,
     private effort: "low" | "medium" | "high" = "medium",
     timeoutMs = 180_000,
   ) {
-    this.client = new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 2 });
+    this.client = anthropicClient(auth, timeoutMs, 2);
   }
 
   async json<T>(ask: JsonAsk<T>): Promise<JsonAnswer<T>> {
@@ -228,20 +236,57 @@ export class ClaudeBrain implements LlmClient {
 export function makeClients(c: BrainCreds): Partial<Record<BrainId, LlmClient>> {
   const out: Partial<Record<BrainId, LlmClient>> = {};
   if (c.openai) out.openai = new OpenAiBrain(c.openai.apiKey, c.openai.model);
-  if (c.claude) out.claude = new ClaudeBrain(c.claude.apiKey, c.claude.model, c.claude.effort);
+  if (c.claude) out.claude = new ClaudeBrain(c.claude, c.claude.model, c.claude.effort);
   if (c.kimi) out.kimi = new KimiBrain(c.kimi.apiKey, c.kimi.model, c.kimi.baseUrl);
   return out;
 }
 
 // ---------- key checks (Setup page and `pnpm lab keys`) ----------
 
-/** Lists one model: proves an Anthropic key works without spending tokens. Returns an error message or null. */
-export async function checkClaudeKey(apiKey: string, timeoutMs = 10_000): Promise<string | null> {
+/**
+ * An Anthropic client from a key or a login profile. With a profile, a stray ANTHROPIC_API_KEY in the environment
+ * (compose passes "" for unset variables) must not shadow it, so the key is pinned to null.
+ */
+function anthropicClient(auth: { apiKey?: string; profile?: string }, timeout: number, maxRetries: number): Anthropic {
+  return auth.apiKey ? new Anthropic({ apiKey: auth.apiKey, timeout, maxRetries }) : new Anthropic({ profile: auth.profile ?? ANTHROPIC_PROFILE, apiKey: null, authToken: null, timeout, maxRetries });
+}
+
+/** The `ant auth login` profile beebots signs in with (`ant --profile beebots auth login --no-browser`). */
+export const ANTHROPIC_PROFILE = "beebots";
+
+/** Where the Anthropic CLI and SDK keep profiles: ANTHROPIC_CONFIG_DIR, else the platform default. */
+export function anthropicConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+  const dir = env.ANTHROPIC_CONFIG_DIR?.trim();
+  if (dir) return dir;
+  if (process.platform === "win32" && env.APPDATA) return join(env.APPDATA, "Anthropic");
+  return join(env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config"), "anthropic");
+}
+
+/**
+ * The command that signs Claude in: inside the Docker install it runs in the engine container (no browser there, so
+ * `--no-browser` prints a link and takes the code back); on a machine with a browser, plain `ant auth login`.
+ */
+export function anthropicLoginCommand(profile = ANTHROPIC_PROFILE): string {
+  return existsSync("/.dockerenv") ? `docker compose exec engine ant --profile ${profile} auth login --no-browser` : `ant --profile ${profile} auth login`;
+}
+
+/** True when `ant auth login` has written this profile (its config and credentials files exist). */
+export function hasAnthropicLogin(profile = ANTHROPIC_PROFILE, env: NodeJS.ProcessEnv = process.env): boolean {
+  const dir = anthropicConfigDir(env);
+  return existsSync(join(dir, "configs", `${profile}.json`)) && existsSync(join(dir, "credentials", `${profile}.json`));
+}
+
+/** Lists one model: proves an Anthropic key (or login) works without spending tokens. Returns an error message or null. */
+export async function checkClaudeKey(auth: string | { apiKey?: string; profile?: string }, timeoutMs = 10_000): Promise<string | null> {
+  const a = typeof auth === "string" ? { apiKey: auth } : auth;
+  if (!a.apiKey && !hasAnthropicLogin(a.profile)) return `No Anthropic login yet. Run: ant --profile ${a.profile ?? ANTHROPIC_PROFILE} auth login --no-browser`;
   try {
-    await new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 0 }).models.list({ limit: 1 });
+    await anthropicClient(a, timeoutMs, 0).models.list({ limit: 1 });
     return null;
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) return "Anthropic rejected that key. Copy it again from console.anthropic.com.";
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+      return a.apiKey ? "Anthropic rejected that key. Copy it again from console.anthropic.com." : "Anthropic rejected the login. Sign in again with ant auth login.";
+    }
     const e = safeError(err);
     return `Could not reach Anthropic (${e.code}: ${e.message})`;
   }
