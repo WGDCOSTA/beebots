@@ -169,6 +169,8 @@ export function applyRisk(input: RiskInput): RiskResult {
       const hit = p.side === "long" ? s.mid <= p.stopPx : s.mid >= p.stopPx;
       if (hit) return out({ kind: "close", reason: "stop" }, { forcedBy: "stop", vetoedBy: proposal ? "stop" : null, status: `stopped out of ${p.coin}` });
     }
+    const fc = brain.forcedClose?.(ctx);
+    if (fc) return out({ kind: "close", reason: fc }, { forcedBy: fc, vetoedBy: proposal ? fc : null, status: `${fc.replace(/_/g, " ")}: closing ${p.coin}` });
     const ts = brain.timeStopMinutes?.(ctx);
     if (ts !== undefined && minutesSince(p.openedAt, now) >= ts) {
       return out({ kind: "close", reason: "time_stop" }, { forcedBy: "time_stop", vetoedBy: proposal ? "time_stop" : null, status: `time stop on ${p.coin}` });

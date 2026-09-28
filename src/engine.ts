@@ -1,5 +1,6 @@
 import { customBrain } from "./bees/custom.js";
 import { BRAINS } from "./bees/index.js";
+import { macro } from "./bees/macro.js";
 import { maxNotionalUsd, minutesSince, positionNotional, profitLockStop } from "./bees/common.js";
 import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Position, type Side } from "./bees/types.js";
 import type { BeeId, Config } from "./config.js";
@@ -265,6 +266,7 @@ export class Engine {
       knobs: this.knobs(id),
       now,
       uplR: p && p.riskUsd > 0 ? bee.uplUsd / p.riskUsd : null,
+      ...(this.d.cfg.slots[id].market !== "crypto" ? { session: (coin: string) => sessionInfo(this.d.sessions?.() ?? null, coin, now) } : {}),
     };
   }
 
@@ -838,7 +840,8 @@ export class Engine {
    */
   private brain(id: BeeId): BeeBrain {
     const s = this.d.cfg.slots[id];
-    const owner = (this.brains[id] ??= customBrain(BRAINS[s.style], { coins: s.coins, rules: s.rules }));
+    // The macro squad runs the macro style (bees/macro.ts) whatever crypto style its settings name.
+    const owner = (this.brains[id] ??= customBrain(s.market === "crypto" ? BRAINS[s.style] : macro, { coins: s.coins, rules: s.rules }));
     const w = this.watch(id);
     if (!w) return owner;
     const key = `${w.coins.join(",")}|${w.probation.join(",")}`;
@@ -870,7 +873,8 @@ export class Engine {
   }
 
   private knobs(id: BeeId) {
-    const k = this.d.cfg.bees[this.d.cfg.slots[id].style];
+    const s = this.d.cfg.slots[id];
+    const k = s.market === "crypto" ? this.d.cfg.bees[s.style] : this.d.cfg.macro.knobs;
     const extra = this.d.evolution?.perks(id).extraTrades ?? 0;
     return extra > 0 ? { ...k, maxTradesPerDay: k.maxTradesPerDay + extra } : k;
   }

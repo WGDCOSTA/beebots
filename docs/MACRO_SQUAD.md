@@ -44,15 +44,43 @@ All of these must hold:
    minutes. Unverified counts as closed.
 
 Jev sees `session: { XAU: "open 190m", NVDA: "closed" }` for a macro bee, with one line telling it that these markets
-gap when shut and that it should prefer taking profit or tightening risk near a close. A position it already holds
-is still managed (stops, exits) when its market closes. Everything else is unchanged: Jev decides, the risk layer has
-the last word, leverage is capped at `MAX_LEVERAGE`.
+gap when shut and that it should prefer taking profit or tightening risk near a close. Everything else is unchanged:
+Jev decides, the risk layer has the last word.
+
+## The macro style
+
+Every macro bee runs the **macro style** (`src/bees/macro.ts`), whatever crypto style its settings name. Two setups,
+read from each coin's 15-minute indicators and 1-hour returns:
+
+| Setup | Long | Short |
+|---|---|---|
+| **TREND** (buy the dip, sell the rally) | 7d and 24h up, MACD histogram up, RSI 35–60, %B ≤ 0.6 | 7d and 24h down, MACD down, RSI 40–65, %B ≥ 0.4 |
+| **REVERT** (no weekly trend: \|7d\| < 2.5%) | below the lower band (%B < 0), RSI < 32 | above the upper band (%B > 1), RSI > 68 |
+
+- Jev sees only coins with a setup (`TREND_LONG_XAU`, `REVERT_SHORT_NVDA`, …) plus `WAIT`. Flat with no setup, the bee
+  waits: it is **never forced in**.
+- Positioned: `HOLD`, `TAKE_PROFIT` (above +0.5R), `TRIM_HALF` (above +1.5R), and `CUT` when the day and the momentum
+  have turned against it.
+- Size: 50–100% by conviction, at most **`MACRO_MAX_LEVERAGE` (1x) equity**, never above `MAX_LEVERAGE`. An open with
+  under 2 h to the close is sized by `MACRO_LATE_SESSION_SIZE` (×0.5).
+- Stop: `MACRO_STOP_ATR_MULT` (2.5) × the 15m ATR. A profit lock keeps 40% of the best move from +0.8%, 60% from
+  +1.5%, 75% from +3%.
+- Knobs: `MACRO_MAX_TRADES_PER_DAY` (4), `MACRO_FEE_BUDGET_USD_DAY` (2), `MACRO_SPREAD_GATE_BPS` (15),
+  `MACRO_COOLDOWN_MINUTES` (30). Survival, rewards and watchlists apply as for any bee.
+
+## Flatten before the close
+
+The risk layer closes a macro position **`SESSION_FLATTEN_MIN` (10) minutes before its session ends**, whatever Jev
+says, so no gap can reach it. `SESSION_FLATTEN`:
+
+- `all` (default): before every close;
+- `weekend`: only before a closure of a day or more (overnight breaks are held through);
+- `off`: hold through closes (the stop still applies once the market reopens).
+
+The flatten fires only in a verified open session; the decision shows `forced by: session_close`.
 
 ## Not done yet (next phases)
 
-- A dedicated **macro style** (trend and mean reversion tuned for metals and indices). Macro bees run on the
-  Momentum style for now (the strongest 7-day mover of their market).
-- **Flatten before a close or weekend** as a hard rule, and a gap-risk size factor.
 - A **lab pack** of session-aware skills (opening-range breakout, gap fade, RSI(2) on SPY) and long history from
   CSV/CCXT imports.
 - A macro news calendar (CPI, FOMC, payrolls) blackout.

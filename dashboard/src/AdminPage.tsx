@@ -294,16 +294,23 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
                 <input className="pinput" value={b.tagline} maxLength={40} onChange={(ev) => set(i, { tagline: ev.target.value })} />
               </label>
               <div className="form-grid two">
-                <label className="plabel">
-                  Trading style
-                  <select className="pinput" value={b.style} onChange={(ev) => set(i, { style: ev.target.value })}>
-                    {s.styles.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {b.market === "crypto" ? (
+                  <label className="plabel">
+                    Trading style
+                    <select className="pinput" value={b.style} onChange={(ev) => set(i, { style: ev.target.value })}>
+                      {s.styles.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="plabel">
+                    Trading style
+                    <span className="dim small">Macro: trend pullbacks and range reversions, at most 1x, closed before each session ends (Settings → Macro squad).</span>
+                  </div>
+                )}
                 {b.extra ? (
                   <label className="plabel">
                     Thinks with
@@ -333,7 +340,9 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
                   <span className="dim small">{s.markets.find((m) => m.id === b.market)?.blurb}</span>
                 </label>
               )}
-              <span className="dim small">{s.styles.find((x) => x.id === b.style)?.blurb} Breakout needs coins within BTC/ETH/SOL/HYPE and Trend within BTC/ETH; otherwise the bee runs on Momentum.</span>
+              {b.market === "crypto" && (
+                <span className="dim small">{s.styles.find((x) => x.id === b.style)?.blurb} Breakout needs coins within BTC/ETH/SOL/HYPE and Trend within BTC/ETH; otherwise the bee runs on Momentum.</span>
+              )}
               <div className="plabel">
                 Assets it may trade
                 <CoinPicker all={coinsFor(b.market)} value={b.coins} onChange={(c) => set(i, { coins: c })} />
