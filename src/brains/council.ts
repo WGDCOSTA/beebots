@@ -134,6 +134,8 @@ export async function runCouncil(opts: {
   now?: () => number;
   /** Live coins (engine market view) for the watchlist; [] = candidates come from the lab, the record and the owner. */
   universe?: CoinInfo[];
+  /** The market mood (CoinMarketCap: Fear & Greed, dominance, market cap move), or null. */
+  market?: Record<string, unknown> | null;
   /** Let the brains choose each bee's coins (BRAIN_WATCHLIST). Off = the previous watchlist is kept. */
   pickCoins?: boolean;
   /** How many coins a bee may hold (grows with its level, 3 in danger). */
@@ -182,6 +184,7 @@ export async function runCouncil(opts: {
           candidates: cands.map(compact),
           ...(pickCoins ? { watchlistSize: size, coinCandidates: watch.evidence } : {}),
           ...(pickMethod ? { methodOptions: methods } : {}),
+          ...(opts.market ? { market: opts.market } : {}),
           hive,
         });
         const r = await client.json({ system: systemPrompt(bee), user, schema: COUNCIL_SCHEMA, name: "council_pick", validate: Answer });

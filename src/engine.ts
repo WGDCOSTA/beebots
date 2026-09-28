@@ -20,6 +20,7 @@ import type { MarketFeed } from "./market/data.js";
 import { safeError } from "./redact.js";
 import { SURVIVAL_NOTE, type Evolution } from "./evolution.js";
 import { effectiveWatchlist, watchlistLine, type WatchItem } from "./brains/watchlist.js";
+import { CMC_NOTE, jevMarketLine, type CmcState } from "./market/cmc.js";
 import { marketKinds, mayOpen, sessionInfo, sessionLabel, SESSION_NOTE, type SessionCalendar } from "./market/sessions.js";
 import type { MarketView } from "./market/types.js";
 import { applyRisk, type JevStatus, type Proposal } from "./risk.js";
@@ -56,6 +57,8 @@ export interface EngineDeps {
    */
   labVotes?: (id: BeeId, instIds: string[]) => Record<string, number> | null;
   labNote?: string;
+  /** CoinMarketCap context (market/cmc.ts), or null when off or stale. Crypto bees see its `mkt` line (CMC_IN_JEV). */
+  cmc?: () => CmcState | null;
   /** Survival and rewards (evolution.ts): size factor, limit boosts, the survival line in Jev's state. */
   evolution?: Evolution;
   /**
@@ -519,7 +522,8 @@ export class Engine {
     }
     const survival = this.d.evolution?.state(id) ?? null;
     const session = this.sessionState(id, brain.snapshotCoins(ctx).map((i) => i.split("-")[0]!), now);
-    const extra = { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}), ...(session ? { session } : {}) };
+    const mkt = this.d.cfg.cmc.inJev && this.d.cfg.slots[id].squad === "crypto" ? jevMarketLine(this.d.cmc?.() ?? null) : null;
+    const extra = { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}), ...(session ? { session } : {}), ...(mkt ? { mkt } : {}) };
     const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null);
     if (brain.id === "boozy" && bee.top1.coin) snap.state.top1 = `${bee.top1.coin} x${bee.top1.streak}`;
 
@@ -533,7 +537,7 @@ export class Engine {
     else if (labels.length === 0) jevStatus = "no_options";
     else if (required) r = requiredAnswer(labels[0]!);
     else {
-      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
+      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, mkt ? CMC_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
       r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
     }
@@ -1141,6 +1145,21 @@ export class Engine {
 
   // ---------- read-only views for the dashboard ----------
 
+  /** CoinMarketCap's market mood for the system bar (null when off or stale). */
+  private cmcView() {
+    const s = this.d.cmc?.() ?? null;
+    if (!s) return null;
+    const r = (x: number | null | undefined, dp = 1) => (x === null || x === undefined ? null : Number(x.toFixed(dp)));
+    return {
+      fearGreed: s.fearGreed ? { value: r(s.fearGreed.value, 0), label: s.fearGreed.label } : null,
+      btcDominancePct: r(s.global?.btcDominancePct),
+      mcapChange24hPct: r(s.global?.mcapChange24hPct, 2),
+      totalMcapUsd: r(s.global?.totalMcapUsd, 0),
+      coins: s.coins.size,
+      updatedAt: s.updatedAt,
+    };
+  }
+
   private publicBee(id: BeeId) {
     const b = this.bees[id];
     const view = this.d.feed.view();
@@ -1239,6 +1258,7 @@ export class Engine {
         jevModel: this.d.cfg.jev.model,
         brains: (["openai", "claude", "kimi"] as const).map((bid) => ({ id: bid, model: this.d.cfg.brains.creds[bid]?.model ?? null, online: !!this.d.cfg.brains.creds[bid] })),
         labSignals: !!this.d.labVotes,
+        cmc: this.cmcView(),
         watchlist: !!this.d.watchlist,
         survival: this.d.evolution?.opts.survival ?? false,
         rewards: this.d.evolution?.opts.rewards ?? false,

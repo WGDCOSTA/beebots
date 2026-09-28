@@ -239,6 +239,23 @@ Extra bees can trade gold, oil and stocks instead of crypto (Admin → Bees → 
 councils, coach and watchlists stay inside their market, and they open only in trading hours the engine has verified
 from the market. See [MACRO_SQUAD.md](MACRO_SQUAD.md).
 
+## CoinMarketCap: the whole market
+
+With a CoinMarketCap Pro API key (`COINMARKETCAP_API_KEY`, or Admin → API keys, checked with a free call before it is
+saved) the engine adds market-wide context the exchange feed does not have (`src/market/cmc.ts`). Every
+`CMC_REFRESH_MIN` minutes (15) it reads CMC's top `CMC_TOP` coins (200), the global metrics and the Fear & Greed index:
+three calls, under the free Basic plan's 10,000 monthly credits, with `CMC_MAX_CALLS_DAY` (300) as a hard cap.
+
+- **Jev** (`CMC_IN_JEV`, on): crypto bees' state carries `mkt` (fear_greed, btc_dom_pct, mcap_24h_pct) with one line
+  in its instructions: background only, never above the menu or the coin data. Macro bees do not get it.
+- **Brains**: each coin in the watchlist evidence gets `live.cmc` (CMC rank, market cap, volume across all exchanges,
+  24h and 30d moves), and councils, the coach and survival councils read the market mood. The lab's CLI council reads
+  the last mood the engine saved (`<LAB_DIR>/cmc-mood.json`).
+- **Dashboard**: the system bar shows Fear & Greed, BTC dominance and the market cap's 24h move.
+
+It is read-only and optional: without a key, or if CMC is down (the last good values are kept up to 2 hours), the
+bees trade on the exchange feed alone. The key only travels in CMC's request header; it is never logged or shown.
+
 ## The profit-lock ratchet
 
 Every style keeps its own stops, and on top of them the engine runs a dynamic profit-locking ratchet

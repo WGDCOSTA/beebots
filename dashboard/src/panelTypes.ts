@@ -112,7 +112,7 @@ export interface JobStatus {
   log: string[];
 }
 
-export type KeyName = "jev" | "openai" | "anthropic" | "kimi";
+export type KeyName = "jev" | "openai" | "anthropic" | "kimi" | "coinmarketcap";
 
 export type ExchangeKind = "demo" | "live";
 /** A bee's OKX keys as the panel may see them: never the keys, only where they come from and the last check. */

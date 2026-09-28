@@ -1714,6 +1714,12 @@ textarea.setup-input {
 .sys-val {
   color: var(--text);
 }
+.sys-val.up {
+  color: var(--good-text);
+}
+.sys-val.down {
+  color: var(--critical-text);
+}
 .sysbar em,
 .tech-strip em {
   font-style: normal;

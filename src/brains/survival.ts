@@ -104,6 +104,8 @@ export interface SurvivalOpts {
   /** BRAIN_WATCHLIST: the council also chooses the bee's coins. Live coins, most liquid first. */
   watchlist?: boolean;
   universe?: () => CoinInfo[];
+  /** The market mood (CoinMarketCap), or null. */
+  market?: () => Record<string, unknown> | null;
   now?: () => number;
 }
 
@@ -264,6 +266,7 @@ export class SurvivalCouncil {
         }),
         ...(watch?.candidates.length ? { currentWatchlist: pb?.bees[bee.slot]?.watchlist?.map((w) => w.coin) ?? [], watchlistSize: watchSize, coinCandidates: watch.evidence } : {}),
         methodOptions: methods,
+        ...(this.o.market?.() ? { market: this.o.market() } : {}),
         teammates: answers.map((x) => ({ brain: BRAIN_INFO[x.brain].label, skills: x.a.skills, coins: x.a.coins?.map((c) => c.coin) ?? [], method: x.a.specialization ?? null, lesson: x.a.lesson })),
         hive,
       });

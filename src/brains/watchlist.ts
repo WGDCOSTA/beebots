@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { Tier } from "../evolution.js";
 import type { Ranking } from "../lab/tournament.js";
 import { coinOfDataset } from "../graph/hive-mind.js";
+import type { CmcState } from "../market/cmc.js";
 import type { MarketView } from "../market/types.js";
 import { kindOf } from "../market/kinds.js";
 import { marketKinds } from "../market/sessions.js";
@@ -37,6 +38,18 @@ export interface CoinInfo {
   ret7dPct: number | null;
   spreadBp: number;
   atrPct: number | null;
+  /** CoinMarketCap's view of the coin (market/cmc.ts), when it is on. */
+  cmc?: CmcFacts | null;
+}
+
+/** What CoinMarketCap says about a coin, in the units the brains read. */
+export interface CmcFacts {
+  rank: number;
+  mcapMusd: number | null;
+  /** 24h volume across every exchange, not only OKX. */
+  volAllMusd: number | null;
+  pct24h: number | null;
+  pct30d: number | null;
 }
 
 export interface CoinEvidence {
@@ -45,7 +58,7 @@ export interface CoinEvidence {
   lab: { bestSkill: string; bestScore: number; adoptedScore: number | null } | null;
   /** The bee's real closed-trade record on this coin. */
   record: { netUsd: number; trades: number; winRatePct: number | null } | null;
-  live: { volMusd: number; ret7dPct: number | null; spreadBp: number; atrPct: number | null } | null;
+  live: { volMusd: number; ret7dPct: number | null; spreadBp: number; atrPct: number | null; cmc?: CmcFacts } | null;
 }
 
 /** Coins a style may trade at all (null = any). */
@@ -113,7 +126,9 @@ export function coinEvidence(o: {
       coin,
       lab: l ? { bestSkill: l.best[0], bestScore: r2(l.best[1]), adoptedScore: l.adopted.length ? r2(l.adopted.reduce((a, b) => a + b, 0) / l.adopted.length) : null } : null,
       record: r ? { netUsd: r2(r.netUsd), trades: r.trades, winRatePct: r.winRatePct } : null,
-      live: v ? { volMusd: r2(v.vol24hUsd / 1e6), ret7dPct: v.ret7dPct === null ? null : r2(v.ret7dPct), spreadBp: r2(v.spreadBp), atrPct: v.atrPct === null ? null : r2(v.atrPct) } : null,
+      live: v
+        ? { volMusd: r2(v.vol24hUsd / 1e6), ret7dPct: v.ret7dPct === null ? null : r2(v.ret7dPct), spreadBp: r2(v.spreadBp), atrPct: v.atrPct === null ? null : r2(v.atrPct), ...(v.cmc ? { cmc: v.cmc } : {}) }
+        : null,
     };
   });
 }
@@ -196,14 +211,26 @@ export function watchInput(o: {
 export const WATCHLIST_PROMPT =
   "Also choose the bee's WATCHLIST: the coins it should trade, only from coinCandidates, at most watchlistSize of them. " +
   "Weigh the lab's out-of-sample evidence per coin (lab.adoptedScore is how the skills you picked did on it), the bee's real record there, and live liquidity (volMusd, spreadBp). " +
+  "live.cmc, when present, is CoinMarketCap's view: rank, market cap, volume across all exchanges (volAllMusd) and the 24h and 30d moves; a low rank or thin all-exchange volume means a fragile coin. " +
   "A coin with no evidence is a gamble: include one only with a concrete reason. Give each coin a short reason.";
 
-/** The live facts about the gated coins (most liquid first), for the brains' evidence. */
-export function coinInfos(view: MarketView, limit = 40): CoinInfo[] {
+/** The live facts about the gated coins (most liquid first), for the brains' evidence; CoinMarketCap's too when on. */
+export function coinInfos(view: MarketView, limit = 40, cmc?: CmcState | null): CoinInfo[] {
   const out: CoinInfo[] = [];
+  const r1 = (x: number | null) => (x === null ? null : Math.round(x * 10) / 10);
   for (const instId of [...view.gated.slice(0, limit), ...view.macro.slice(0, limit)]) {
     const s = view.stats.get(instId);
-    if (s) out.push({ coin: s.coin.toUpperCase(), vol24hUsd: s.vol24hUsd, ret7dPct: s.ret7dPct, spreadBp: s.spreadBp, atrPct: s.atr14Pct });
+    if (!s) continue;
+    const coin = s.coin.toUpperCase();
+    const c = cmc?.coins.get(coin);
+    out.push({
+      coin,
+      vol24hUsd: s.vol24hUsd,
+      ret7dPct: s.ret7dPct,
+      spreadBp: s.spreadBp,
+      atrPct: s.atr14Pct,
+      ...(c ? { cmc: { rank: c.rank, mcapMusd: c.mcapUsd === null ? null : Math.round(c.mcapUsd / 1e6), volAllMusd: c.vol24hUsd === null ? null : Math.round(c.vol24hUsd / 1e6), pct24h: r1(c.pct24h), pct30d: r1(c.pct30d) } } : {}),
+    });
   }
   return out;
 }

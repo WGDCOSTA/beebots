@@ -80,6 +80,15 @@ export interface SystemInfo {
   macroTrading: boolean;
   macroBees: number;
   maxLeverage: number;
+  /** CoinMarketCap's market mood (null when no key or stale). */
+  cmc?: {
+    fearGreed: { value: number; label: string } | null;
+    btcDominancePct: number | null;
+    mcapChange24hPct: number | null;
+    totalMcapUsd: number | null;
+    coins: number;
+    updatedAt: number;
+  } | null;
 }
 
 export type Tier = "thriving" | "healthy" | "danger" | "critical" | "dead";

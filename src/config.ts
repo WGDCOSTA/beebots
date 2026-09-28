@@ -163,6 +163,15 @@ const EnvSchema = z.object({
   CLAUDE_MODEL: str("claude-opus-5"),
   CLAUDE_EFFORT: oneOf(["low", "medium", "high"] as const, "medium"),
   KIMI_API_KEY: opt,
+  // ---- CoinMarketCap (market/cmc.ts): market-wide context, optional ----
+  COINMARKETCAP_API_KEY: opt,
+  CMC_API_KEY: opt,
+  // Minutes between refreshes (3 calls each), coins fetched, and a hard daily call cap (Basic plan: 10,000 a month).
+  CMC_REFRESH_MIN: num(15),
+  CMC_TOP: num(200),
+  CMC_MAX_CALLS_DAY: num(300),
+  // Show Jev the market line (Fear & Greed, BTC dominance, total market cap 24h move) in every decision.
+  CMC_IN_JEV: bool(true),
   MOONSHOT_API_KEY: opt,
   KIMI_MODEL: str("kimi-k2.5"),
   KIMI_BASE_URL: str("https://api.moonshot.ai/v1"),
@@ -270,6 +279,8 @@ export interface Config {
   skippedBees: BeeId[];
   slots: Record<BeeId, SlotProfile>;
   openai: { apiKey?: string; textModel: string; imageModel: string };
+  /** CoinMarketCap context (market/cmc.ts); apiKey absent = off. */
+  cmc: { apiKey?: string; refreshMin: number; top: number; maxCallsDay: number; inJev: boolean };
   links: { sponsor: string; code: string };
   hive: { url: string };
   update: { enabled: boolean; repo: string; version: string };
@@ -430,6 +441,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     skippedBees,
     slots,
     openai: { apiKey: e.OPENAI_API_KEY ?? settings?.openaiKey, textModel: e.OPENAI_TEXT_MODEL, imageModel: e.OPENAI_IMAGE_MODEL },
+    cmc: {
+      apiKey: e.COINMARKETCAP_API_KEY ?? e.CMC_API_KEY ?? settings?.cmcKey,
+      refreshMin: Math.max(5, e.CMC_REFRESH_MIN),
+      top: Math.min(5000, Math.max(10, Math.round(e.CMC_TOP))),
+      maxCallsDay: Math.max(0, Math.round(e.CMC_MAX_CALLS_DAY)),
+      inJev: e.CMC_IN_JEV,
+    },
     links: { sponsor: e.HOST_LINK, code: e.REPO_LINK },
     hive: { url: e.HIVE_URL.replace(/\/+$/, "") },
     update: { enabled: e.UPDATE_CHECK, repo: e.UPDATE_REPO, version: e.APP_VERSION },
