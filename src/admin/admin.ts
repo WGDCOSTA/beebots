@@ -17,6 +17,7 @@ import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
+import { anthropicLoginCommand } from "../brains/llm.js";
 import { BeeSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
@@ -60,6 +61,11 @@ export interface AdminOpts {
   coins?: () => string[];
   /** Stocks and commodities with a live X-Perp right now (the macro squad's picker). */
   macroCoins?: () => { commodities: string[]; stocks: string[] };
+  /**
+   * Claude via an Anthropic Console sign-in instead of a key (`ant --profile beebots auth login`): whether that
+   * profile exists, and a free call that proves it works.
+   */
+  anthropicLogin?: { profile: string; active: () => boolean; check: () => Promise<string | null> };
   /** The trading-hours calendar the engine is learning (market/sessions.ts), summarised. */
   sessions?: () => unknown;
   /** Bees the running engine trades, and whether one is flat (a bee may only be removed flat). */
@@ -126,6 +132,10 @@ export class Admin {
     this.now = o.now ?? Date.now;
   }
 
+  private keySet(k: KeyName): boolean {
+    return KEY_ENV[k].some((n) => this.envSet(n)) || !!loadSettings(this.o.settingsPath)?.[KEY_FIELD[k]];
+  }
+
   private envSet(name: string): boolean {
     return !!(this.o.env[name] ?? "").trim();
   }
@@ -145,7 +155,9 @@ export class Admin {
       KEY_NAMES.map((k) => {
         const env = KEY_ENV[k].some((n) => this.envSet(n));
         const file = !!settings?.[KEY_FIELD[k]];
-        return [k, { set: env || file, source: env ? "env" : file ? "settings" : null }];
+        // No Anthropic key: an Anthropic Console sign-in counts (the brain uses it; see brains/llm.ts).
+        const login = k === "anthropic" && !env && !file && !!this.o.anthropicLogin?.active();
+        return [k, { set: env || file || login, source: env ? "env" : file ? "settings" : login ? "login" : null }];
       }),
     );
     return {
@@ -175,6 +187,9 @@ export class Admin {
       macroCoins: this.o.macroCoins?.() ?? { commodities: [], stocks: [] },
       markets: MARKETS.map((m) => ({ id: m, ...MARKET_INFO[m] })),
       sessions: this.o.sessions?.() ?? null,
+      anthropicLogin: this.o.anthropicLogin
+        ? { profile: this.o.anthropicLogin.profile, active: this.o.anthropicLogin.active(), command: anthropicLoginCommand(this.o.anthropicLogin.profile) }
+        : null,
       evolution: this.o.evolution?.() ?? null,
       styles: STYLES.map((s) => ({ id: s, label: STYLE_INFO[s].label, blurb: STYLE_INFO[s].blurb })),
       groups: FIELD_GROUPS.map((g) => ({ id: g, ...GROUP_INFO[g] })),
@@ -332,6 +347,16 @@ export class Admin {
         saveSettings(this.o.settingsPath, { ...s, bees });
         this.pending = true;
         log.info("admin: bees saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/anthropic-login": {
+        if (!this.o.anthropicLogin) return send(res, 404, { error: "Anthropic sign-in is not available here." });
+        const err = await this.o.anthropicLogin.check();
+        if (err) return send(res, 400, { error: err });
+        // The brain picks the login up at the next start when no key is set.
+        if (!this.keySet("anthropic")) this.pending = true;
+        log.info("admin: Anthropic sign-in checked");
         return send(res, 200, this.state());
       }
 

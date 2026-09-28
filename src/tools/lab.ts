@@ -250,7 +250,7 @@ async function cmdKeys() {
     console.log(`${name.padEnd(8)} ${err ? `FAILED: ${err}` : "ok"}`);
   };
   await check("ChatGPT", !!c.openai, async () => (await checkOpenAiKey(c.openai!.apiKey), null));
-  await check("Claude", !!c.claude, () => checkClaudeKey(c.claude!.apiKey));
+  await check("Claude", !!c.claude, () => checkClaudeKey(c.claude!));
   await check("Kimi", !!c.kimi, () => checkKimiKey(c.kimi!.apiKey, c.kimi!.baseUrl));
   for (const slot of BEES) console.log(`${slot} -> ${BRAIN_INFO[env.slots[slot]].label}`);
 }

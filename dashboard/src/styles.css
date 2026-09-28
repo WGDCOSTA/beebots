@@ -1670,3 +1670,18 @@ textarea.setup-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.setup-login {
+  margin: 0.4rem 0 1rem;
+}
+.setup-login summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+.setup-cmd {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.7rem;
+  overflow-x: auto;
+  white-space: pre;
+  user-select: all;
+  font-size: 0.8rem;
+}

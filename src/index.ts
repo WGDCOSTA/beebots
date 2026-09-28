@@ -24,7 +24,7 @@ import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
 import type { CouncilBee } from "./brains/council.js";
-import { checkClaudeKey, checkKimiKey, makeClients } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, checkClaudeKey, checkKimiKey, hasAnthropicLogin, makeClients } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
 import { checkOpenAiKey } from "./openai.js";
@@ -346,6 +346,11 @@ async function main() {
       openai: (k) => checkOpenAiKey(k).then(() => null, (e: Error) => `OpenAI said: ${e.message}`),
       anthropic: (k) => checkClaudeKey(k),
       kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
+    },
+    anthropicLogin: {
+      profile: ANTHROPIC_PROFILE,
+      active: () => hasAnthropicLogin(),
+      check: () => checkClaudeKey({ profile: ANTHROPIC_PROFILE }),
     },
     jobs,
     coachNow: Object.keys(clients).length ? () => coach.reflectAll() : null,

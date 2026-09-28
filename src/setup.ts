@@ -19,7 +19,7 @@ import { BIZZY_BREAKOUT_COINS } from "./bees/bizzy.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
 import { deriveStyle } from "./bees/custom.js";
 import { fetchXperpCoins } from "./okx/public.js";
-import { checkClaudeKey, checkKimiKey } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, anthropicLoginCommand, checkClaudeKey, checkKimiKey, hasAnthropicLogin } from "./brains/llm.js";
 import { checkOpenAiKey, designBee, OpenAiError, paintBee, type BeeDesign } from "./openai.js";
 import { safeError } from "./redact.js";
 import { clientAddr } from "./visitors.js";
@@ -188,6 +188,8 @@ export class Setup {
       closesAt: this.closesAt,
       secure: req.headers["x-forwarded-proto"] === "https",
       serverHasOpenAiKey: !!this.o.openai.apiKey,
+      // Claude without a key: an Anthropic Console sign-in made with the Anthropic CLI (brains/llm.ts).
+      anthropicLogin: { command: anthropicLoginCommand(), active: hasAnthropicLogin() },
       styles: STYLES.map((id) => ({ id, ...STYLE_INFO[id] })),
     };
   }
@@ -266,6 +268,11 @@ export class Setup {
         const key = String(body.key ?? "").trim();
         if (key.length < 8) return send(res, 400, { error: "Paste your Anthropic API key." });
         const err = await checkClaudeKey(key);
+        return send(res, err ? 400 : 200, err ? { error: err } : { ok: true });
+      }
+
+      case "/setup/check-claude-login": {
+        const err = await checkClaudeKey({ profile: ANTHROPIC_PROFILE });
         return send(res, err ? 400 : 200, err ? { error: err } : { ok: true });
       }
 

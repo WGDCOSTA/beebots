@@ -119,7 +119,9 @@ export interface AdminState {
   version: string;
   hasSettingsFile: boolean;
   pendingRestart: boolean;
-  keys: Record<KeyName, { set: boolean; source: "env" | "settings" | null }>;
+  keys: Record<KeyName, { set: boolean; source: "env" | "settings" | "login" | null }>;
+  /** Claude through an Anthropic Console sign-in instead of a key (`ant auth login` in the engine container). */
+  anthropicLogin: { profile: string; active: boolean; command: string } | null;
   bees: Array<{ slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; image: boolean; brain: string | null; market?: string; extra: boolean; running: boolean; flat: boolean }> | null;
   maxBees: number;
   /** Coins with a live X-Perp right now ([] before the market loads: free text then). */

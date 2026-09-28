@@ -101,7 +101,9 @@ describe("setup", () => {
     const t = await boot();
     const s = (await (await fetch(`${t.base}/setup/status`)).json()) as Record<string, unknown>;
     expect(s).toMatchObject({ needed: true, timedOut: false });
-    expect(Object.keys(s).sort()).toEqual(["closesAt", "needed", "secure", "serverHasOpenAiKey", "styles", "timedOut"]);
+    expect(Object.keys(s).sort()).toEqual(["anthropicLogin", "closesAt", "needed", "secure", "serverHasOpenAiKey", "styles", "timedOut"]);
+    // The Anthropic sign-in shows only the command to run and whether a sign-in exists, never a token.
+    expect(Object.keys(s.anthropicLogin as object).sort()).toEqual(["active", "command"]);
   });
 
   it("refuses to save without all three risk statements", async () => {
