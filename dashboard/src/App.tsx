@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BeeColumn, money } from "./BeeColumn";
-import { Header } from "./Header";
+import { Header, SystemBar } from "./Header";
 import { unlockAudio } from "./sound";
 import { Ticker } from "./Ticker";
 import { Toasts } from "./Toasts";
@@ -56,6 +56,7 @@ export function App() {
   return (
     <div className="app">
       <Header snap={feed.snap} connected={feed.connected} stalled={stalled} soundOn={soundOn} onSound={toggleSound} />
+      <SystemBar snap={feed.snap} />
       <main className="grid">
         {BEE_NAMES.map((name) => {
           const bee = feed.bees[name];
@@ -76,7 +77,7 @@ export function App() {
           <section className="rail-card board">
             <div className="rail-head">
               <span className="eyebrow">Leaderboard</span>
-              <span className="dim">equity</span>
+              <span className="dim num">lvl · pnl · equity</span>
             </div>
             {board.map((name, i) => {
               const b = feed.bees[name];
@@ -88,6 +89,10 @@ export function App() {
                   <span className="board-name">{beeMeta(name).short}</span>
                   <span className="board-bar">
                     <span style={{ width: `${width}%` }} />
+                  </span>
+                  <span className="board-meta num">
+                    {b?.evo ? <span className={TIER_INFO[b.evo.tier].tone}>L{b.evo.level}</span> : null}
+                    {b ? <span className={b.pnlPct >= 0 ? "good" : "bad"}>{b.pnlPct >= 0 ? "+" : ""}{b.pnlPct.toFixed(2)}%</span> : null}
                   </span>
                   <span className="board-eq num">{b ? money(b.equityUsd) : "–"}</span>
                 </div>

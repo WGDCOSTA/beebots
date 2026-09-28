@@ -51,6 +51,31 @@ export interface PublicBee {
   evo?: { tier: Tier; health: number; points: number; level: number; deaths: number } | null;
   /** The coins its AI brains chose that the engine applies right now (null = the style's normal choice). */
   watchlist?: { coins: string[]; probation: string[] } | null;
+  /** The LLM brain that plans for it, and whether that brain has a key or sign-in. */
+  brain?: { id: string; model: string | null; online: boolean };
+  market?: string;
+  squad?: "crypto" | "macro";
+  /** Notional of every position it holds (main + legs) vs its cap. */
+  exposureUsd?: number;
+  /** Main position's unrealised P&L in R (risk at entry). */
+  uplR?: number | null;
+  /** Multi-orders: extra positions, and how many positions its performance allows. */
+  legs?: Array<{ coin: string; side: "long" | "short"; sizeUsd: number | null; entryPx: number; markPx: number | null; stopPx: number | null; uplUsd: number | null; minutesHeld: number }>;
+  slots?: number;
+}
+
+/** Engine telemetry for the system bar. */
+export interface SystemInfo {
+  jevModel: string;
+  brains: Array<{ id: string; model: string | null; online: boolean }>;
+  labSignals: boolean;
+  watchlist: boolean;
+  survival: boolean;
+  rewards: boolean;
+  maxPositions: number;
+  macroTrading: boolean;
+  macroBees: number;
+  maxLeverage: number;
 }
 
 export type Tier = "thriving" | "healthy" | "danger" | "critical" | "dead";
@@ -85,6 +110,7 @@ export interface Snapshot {
   startedAt: number;
   startEquityUsd: number;
   tickMs: number;
+  system?: SystemInfo;
   bees: PublicBee[];
   leaderboard: Array<{ bee: BeeName; equityUsd: number }>;
   totals: { feesUsd: number; fundingUsd: number; jevUsd: number; pnlUsd: number };

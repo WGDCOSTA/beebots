@@ -101,6 +101,7 @@ services:
       SESSION_FLATTEN: ${SESSION_FLATTEN:-}
       SESSION_FLATTEN_MIN: ${SESSION_FLATTEN_MIN:-}
       REWARDS_IN_LIVE: ${REWARDS_IN_LIVE:-}
+      MAX_POSITIONS_PER_BEE: ${MAX_POSITIONS_PER_BEE:-}
       LAB_DIR: /data/lab
       GRAPH_PATH: /data/lab/hive-mind.sqlite
     volumes:

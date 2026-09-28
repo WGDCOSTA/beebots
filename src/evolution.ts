@@ -31,6 +31,8 @@ export interface EvolutionOpts {
   /** Limit boosts also apply with real money. */
   boostLimits: boolean;
   startEquityUsd: number;
+  /** Most positions a bee may hold at once (MAX_POSITIONS_PER_BEE). */
+  maxPositions?: number;
 }
 
 export interface Perks {
@@ -44,6 +46,8 @@ export interface Perks {
   limitBoost: number;
   /** Extra opens per UTC day. */
   extraTrades: number;
+  /** Positions it may hold at once (multi-orders): 2 from level 3, 3 from level 5, capped by MAX_POSITIONS_PER_BEE. */
+  positions: number;
 }
 
 export interface BeeEvolution {
@@ -77,14 +81,15 @@ export function levelFor(points: number): number {
   return l;
 }
 
-export function perksFor(level: number, o: Pick<EvolutionOpts, "rewards" | "maxLimitBoost" | "boostLimits">): Perks {
-  if (!o.rewards) return { skillSlots: 4, canAuthorSkills: false, extraBrains: 0, limitBoost: 0, extraTrades: 0 };
+export function perksFor(level: number, o: Pick<EvolutionOpts, "rewards" | "maxLimitBoost" | "boostLimits"> & { maxPositions?: number }): Perks {
+  if (!o.rewards) return { skillSlots: 4, canAuthorSkills: false, extraBrains: 0, limitBoost: 0, extraTrades: 0, positions: 1 };
   return {
     skillSlots: Math.min(6, 3 + level),
     canAuthorSkills: level >= 1,
     extraBrains: level >= 5 ? 2 : level >= 3 ? 1 : 0,
     limitBoost: o.boostLimits ? Math.min(o.maxLimitBoost, Math.round(level * 10) / 100) : 0,
     extraTrades: o.boostLimits ? Math.min(3, Math.floor(level / 2)) : 0,
+    positions: o.boostLimits ? Math.max(1, Math.min(o.maxPositions ?? 3, level >= 5 ? 3 : level >= 3 ? 2 : 1)) : 1,
   };
 }
 

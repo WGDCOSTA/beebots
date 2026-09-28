@@ -1,8 +1,8 @@
 import { customBrain } from "./bees/custom.js";
 import { BRAINS } from "./bees/index.js";
 import { macro } from "./bees/macro.js";
-import { maxNotionalUsd, minutesSince, positionNotional, profitLockStop } from "./bees/common.js";
-import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Position, type Side } from "./bees/types.js";
+import { allPositions, maxNotionalUsd, minutesSince, positionNotional, profitLockStop, uplUsd } from "./bees/common.js";
+import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Menu, type Position, type Side } from "./bees/types.js";
 import type { BeeId, Config } from "./config.js";
 import type { Alerts } from "./alerts.js";
 import type { Db } from "./db.js";
@@ -10,7 +10,7 @@ import type { EventBus } from "./events.js";
 import type { Executor } from "./exec/executor.js";
 import { contractsFor, roundToLot } from "./exec/sizing.js";
 import type { Jev, JevAnswer, JevResult } from "./jev.js";
-import { applyFill, applyFunding, freshBee, mark, rollDay, sizedRiskUsd } from "./ledger.js";
+import { applyFill, applyFunding, freshBee, mark, promoteLeg, rollDay, sizedRiskUsd } from "./ledger.js";
 import { log } from "./log.js";
 import type { MarketFeed } from "./market/data.js";
 import { safeError } from "./redact.js";
@@ -26,6 +26,10 @@ const RECON_MS = 5 * 60_000;
 /** How often a benched bee gets a live P&L row in the stream. */
 const PULSE_MS = 4_000;
 /** How long a bee opens nothing after the exchange rejects one of its new orders. */
+/** Told to Jev when its menu carries multi-order options. */
+export const MULTI_ORDER_NOTE =
+  "LEG_* options open an extra position on another coin next to the one you hold (you earned more position slots by performing); every position shares one leverage cap and keeps its own code stop. CLOSE_LEG_<coin> closes an extra position. Only add a leg for a setup as good as a fresh entry.";
+
 export const ORDER_REJECT_PAUSE_MS = 10 * 60_000;
 const EQUITY_SNAPSHOT_MS = 10_000;
 
@@ -236,7 +240,19 @@ export class Engine {
       if (this.closedAt === null && this.d.closeRequested?.()) this.beginClose(now);
       if (this.closedAt === null && this.d.takeResumeRequest?.()) await this.resumeLast(now);
       if (this.closedAt !== null) await this.windDown(now);
-      else await Promise.all(this.ids.map((id) => this.decide(id, now).catch((err) => log.error("decision failed", { bee: id, err: safeError(err) }))));
+      else
+        await Promise.all(
+          this.ids.map(async (id) => {
+            try {
+              // Legs first (their code exits), then the bee's decision, then a leg steps up if the main position closed.
+              await this.manageLegs(id, now);
+              await this.decide(id, now);
+              if (promoteLeg(this.bees[id])) this.d.db.saveBee(this.bees[id], now);
+            } catch (err) {
+              log.error("decision failed", { bee: id, err: safeError(err) });
+            }
+          }),
+        );
 
       if (now - this.lastEquityAt >= EQUITY_SNAPSHOT_MS) {
         this.lastEquityAt = now;
@@ -259,15 +275,91 @@ export class Engine {
     const boost = this.d.evolution?.perks(id).limitBoost ?? 0;
     // A reward may raise this bee's max position size (never leverage: maxNotionalUsd still caps by MAX_LEVERAGE).
     const cfg = boost > 0 ? { ...this.d.cfg, risk: { ...this.d.cfg.risk, maxNotionalUsdPerBee: this.d.cfg.risk.maxNotionalUsdPerBee * (1 + boost) } } : this.d.cfg;
+    // With legs, the bee's own P&L line is the main position's (uplR, a brain's "losing?" checks); legs are separate.
+    const mainUpl = bee.legs?.length ? (bee.mainUplUsd ?? bee.uplUsd) : bee.uplUsd;
     return {
-      bee,
+      bee: mainUpl === bee.uplUsd ? bee : { ...bee, uplUsd: mainUpl },
       view: this.viewFor(id, now),
       cfg,
       knobs: this.knobs(id),
       now,
-      uplR: p && p.riskUsd > 0 ? bee.uplUsd / p.riskUsd : null,
+      uplR: p && p.riskUsd > 0 ? mainUpl / p.riskUsd : null,
+      slots: this.slots(id),
       ...(this.d.cfg.slots[id].market !== "crypto" ? { session: (coin: string) => sessionInfo(this.d.sessions?.() ?? null, coin, now) } : {}),
     };
+  }
+
+  /**
+   * Multi-orders: how many positions this bee may hold now. Its performance earns them (evolution.ts perks.positions:
+   * 2 from level 3, 3 from level 5); a bee in danger or worse is back to one.
+   */
+  private slots(id: BeeId): number {
+    const ev = this.d.evolution;
+    if (!ev) return 1;
+    const tier = ev.bees[id]?.tier;
+    if (tier === "danger" || tier === "critical" || tier === "dead") return 1;
+    return Math.max(1, ev.perks(id).positions);
+  }
+
+  /**
+   * Multi-orders menu: with a main position and a free slot, the openings the brain would offer if the bee were flat,
+   * on coins it does not hold yet, as LEG_*; and CLOSE_LEG_<coin> for each leg it holds.
+   */
+  private legMenu(id: BeeId, ctx: BeeContext): Menu {
+    const bee = ctx.bee;
+    const m: Menu = {};
+    if (!bee.position) return m;
+    for (const l of bee.legs ?? []) m[`CLOSE_LEG_${l.coin}`] = { desc: "close this extra position", intent: { kind: "leg_close", instId: l.instId, reason: "jev_close_leg" } };
+    const slots = ctx.slots ?? 1;
+    if (slots <= 1 || allPositions(bee).length >= slots || bee.cap) return m;
+    const held = new Set(allPositions(bee).map((p) => p.instId));
+    const flat = this.brain(id).menu({ ...ctx, bee: { ...bee, position: null, legs: [], uplUsd: 0 }, uplR: null });
+    for (const [label, opt] of Object.entries(flat)) {
+      const i = opt.intent;
+      if (i.kind !== "open" || held.has(i.instId)) continue;
+      m[`LEG_${label}`] = { desc: opt.desc ? `extra position: ${opt.desc}` : "extra position", intent: { kind: "leg_open", instId: i.instId, side: i.side, sizeFrac: i.sizeFrac, setup: i.setup } };
+    }
+    return m;
+  }
+
+  /** A leg seen through the brain as if it were the bee's main position (trailing, stops, session close). */
+  private legCtx(id: BeeId, leg: Position, now: number): BeeContext {
+    const base = this.ctx(id, now);
+    const view = base.view;
+    const m = view.tickers.get(leg.instId)?.mid;
+    const c = view.instruments.get(leg.instId)?.ctVal;
+    const upl = m && c ? uplUsd(leg, m, c) : 0;
+    return { ...base, bee: { ...base.bee, position: leg, legs: [], uplUsd: upl }, uplR: leg.riskUsd > 0 ? upl / leg.riskUsd : null };
+  }
+
+  /**
+   * Code exits for legs, every tick and whatever Jev says: the stop, a brain's forced close (a macro session ending),
+   * its time stop, and the bee's retire / daily loss stop. Jev can also close a leg from its menu (CLOSE_LEG_*).
+   */
+  private async manageLegs(id: BeeId, now: number): Promise<void> {
+    const bee = this.bees[id];
+    if (!bee.legs?.length) return;
+    const brain = this.brain(id);
+    for (const leg of [...bee.legs]) {
+      const ctx = this.legCtx(id, leg, now);
+      const mid = ctx.view.stats.get(leg.instId)?.mid ?? ctx.view.tickers.get(leg.instId)?.mid;
+      const stopHit = mid !== undefined && leg.stopPx !== null && (leg.side === "long" ? mid <= leg.stopPx : mid >= leg.stopPx);
+      const ts = brain.timeStopMinutes?.(ctx);
+      const why =
+        bee.cap === "retired" || bee.cap === "loss_stop"
+          ? bee.cap
+          : stopHit
+            ? "stop"
+            : (brain.forcedClose?.(ctx) ?? (ts !== undefined && minutesSince(leg.openedAt, now) >= ts ? "time_stop" : null));
+      if (!why) continue;
+      const decisionId = this.d.db.insertDecision({
+        bee: id, ts: now, stateHash: "", stateJson: "{}", menuJson: "[]", choice: null, probabilities: null, confidence: null,
+        conviction: null, latencyMs: null, inputTokens: null, jevCostUsd: 0, jevError: null,
+        action: { kind: "leg_close", instId: leg.instId, reason: why }, vetoedBy: null, forcedBy: why, status: `${why.replace(/_/g, " ")}: closing leg ${leg.coin}`,
+      });
+      await this.order(id, decisionId, leg.instId, leg.side === "long" ? "sell" : "buy", leg.contracts, true, `leg_${why}`);
+    }
+    this.d.db.saveBee(bee, now);
   }
 
   /**
@@ -298,13 +390,35 @@ export class Engine {
     return all.length ? Object.fromEntries(all.map((c) => [c, sessionLabel(sessionInfo(cal, c, now))])) : null;
   }
 
+  /** Mark every position at the current mids, the one just filled at its fill price. */
+  private remark(id: BeeId, instId: string, px: number) {
+    const bee = this.bees[id];
+    const view = this.d.feed.view();
+    const pxOf = (i: string) => (i === instId ? px : view.tickers.get(i)?.mid);
+    let legsUpl = 0;
+    for (const l of bee.legs ?? []) {
+      const m = pxOf(l.instId);
+      const c = view.instruments.get(l.instId)?.ctVal;
+      legsUpl += m && c ? uplUsd(l, m, c) : 0;
+    }
+    const p = bee.position;
+    mark(bee, p ? pxOf(p.instId) : undefined, p ? view.instruments.get(p.instId)?.ctVal : undefined, legsUpl);
+  }
+
   private markBee(id: BeeId, now: number) {
     const bee = this.bees[id];
     const view = this.d.feed.view();
     const p = bee.position;
     const t = p ? view.tickers.get(p.instId) : undefined;
     const ctVal = p ? view.instruments.get(p.instId)?.ctVal : undefined;
-    mark(bee, t?.mid, ctVal);
+    // Legs (multi-orders) are marked at their own prices.
+    let legsUpl = 0;
+    for (const l of bee.legs ?? []) {
+      const lm = view.tickers.get(l.instId)?.mid;
+      const lc = view.instruments.get(l.instId)?.ctVal;
+      legsUpl += lm && lc ? uplUsd(l, lm, lc) : 0;
+    }
+    mark(bee, t?.mid, ctVal, legsUpl);
     // Positions opened before initialStopPx existed: their stop has never trailed past entry, so it is the entry stop.
     // Re-size R once from it (R used to stay at the first fill's risk after adds).
     if (p && p.initialStopPx === undefined && p.stopPx !== null && ctVal) {
@@ -328,6 +442,19 @@ export class Engine {
       const cand = profitLockStop(p.side, p.entryPx, p.peakPx!, brain.profitLock);
       if (cand !== null && Number.isFinite(cand)) ratchetStop(p, cand);
     }
+    // The same trailing and profit lock for every leg, each seen by the brain as if it were the main position.
+    for (const l of bee.legs ?? []) {
+      const lm = view.tickers.get(l.instId)?.mid;
+      if (brain.trail) {
+        const cand = brain.trail(this.legCtx(id, l, now));
+        if (cand !== null && Number.isFinite(cand)) ratchetStop(l, cand);
+      }
+      if (brain.profitLock && lm) {
+        if (l.peakPx == null || (l.side === "long" ? lm > l.peakPx : lm < l.peakPx)) l.peakPx = lm;
+        const cand = profitLockStop(l.side, l.entryPx, l.peakPx!, brain.profitLock);
+        if (cand !== null && Number.isFinite(cand)) ratchetStop(l, cand);
+      }
+    }
   }
 
   private async decide(id: BeeId, now: number): Promise<void> {
@@ -339,6 +466,8 @@ export class Engine {
     if (bee.cap === "trade_cap" || bee.cap === "fee_budget") return this.decideBenched(id, now);
     const ctx = this.ctx(id, now);
     const menu = brain.menu(ctx);
+    const legOptions = this.legMenu(id, ctx);
+    Object.assign(menu, legOptions);
     let lab: Record<string, number> | null = null;
     try {
       lab = this.d.labVotes?.(id, brain.snapshotCoins(ctx)) ?? null;
@@ -361,7 +490,7 @@ export class Engine {
     else if (labels.length === 0) jevStatus = "no_options";
     else if (required) r = requiredAnswer(labels[0]!);
     else {
-      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null].filter(Boolean).join(" ");
+      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
       r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
     }
@@ -570,19 +699,23 @@ export class Engine {
     await Promise.all(
       this.ids.map(async (id) => {
         const bee = this.bees[id];
-        const p = bee.position;
-        if (!p || now < (this.closeRetryAt[id] ?? 0)) return;
-        const decisionId = this.d.db.insertDecision({
-          bee: id, ts: now, stateHash: "", stateJson: "{}", menuJson: "[]", choice: null, probabilities: null, confidence: null,
-          conviction: null, latencyMs: null, inputTokens: null, jevCostUsd: 0, jevError: null,
-          action: { kind: "close", reason: "experiment_closed" }, vetoedBy: null, forcedBy: "experiment_closed", status: "experiment closed: closing position",
-        });
-        const ok = await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", p.contracts, true, "experiment_close");
-        if (!ok) this.closeRetryAt[id] = now + 10_000;
+        if (!allPositions(bee).length || now < (this.closeRetryAt[id] ?? 0)) return;
+        // Legs first, then the main position.
+        for (const p of [...(bee.legs ?? []), ...(bee.position ? [bee.position] : [])]) {
+          const leg = p !== bee.position;
+          const decisionId = this.d.db.insertDecision({
+            bee: id, ts: now, stateHash: "", stateJson: "{}", menuJson: "[]", choice: null, probabilities: null, confidence: null,
+            conviction: null, latencyMs: null, inputTokens: null, jevCostUsd: 0, jevError: null,
+            action: leg ? { kind: "leg_close", instId: p.instId, reason: "experiment_closed" } : { kind: "close", reason: "experiment_closed" },
+            vetoedBy: null, forcedBy: "experiment_closed", status: "experiment closed: closing position",
+          });
+          const ok = await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", p.contracts, true, "experiment_close");
+          if (!ok) this.closeRetryAt[id] = now + 10_000;
+        }
         this.d.db.saveBee(bee, now);
       }),
     ).catch((err) => log.error("close failed", { err: safeError(err) }));
-    if (!this.closeAnnounced && this.ids.every((id) => !this.bees[id].position)) {
+    if (!this.closeAnnounced && this.ids.every((id) => !allPositions(this.bees[id]).length)) {
       this.closeAnnounced = true;
       this.d.db.setMeta("experiment_flat_at", String(now));
       this.lastReconAt = 0; // confirm flat against OKX on the next tick
@@ -631,10 +764,18 @@ export class Engine {
       case "open":
         await this.openPosition(id, decisionId, action.instId, action.side, action.notionalUsd);
         return;
+      case "leg_open":
+        await this.openPosition(id, decisionId, action.instId, action.side, action.notionalUsd, true);
+        return;
+      case "leg_close": {
+        const l = bee.legs?.find((x) => x.instId === action.instId);
+        if (l) await this.order(id, decisionId, l.instId, l.side === "long" ? "sell" : "buy", l.contracts, true, "leg_close");
+        return;
+      }
     }
   }
 
-  private async openPosition(id: BeeId, decisionId: number, instId: string, side: Side, notionalUsd: number): Promise<void> {
+  private async openPosition(id: BeeId, decisionId: number, instId: string, side: Side, notionalUsd: number, leg = false): Promise<void> {
     const view = this.d.feed.view();
     const inst = view.instruments.get(instId);
     const s = view.stats.get(instId);
@@ -644,12 +785,12 @@ export class Engine {
       log.info("order rounds to zero contracts, skipped", { bee: id, coin: inst.coin, notionalUsd });
       return;
     }
-    const ok = await this.order(id, decisionId, instId, side === "long" ? "buy" : "sell", contracts, false, "open");
+    const ok = await this.order(id, decisionId, instId, side === "long" ? "buy" : "sell", contracts, false, leg ? "leg_open" : "open", leg);
     const bee = this.bees[id];
-    if (!ok || !bee.position) return;
+    const p = leg ? bee.legs?.find((l) => l.instId === instId) : bee.position;
+    if (!ok || !p) return;
     bee.tradesToday++;
-    const ctx = this.ctx(id, this.now());
-    const p = bee.position;
+    const ctx = leg ? this.legCtx(id, p, this.now()) : this.ctx(id, this.now());
     p.stopPx = this.brain(id).stopFor(instId, side, p.entryPx, ctx);
     p.initialStopPx = p.stopPx;
     const notional = positionNotional(p, p.entryPx, inst.ctVal);
@@ -658,7 +799,7 @@ export class Engine {
   }
 
   /** Record the order, send it, apply the fill. Returns true when it filled. */
-  private async order(id: BeeId, decisionId: number, instId: string, side: "buy" | "sell", contracts: number, reduceOnly: boolean, purpose: string): Promise<boolean> {
+  private async order(id: BeeId, decisionId: number, instId: string, side: "buy" | "sell", contracts: number, reduceOnly: boolean, purpose: string, leg = false): Promise<boolean> {
     const { db, bus, exec } = this.d;
     const now = this.now();
     const inst = this.d.feed.view().instruments.get(instId);
@@ -686,10 +827,10 @@ export class Engine {
     }
     db.updateOrder(orderId, "filled", res.ordId, null);
     const bee = this.bees[id];
-    const realised = applyFill(bee, { instId, coin: inst.coin, side, contracts: res.contracts, px: res.avgPx, feeUsd: res.feeUsd, ctVal: inst.ctVal, ts: res.ts });
+    const realised = applyFill(bee, { instId, coin: inst.coin, side, contracts: res.contracts, px: res.avgPx, feeUsd: res.feeUsd, ctVal: inst.ctVal, ts: res.ts, leg });
     const notionalUsd = res.contracts * inst.ctVal * res.avgPx;
     db.insertFill({ orderId, bee: id, ts: res.ts, instId, side, contracts: res.contracts, px: res.avgPx, notionalUsd, feeUsd: res.feeUsd, realisedUsd: realised });
-    mark(bee, res.avgPx, inst.ctVal);
+    this.remark(id, instId, res.avgPx);
     const dir = reduceOnly ? "CLOSE" : side === "buy" ? "LONG" : "SHORT";
     bus.emit("fill", {
       bee: id,
@@ -716,14 +857,17 @@ export class Engine {
     const view = this.d.feed.view();
     for (const id of this.ids) {
       const bee = this.bees[id];
-      const p = bee.position;
-      const s = p ? view.stats.get(p.instId) : undefined;
-      const inst = p ? view.instruments.get(p.instId) : undefined;
-      if (!p || !s || !inst || s.fundingPct === null) continue;
-      const amount = -(p.side === "long" ? 1 : -1) * (s.fundingPct / 100) * positionNotional(p, s.mid, inst.ctVal);
-      if (this.d.db.insertFunding(id, now, p.instId, amount, `sim-${id}-${slot}`)) {
-        applyFunding(bee, amount);
-        this.d.bus.emit("funding", { bee: id, coin: p.coin, amountUsd: Number(amount.toFixed(4)) }, now);
+      // Every position pays or earns funding: the main one and any legs.
+      for (const p of allPositions(bee)) {
+        const s = view.stats.get(p.instId);
+        const inst = view.instruments.get(p.instId);
+        if (!s || !inst || s.fundingPct === null) continue;
+        const amount = -(p.side === "long" ? 1 : -1) * (s.fundingPct / 100) * positionNotional(p, s.mid, inst.ctVal);
+        const billId = p === bee.position ? `sim-${id}-${slot}` : `sim-${id}-${slot}-${p.coin}`;
+        if (this.d.db.insertFunding(id, now, p.instId, amount, billId)) {
+          applyFunding(bee, amount);
+          this.d.bus.emit("funding", { bee: id, coin: p.coin, amountUsd: Number(amount.toFixed(4)) }, now);
+        }
       }
     }
   }
@@ -756,13 +900,15 @@ export class Engine {
         diffs.push(`${this.d.cfg.slots[id].name}: could not read OKX positions`);
         continue;
       }
-      const theirs = ex[0];
-      const ours = bee.position;
-      const oursSigned = ours ? (ours.side === "long" ? 1 : -1) * ours.contracts : 0;
-      const theirSigned = theirs?.pos ?? 0;
-      const sameInst = (ours?.instId ?? null) === (theirs?.instId ?? null);
-      let ok = ex.length <= 1 && sameInst && Math.abs(oursSigned - theirSigned) < 1e-9;
-      let detail = ok ? "match" : `ours ${ours ? `${ours.side} ${ours.contracts} ${ours.coin}` : "flat"} vs OKX ${theirs ? `${theirs.pos} ${theirs.instId.split("-")[0]}` : "flat"}`;
+      // Every position we hold (main + legs) against every OKX position, by instrument and signed size.
+      const ours = allPositions(bee);
+      const signed = (p: Position) => (p.side === "long" ? 1 : -1) * p.contracts;
+      const oursBy = new Map(ours.map((p) => [p.instId, signed(p)]));
+      const theirsBy = new Map(ex.map((x) => [x.instId, x.pos]));
+      const sameBooks = oursBy.size === theirsBy.size && [...theirsBy].every(([i, n]) => oursBy.has(i) && Math.abs(oursBy.get(i)! - n) < 1e-9);
+      let ok = sameBooks;
+      const fmt = (m: Map<string, number>) => (m.size ? [...m].map(([i, n]) => `${n} ${i.split("-")[0]}`).join(", ") : "flat");
+      let detail = ok ? "match" : `ours ${fmt(oursBy)} vs OKX ${fmt(theirsBy)}`;
 
       // Fees to the cent on our recent filled orders.
       const rows = this.d.db.raw
@@ -780,31 +926,34 @@ export class Engine {
         }
       }
 
-      if (!sameInst || Math.abs(oursSigned - theirSigned) >= 1e-9) {
-        // OKX is the truth: rebuild the position from it.
-        if (!theirs) {
-          bee.position = null;
-          bee.flatSince ??= now;
-        } else {
+      if (!sameBooks) {
+        // OKX is the truth: rebuild every position from it, keeping our stops where the coin and side still match.
+        const rebuilt: Position[] = ex.map((theirs) => {
+          const mine = ours.find((p) => p.instId === theirs.instId);
           const inst = view.instruments.get(theirs.instId);
           const side: Side = theirs.pos > 0 ? "long" : "short";
-          const keepStop = ours && sameInst && ours.side === side ? ours.stopPx : null;
-          bee.position = {
+          const keepStop = mine && mine.side === side ? mine.stopPx : null;
+          const np: Position = {
             instId: theirs.instId,
             coin: theirs.instId.split("-")[0]!,
             side,
             contracts: Math.abs(theirs.pos),
             entryPx: theirs.avgPx,
-            openedAt: ours?.openedAt ?? now,
+            openedAt: mine?.openedAt ?? now,
             stopPx: keepStop ?? this.brain(id).stopFor(theirs.instId, side, theirs.avgPx, this.ctx(id, now)),
-            riskUsd: ours?.riskUsd ?? (inst ? Math.abs(theirs.pos) * inst.ctVal * theirs.avgPx * 0.01 : 0),
+            riskUsd: mine?.riskUsd ?? (inst ? Math.abs(theirs.pos) * inst.ctVal * theirs.avgPx * 0.01 : 0),
           };
-          const np = bee.position;
-          np.initialStopPx = keepStop !== null && ours ? (ours.initialStopPx ?? ours.stopPx) : np.stopPx;
-          np.peakPx = keepStop !== null && ours ? (ours.peakPx ?? null) : null;
+          np.initialStopPx = keepStop !== null && mine ? (mine.initialStopPx ?? mine.stopPx) : np.stopPx;
+          np.peakPx = keepStop !== null && mine ? (mine.peakPx ?? null) : null;
           if (inst && np.initialStopPx !== null && np.initialStopPx !== undefined) np.riskUsd = sizedRiskUsd(np.contracts, inst.ctVal, np.entryPx, np.initialStopPx);
-          bee.flatSince = null;
-        }
+          return np;
+        });
+        // The main position stays the main one if OKX still has it.
+        const mainIdx = Math.max(0, rebuilt.findIndex((p) => p.instId === bee.position?.instId));
+        bee.position = rebuilt[mainIdx] ?? null;
+        bee.legs = rebuilt.filter((_, k) => k !== mainIdx);
+        if (bee.position) bee.flatSince = null;
+        else bee.flatSince ??= now;
       }
       this.d.db.insertRecon(id, now, ok, { detail });
       if (!ok) diffs.push(`${this.d.cfg.slots[id].name}: ${detail}`);
@@ -922,10 +1071,40 @@ export class Engine {
             entryPx: p.entryPx,
             markPx: mid ?? null,
             stopPx: p.stopPx,
-            uplUsd: r2(b.uplUsd),
+            uplUsd: r2(b.legs?.length ? (b.mainUplUsd ?? b.uplUsd) : b.uplUsd),
             minutesHeld: Math.round(minutesSince(p.openedAt, this.now())),
           }
         : null,
+      /** Which LLM brain plans for this bee (and whether it has a key or sign-in), what it trades, its exposure. */
+      brain: (() => {
+        const bid = this.d.cfg.brains.slots[id];
+        const c = this.d.cfg.brains.creds[bid];
+        return { id: bid, model: c?.model ?? null, online: !!c };
+      })(),
+      market: this.d.cfg.slots[id].market,
+      squad: this.d.cfg.slots[id].squad,
+      exposureUsd: r2(allPositions(b).reduce((a, q) => {
+        const qi = view.instruments.get(q.instId);
+        const qm = view.tickers.get(q.instId)?.mid;
+        return a + (qi && qm ? positionNotional(q, qm, qi.ctVal) : 0);
+      }, 0)),
+      uplR: p && p.riskUsd > 0 ? Number(((b.legs?.length ? (b.mainUplUsd ?? b.uplUsd) : b.uplUsd) / p.riskUsd).toFixed(2)) : null,
+      /** Multi-orders: extra positions, and how many positions the bee may hold. */
+      legs: (b.legs ?? []).map((l) => {
+        const lm = view.tickers.get(l.instId)?.mid;
+        const li = view.instruments.get(l.instId);
+        return {
+          coin: l.coin,
+          side: l.side,
+          sizeUsd: li && lm ? r2(positionNotional(l, lm, li.ctVal)) : null,
+          entryPx: l.entryPx,
+          markPx: lm ?? null,
+          stopPx: l.stopPx,
+          uplUsd: li && lm ? r2(uplUsd(l, lm, li.ctVal)) : null,
+          minutesHeld: Math.round(minutesSince(l.openedAt, this.now())),
+        };
+      }),
+      slots: this.slots(id),
       flatMinutes: p ? null : Math.round(minutesSince(b.flatSince, this.now())),
       tradesToday: b.tradesToday,
       maxTradesPerDay: knobs.maxTradesPerDay,
@@ -952,9 +1131,22 @@ export class Engine {
       ts: this.now(),
       mode: this.d.cfg.mode,
       startedAt: this.experimentStartedAt,
-      closed: this.closedAt === null ? null : { at: this.closedAt, flat: this.ids.every((id) => !this.bees[id].position) },
+      closed: this.closedAt === null ? null : { at: this.closedAt, flat: this.ids.every((id) => !allPositions(this.bees[id]).length) },
       startEquityUsd: this.d.cfg.risk.startEquityUsd,
       tickMs: this.d.cfg.tickMs,
+      /** Engine telemetry for the dashboard's system bar: which intelligence features are on. No secrets. */
+      system: {
+        jevModel: this.d.cfg.jev.model,
+        brains: (["openai", "claude", "kimi"] as const).map((bid) => ({ id: bid, model: this.d.cfg.brains.creds[bid]?.model ?? null, online: !!this.d.cfg.brains.creds[bid] })),
+        labSignals: !!this.d.labVotes,
+        watchlist: !!this.d.watchlist,
+        survival: this.d.evolution?.opts.survival ?? false,
+        rewards: this.d.evolution?.opts.rewards ?? false,
+        maxPositions: this.d.evolution?.opts.maxPositions ?? 1,
+        macroTrading: this.d.cfg.universe.allowNonCrypto,
+        macroBees: this.ids.filter((id) => this.d.cfg.slots[id].squad === "macro").length,
+        maxLeverage: this.d.cfg.risk.maxLeverage,
+      },
       bees,
       leaderboard: [...bees].sort((a, b) => b.equityUsd - a.equityUsd).map((b) => ({ bee: b.bee, equityUsd: b.equityUsd })),
       evolution: this.d.evolution
@@ -987,6 +1179,10 @@ function fundingSlot(ms: number): number {
 
 function describeAction(a: Action): string {
   switch (a.kind) {
+    case "leg_open":
+      return `leg ${a.side} ${a.instId.split("-")[0]} $${a.notionalUsd.toFixed(0)}`;
+    case "leg_close":
+      return `close leg ${a.instId.split("-")[0]} (${a.reason})`;
     case "none":
       return "hold";
     case "close":

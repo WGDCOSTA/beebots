@@ -802,7 +802,7 @@ a.counter.host:hover {
 }
 .board-row {
   display: grid;
-  grid-template-columns: 1.2rem 2rem 4.2rem 1fr 6.2rem;
+  grid-template-columns: 1.2rem 2rem 4.2rem 1fr auto 6.2rem;
   align-items: center;
   gap: 0.55rem;
   padding: 0.25rem 0;
@@ -1684,4 +1684,152 @@ textarea.setup-input {
   white-space: pre;
   user-select: all;
   font-size: 0.8rem;
+}
+
+/* ---------- technical layer: system bar, per-bee telemetry, multi-order positions ---------- */
+.sysbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.4rem;
+  align-items: center;
+  margin: 0 0 0.6rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  color: var(--text-2);
+}
+.sys-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sys-key {
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.sys-val {
+  color: var(--text);
+}
+.sysbar em,
+.tech-strip em {
+  font-style: normal;
+  color: var(--muted);
+}
+.sys-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--muted);
+}
+.sys-flag i,
+.tech-strip .dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--axis);
+  display: inline-block;
+}
+.sys-flag.on {
+  color: var(--text);
+}
+.sys-flag.on i,
+.tech-strip .dot.on {
+  background: var(--good-text);
+  box-shadow: 0 0 0.35rem rgba(63, 207, 63, 0.6);
+}
+
+.tech-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0.25rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.64rem;
+}
+.chip-t {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 0.35rem;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.chip-t.off {
+  opacity: 0.6;
+}
+.chip-t.macro {
+  border-color: var(--bee);
+  color: var(--text);
+}
+.chip-t.multi {
+  border-color: var(--bee);
+  color: var(--text);
+  font-weight: 700;
+}
+.chip-t.good {
+  color: var(--good-text);
+}
+.chip-t.bad {
+  color: var(--critical-text);
+}
+
+.pos-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.25rem 0 0.1rem;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.64rem;
+}
+.pos-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 0.3rem 0.15rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.pos-table td {
+  padding: 0.12rem 0.3rem 0.12rem 0;
+  white-space: nowrap;
+}
+.pos-table td.side.long {
+  color: var(--good-text);
+}
+.pos-table td.side.short {
+  color: var(--critical-text);
+}
+.leg-tag {
+  margin-left: 0.3rem;
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--bee);
+  color: var(--page);
+  font-size: 0.5rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.board-meta {
+  display: inline-flex;
+  gap: 0.4rem;
+  font-size: 0.62rem;
+}
+.board-meta .good {
+  color: var(--good-text);
+}
+.board-meta .bad,
+.board-meta .warn {
+  color: var(--critical-text);
+}
+.leg-count {
+  font-size: 0.6rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--bee);
+  color: var(--text);
 }

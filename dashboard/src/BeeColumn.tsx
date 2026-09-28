@@ -1,4 +1,5 @@
 import { EquityChart } from "./EquityChart";
+import { BRAIN_LABEL } from "./panelTypes";
 import { beeMeta, TIER_INFO, type BeeName, type PublicBee } from "./types";
 import type { Curve, FeedState } from "./useFeed";
 
@@ -47,6 +48,73 @@ export function ProbBars({ top3, choice, color, big }: { top3: Array<[string, nu
         </div>
       ))}
     </div>
+  );
+}
+
+/** One line of technical facts: brain, market, level/points, health, slots, R. */
+function TechStrip({ bee }: { bee: PublicBee }) {
+  const b = bee.brain;
+  const e = bee.evo;
+  const used = (bee.position ? 1 : 0) + (bee.legs?.length ?? 0);
+  return (
+    <div className="tech-strip num">
+      {b && (
+        <span className={`chip-t ${b.online ? "" : "off"}`} title={b.online ? `${BRAIN_LABEL[b.id] ?? b.id} plans for this bee (${b.model})` : "No key or sign-in: a rules pick plans for this bee"}>
+          <i className={`dot ${b.online ? "on" : ""}`} />
+          {BRAIN_LABEL[b.id] ?? b.id}
+          {b.online && b.model ? <em> {b.model}</em> : <em> rules</em>}
+        </span>
+      )}
+      {bee.market && bee.market !== "crypto" && <span className="chip-t macro">MACRO · {bee.market}</span>}
+      {e && (
+        <span className="chip-t" title={`${e.points} points · health ${e.health}% of start`}>
+          L{e.level} <em>{e.points}pts</em> <em>{e.health}%</em>
+        </span>
+      )}
+      {(bee.slots ?? 1) > 1 && (
+        <span className="chip-t multi" title="Multi-orders: positions held / positions its performance allows">
+          POS {used}/{bee.slots}
+        </span>
+      )}
+      {bee.uplR != null && <span className={`chip-t ${bee.uplR >= 0 ? "good" : "bad"}`}>{bee.uplR >= 0 ? "+" : ""}{bee.uplR.toFixed(2)}R</span>}
+    </div>
+  );
+}
+
+/** Every position the bee holds (main first, then multi-order legs), as a compact table. */
+function PositionsTable({ bee }: { bee: PublicBee }) {
+  const rows = [...(bee.position ? [{ ...bee.position, main: true }] : []), ...(bee.legs ?? []).map((l) => ({ ...l, main: false }))];
+  if (rows.length < 2) return null;
+  return (
+    <table className="pos-table num">
+      <thead>
+        <tr>
+          <th />
+          <th>coin</th>
+          <th>size</th>
+          <th>entry → mark</th>
+          <th>stop</th>
+          <th>uPnL</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.coin}>
+            <td className={`side ${r.side}`}>{r.side === "long" ? "▲" : "▼"}</td>
+            <td>
+              {r.coin}
+              {!r.main && <span className="leg-tag">leg</span>}
+            </td>
+            <td>{r.sizeUsd !== null ? money(r.sizeUsd, 0) : "–"}</td>
+            <td className="dim">
+              {px(r.entryPx)} → {px(r.markPx)}
+            </td>
+            <td className="dim">{px(r.stopPx)}</td>
+            <td className={r.uplUsd !== null && r.uplUsd >= 0 ? "good" : "bad"}>{r.uplUsd !== null ? signed(r.uplUsd) : "–"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -101,6 +169,8 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
         </div>
       </header>
 
+      {bee && <TechStrip bee={bee} />}
+
       <div className="equity">
         <div className="equity-value num">{bee ? money(bee.equityUsd) : "–"}</div>
         {bee && <Delta usd={bee.pnlUsd} pct={bee.pnlPct} />}
@@ -119,6 +189,7 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
             <div className="pos-main">
               <span className={`side ${p.side}`}>{p.side === "long" ? "▲ LONG" : "▼ SHORT"}</span>
               <span className="pos-coin">{p.coin}</span>
+              {bee?.legs?.length ? <span className="leg-count num">+{bee.legs.length} leg{bee.legs.length > 1 ? "s" : ""}</span> : null}
               <span className="pos-size num">{p.sizeUsd !== null ? money(p.sizeUsd, 0) : ""}</span>
             </div>
             <div className="pos-upl num">
@@ -136,6 +207,8 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
           </div>
         )}
       </div>
+
+      {bee && <PositionsTable bee={bee} />}
 
       <EquityChart curve={curve ?? []} color={meta.color} baseline={baseline} gradientId={`g-${name}`} />
 
@@ -162,6 +235,12 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
       <div className="meters">
         <Meter label="Trades today" value={bee?.tradesToday ?? 0} max={bee?.maxTradesPerDay ?? 1} text={`${bee?.tradesToday ?? 0} / ${bee?.maxTradesPerDay ?? "–"}`} />
         <Meter label="Fee budget" value={bee?.feesTodayUsd ?? 0} max={bee?.feeBudgetUsd ?? 1} text={`${money(bee?.feesTodayUsd ?? 0)} / ${money(bee?.feeBudgetUsd ?? 0)}`} />
+        <Meter
+          label="Exposure vs cap"
+          value={bee?.exposureUsd ?? 0}
+          max={bee?.maxNotionalUsd ?? 1}
+          text={`${money(bee?.exposureUsd ?? 0, 0)} / ${money(bee?.maxNotionalUsd ?? 0, 0)}`}
+        />
       </div>
 
       <div className="costs num">

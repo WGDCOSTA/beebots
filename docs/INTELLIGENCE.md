@@ -221,16 +221,35 @@ surviving the day**, **+5 for the day's best bee**. Points never go below zero. 
 | 0 | 0 | 3 skills in its playbook |
 | 1 | 50 | 4 skills, **writes new skills** in its councils, +10% max position |
 | 2 | 150 | 5 skills, +20% max position, +1 trade a day |
-| 3 | 300 | 6 skills, **one extra brain** in its councils, +30% max position |
+| 3 | 300 | 6 skills, **one extra brain** in its councils, +30% max position, **2 positions (multi-orders)** |
 | 4 | 500 | +40% max position, +2 trades a day |
-| 5 | 800 | **two extra brains**, +50% max position (`REWARD_MAX_LIMIT_BOOST`) |
+| 5 | 800 | **two extra brains**, +50% max position (`REWARD_MAX_LIMIT_BOOST`), **3 positions** |
 
 A level-up wakes a reward council (the prize in action). Leverage is never raised (hard rule: `MAX_LEVERAGE` ≤ 2
 still caps every position), and with real money limit boosts are off unless `REWARDS_IN_LIVE=true`. The Lab page's
 **Evolution** table ranks the bees by points with health, level progress, prizes, the last days and deaths.
 
+### Multi-orders (a prize for top performers)
+
+A bee that performs well earns more **position slots**: **2 at level 3, 3 at level 5** (capped by
+`MAX_POSITIONS_PER_BEE`, default 3; 1 turns it off). While it holds its main position, Jev's menu then also offers
+`LEG_*` options (the openings the bee's style would offer if it were flat, on coins it does not hold yet) and
+`CLOSE_LEG_<coin>` for each extra position it holds. What stays fixed:
+
+- **one leverage cap for everything**: each position gets at most `max / slots`, and all of them together never pass
+  `MAX_LEVERAGE` × equity (the hard rule). Multi-orders spread the same risk budget; they never add leverage;
+- every leg has its own code stop, trailing and profit lock, and code closes it at its stop, a macro session close,
+  a time stop, or the bee's retire / daily loss stop, whatever Jev says;
+- a bee in danger or worse is back to one position (legs it holds are still managed to their exits);
+- with real money it follows `REWARDS_IN_LIVE` (off by default, like limit boosts);
+- when the main position closes, the oldest leg becomes the main one. Reconciliation (demo/live) compares every
+  position against OKX and rebuilds all of them from OKX on a mismatch.
+
+The live board shows each bee's positions table (main + legs), `POS used/slots`, and exposure against its cap.
+
 Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`, `SURVIVAL_DANGER_PCT`,
-`SURVIVAL_CRITICAL_PCT`, `SURVIVAL_MAX_CALLS_DAY`, `REWARDS`, `REWARD_MAX_LIMIT_BOOST`, `REWARDS_IN_LIVE`.
+`SURVIVAL_CRITICAL_PCT`, `SURVIVAL_MAX_CALLS_DAY`, `REWARDS`, `REWARD_MAX_LIMIT_BOOST`, `REWARDS_IN_LIVE`,
+`MAX_POSITIONS_PER_BEE`.
 
 ## Dashboard pages
 

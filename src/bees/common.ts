@@ -27,6 +27,23 @@ export function maxNotionalUsd(ctx: BeeContext): number {
   return Math.max(0, Math.min(ctx.cfg.risk.maxLeverage * ctx.bee.equityUsd * MARGIN_HEADROOM, ctx.cfg.risk.maxNotionalUsdPerBee));
 }
 
+/** Every position the bee holds: the main one, then its legs (multi-orders). */
+export function allPositions(bee: { position: Position | null; legs?: Position[] }): Position[] {
+  return [...(bee.position ? [bee.position] : []), ...(bee.legs ?? [])];
+}
+
+/** USD notional of every position the bee holds at current mids, optionally leaving one coin out. */
+export function exposureUsd(ctx: BeeContext, exceptInstId?: string): number {
+  let sum = 0;
+  for (const p of allPositions(ctx.bee)) {
+    if (p.instId === exceptInstId) continue;
+    const s = ctx.view.stats.get(p.instId);
+    const inst = ctx.view.instruments.get(p.instId);
+    sum += inst ? positionNotional(p, s?.mid ?? p.entryPx, inst.ctVal) : 0;
+  }
+  return sum;
+}
+
 /** ATR-multiple stop from the 15m ATR%. */
 export function atrStop(s: CoinStats | undefined, side: Side, entryPx: number, mult: number): number | null {
   if (!s || s.atr14Pct === null) return null;
@@ -64,6 +81,9 @@ export function beeLine(ctx: BeeContext): Record<string, number | string | null>
         held_min: r2(minutesSince(p.openedAt, now), 0),
       }
     : { pos: "flat", flat_min: r2(minutesSince(bee.flatSince, now), 0) };
+  // Multi-orders: the extra positions, and how many slots the bee has.
+  if (bee.legs?.length) line.legs = bee.legs.map((l) => `${l.side} ${l.coin}`).join(", ");
+  if ((ctx.slots ?? 1) > 1) line.slots = `${allPositions(bee).length}/${ctx.slots}`;
   line.trades = `${bee.tradesToday}/${knobs.maxTradesPerDay}`;
   line.fee_left = r2(knobs.feeBudgetUsdDay - bee.feesTodayUsd);
   return line;

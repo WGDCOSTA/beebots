@@ -33,10 +33,18 @@ export interface BeeState {
   cashUsd: number;
   /** Mark-to-market equity = cash + unrealised P&L. */
   equityUsd: number;
+  /** Unrealised P&L of every position (the main one and any legs). */
   uplUsd: number;
+  /** Unrealised P&L of the main position only (multi-orders: uplR and the stops use it). */
+  mainUplUsd?: number;
   dayKey: string;
   dayStartEquityUsd: number;
   position: Position | null;
+  /**
+   * Multi-orders: extra positions on other coins ("legs"), next to `position`. Only a bee whose performance earned
+   * more position slots (evolution.ts perks.positions) opens them; all positions share one leverage cap.
+   */
+  legs?: Position[];
   /** When the bee last became flat (ms), or null while positioned. */
   flatSince: number | null;
   tradesToday: number;
@@ -56,7 +64,10 @@ export type Intent =
   | { kind: "close"; reason: string }
   | { kind: "switch"; instId: string; side: Side; sizeFrac: number; setup: "strict" | "loose" }
   | { kind: "add"; sizeFrac: number }
-  | { kind: "trim"; fraction: number };
+  | { kind: "trim"; fraction: number }
+  /** Multi-orders: open an extra position on another coin, or close one. */
+  | { kind: "leg_open"; instId: string; side: Side; sizeFrac: number; setup: "strict" | "loose" }
+  | { kind: "leg_close"; instId: string; reason: string };
 
 /** What the risk layer lets through to execution. Sizes are resolved to USD notional. */
 export type Action =
@@ -65,7 +76,9 @@ export type Action =
   | { kind: "close"; reason: string }
   | { kind: "switch"; instId: string; side: Side; notionalUsd: number }
   | { kind: "add"; notionalUsd: number }
-  | { kind: "trim"; fraction: number };
+  | { kind: "trim"; fraction: number }
+  | { kind: "leg_open"; instId: string; side: Side; notionalUsd: number }
+  | { kind: "leg_close"; instId: string; reason: string };
 
 export interface MenuOption {
   /** null when the label says it all (saves Jev tokens). */
@@ -82,6 +95,8 @@ export interface BeeContext {
   now: number;
   /** Unrealised P&L of the open position, in R (null when flat). */
   uplR: number | null;
+  /** Positions this bee may hold at once (1, or more once its performance earned multi-orders). */
+  slots?: number;
   /** Macro bees: a coin's trading session right now (market/sessions.ts). Absent for crypto bees. */
   session?: (coin: string) => SessionInfo;
 }

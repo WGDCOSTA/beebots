@@ -1,7 +1,7 @@
 // The deterministic risk layer (hard rule 2: Jev chooses, code decides).
 // Pure: no I/O, no clock, no randomness. Every veto, shrink and force says why.
 
-import { maxNotionalUsd, minutesSince, positionNotional } from "./bees/common.js";
+import { exposureUsd, maxNotionalUsd, minutesSince, positionNotional } from "./bees/common.js";
 import type { Action, BeeBrain, BeeContext, CapReason, Intent } from "./bees/types.js";
 
 export type { Action } from "./bees/types.js";
@@ -46,7 +46,7 @@ export interface RiskResult {
 }
 
 const NONE: Action = { kind: "none" };
-const isOpening = (i: Intent) => i.kind === "open" || i.kind === "switch" || i.kind === "add";
+const isOpening = (i: Intent) => i.kind === "open" || i.kind === "switch" || i.kind === "add" || i.kind === "leg_open";
 
 /** Cap state for a bee, and whether one newly tripped. Caps only escalate within a day. */
 export function evaluateCaps(ctx: BeeContext): { cap: CapReason | null; tripped: CapReason | null } {
@@ -95,6 +95,10 @@ function checkOpen(intent: Intent, input: RiskInput, conviction: number): OpenCh
   const { bee, view, knobs } = ctx;
   const max = maxNotionalUsd(ctx) * sizeMult;
   if (!(max > 0)) return { ok: false, why: "no_equity" };
+  // Multi-orders: every position shares one leverage cap. Each gets up to max / slots, and together they never pass
+  // max. With one slot this is exactly the single-position rule.
+  const slots = Math.max(1, ctx.slots ?? 1);
+  const perSlot = max / slots;
 
   if (intent.kind === "add") {
     const p = bee.position!;
@@ -102,13 +106,13 @@ function checkOpen(intent: Intent, input: RiskInput, conviction: number): OpenCh
     const inst = view.instruments.get(p.instId);
     if (!s || !inst) return { ok: false, why: "no_market_data" };
     if (s.spreadBp > knobs.spreadGateBps) return { ok: false, why: `spread_gate ${p.coin} ${s.spreadBp.toFixed(1)}bp` };
-    const room = max - positionNotional(p, s.mid, inst.ctVal);
+    const room = Math.min(perSlot - positionNotional(p, s.mid, inst.ctVal), max - exposureUsd(ctx));
     const n = Math.min(intent.sizeFrac * maxNotionalUsd(ctx) * sizeMult, room);
     const minUsd = inst.minSz * inst.ctVal * s.mid;
     if (n < minUsd) return { ok: false, why: "size_cap" };
     return { ok: true, notionalUsd: n };
   }
-  if (intent.kind !== "open" && intent.kind !== "switch") return { ok: false, why: "not_opening" };
+  if (intent.kind !== "open" && intent.kind !== "switch" && intent.kind !== "leg_open") return { ok: false, why: "not_opening" };
 
   const s = view.stats.get(intent.instId);
   const inst = view.instruments.get(intent.instId);
@@ -117,8 +121,12 @@ function checkOpen(intent: Intent, input: RiskInput, conviction: number): OpenCh
   if (intent.side === "long" && brain.fundingVetoLongZ !== undefined && s.fundingZ !== null && s.fundingZ > brain.fundingVetoLongZ) {
     return { ok: false, why: `funding_veto ${s.coin} z=${s.fundingZ.toFixed(1)}` };
   }
-  const frac = Math.max(0, Math.min(1, brain.sizeFrac(intent, conviction, ctx)));
-  const n = Math.min(frac * max, max);
+  const asOpen = intent.kind === "leg_open" ? { ...intent, kind: "open" as const } : intent;
+  const frac = Math.max(0, Math.min(1, brain.sizeFrac(asOpen, conviction, ctx)));
+  // A switch replaces the main position, so its notional frees up; an open or a leg adds to what is held.
+  const others = intent.kind === "switch" ? exposureUsd(ctx, bee.position?.instId) : exposureUsd(ctx);
+  const n = Math.min(frac * perSlot, max - others);
+  if (n <= 0) return { ok: false, why: "exposure_cap" };
   const minUsd = inst.minSz * inst.ctVal * s.mid;
   if (n < minUsd) return { ok: false, why: `below_min_size ${s.coin} $${n.toFixed(2)} < $${minUsd.toFixed(2)}` };
   return { ok: true, notionalUsd: n };
@@ -138,6 +146,10 @@ function toAction(intent: Intent, notionalUsd?: number): Action {
       return { kind: "open", instId: intent.instId, side: intent.side, notionalUsd: notionalUsd! };
     case "switch":
       return { kind: "switch", instId: intent.instId, side: intent.side, notionalUsd: notionalUsd! };
+    case "leg_open":
+      return { kind: "leg_open", instId: intent.instId, side: intent.side, notionalUsd: notionalUsd! };
+    case "leg_close":
+      return { kind: "leg_close", instId: intent.instId, reason: intent.reason };
   }
 }
 
@@ -193,6 +205,19 @@ export function applyRisk(input: RiskInput): RiskResult {
   if (!p && intent.kind !== "open" && intent.kind !== "hold") veto("invalid_while_flat");
   if (p && intent.kind === "open") veto("invalid_while_positioned");
   if (p && intent.kind === "switch" && intent.instId === p.instId && intent.side === p.side) veto("switch_to_same");
+  // A main open or switch can't land on a coin already held as a leg (it would merge into the leg).
+  if ((intent.kind === "open" || intent.kind === "switch") && (bee.legs ?? []).some((l) => l.instId === (intent as { instId: string }).instId)) veto("already_held");
+  // Multi-orders: a leg needs a main position, a free slot and a coin the bee does not hold yet.
+  if (intent.kind === "leg_open") {
+    const held = [p?.instId, ...(bee.legs ?? []).map((l) => l.instId)];
+    if (!p) veto("leg_while_flat");
+    else if ((bee.legs?.length ?? 0) + 1 >= Math.max(1, ctx.slots ?? 1)) veto("no_free_slot");
+    else if (held.includes(intent.instId)) veto("already_held");
+  }
+  if (intent.kind === "leg_close") {
+    const target = intent.instId;
+    if (!(bee.legs ?? []).some((l) => l.instId === target)) veto("no_such_leg");
+  }
 
   // 5. Opening gates.
   if (proposal && isOpening(intent)) {
@@ -202,7 +227,7 @@ export function applyRisk(input: RiskInput): RiskResult {
     else if (dataStale) veto("stale_market_data");
     else if (brain.openGate && intent.kind !== "add" && (proposal.prob < brain.openGate.minProb(ctx) || proposal.conviction < brain.openGate.minConviction)) {
       veto(`weak_conviction p=${proposal.prob.toFixed(2)} c=${proposal.conviction}`);
-    } else if (brain.requiresStrictSetup && (intent.kind === "open" || intent.kind === "switch") && intent.setup === "loose") veto("no_setup_yet");
+    } else if (brain.requiresStrictSetup && (intent.kind === "open" || intent.kind === "switch" || intent.kind === "leg_open") && intent.setup === "loose") veto("no_setup_yet");
     else if (cooldownLeft > 0) veto(`cooldown ${Math.ceil(cooldownLeft)}m`);
     else {
       const c = checkOpen(intent, input, proposal.conviction);
