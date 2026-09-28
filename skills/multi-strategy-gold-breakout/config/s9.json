@@ -1,0 +1,57 @@
+{
+  "id": "S9",
+  "enabled": true,
+  "entry_timeframe": "M15",
+  "exit_timeframe": "M1",
+  "structure": {
+    "left_bars": 2,
+    "right_bars": 3,
+    "max_lookback_bars": 150,
+    "level_selection": "recent"
+  },
+  "entry": {
+    "mode": "pending_stop",
+    "min_arm_distance": 4,
+    "breakout_offset": 0.6,
+    "pending_expiry_bars": 40,
+    "oco": true
+  },
+  "stop_loss": {
+    "base_distance": 8
+  },
+  "take_profit": {
+    "base_distance": 9
+  },
+  "break_even": {
+    "enabled": true,
+    "trigger_distance": 3.5,
+    "lock_distance": 0.5
+  },
+  "trailing": {
+    "enabled": true,
+    "trigger_distance": 5.5,
+    "distance": 3
+  },
+  "structure_trailing": {
+    "enabled": true,
+    "timeframe": "M1",
+    "offset": 0.4
+  },
+  "trailing_tp": {
+    "enabled": false,
+    "trigger_distance": 0,
+    "extend_distance": 0,
+    "max_extensions": 3
+  },
+  "fake_breakout": {
+    "enabled": true,
+    "mode": "LOW",
+    "reference": "structural_level",
+    "tolerance_points": 0,
+    "close_on_failure": true
+  },
+  "risk": {
+    "weight": 0.4,
+    "max_trade_risk_pct": 0.1
+  }
+}
