@@ -1,7 +1,8 @@
 // What goes into the knowledge graph, and what comes back out as context for a bee's LLM brain.
 import type { DatabaseSync } from "node:sqlite";
 import type { Ranking } from "../lab/tournament.js";
-import { nodeId, type KnowledgeGraph } from "./graph.js";
+import { nodeId, type GraphNode, type KnowledgeGraph } from "./graph.js";
+import { conflicts, memories, subgraph } from "./memory.js";
 
 export interface BeeProfile {
   slot: string;
@@ -96,9 +97,22 @@ export function ingestFills(g: KnowledgeGraph, db: DatabaseSync, sinceTs: number
   return last;
 }
 
-/** Everything the graph knows that matters to one bee, as a compact object for an LLM prompt. */
+/**
+ * What the graph knows that matters to one bee, compact and scoped (graph/memory.ts): its newest lessons, its
+ * consolidated memories (older lessons folded per topic, so nothing is lost), its record, the slice of the graph
+ * around it with each link's confidence, and the facts that disagree. Small enough to send every time.
+ */
 export function contextFor(g: KnowledgeGraph, slot: string) {
   const bee = beeNode(slot);
+  const recent = g
+    .out(bee, "learned", 200)
+    .map((e) => g.node(e.dst))
+    .filter((n): n is GraphNode => !!n && !n.props.consolidated)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 6)
+    .map((n) => String(n.props.text ?? n.label));
+  const spec = g.out(bee, "specialises_in", 1)[0];
+  const focus = [bee, ...g.out(bee, "traded", 5).map((e) => e.dst), ...g.out(bee, "watches", 5).map((e) => e.dst), ...(spec ? [spec.dst] : [])];
   const adopted = g.out(bee, "adopts", 8).map((e) => ({ skill: e.dst.slice(6), weight: round(e.weight) }));
   const record = g.out(bee, "traded", 12).map((e) => ({
     coin: e.dst.slice(5),
@@ -116,12 +130,17 @@ export function contextFor(g: KnowledgeGraph, slot: string) {
       adopts: g.out(n.id, "adopts", 4).map((e) => e.dst.slice(6)),
     }));
   return {
-    myLessons: g.lessons(bee, 6).map((l) => l.text),
+    trust: "Links marked EXTRACTED are measured facts (trades, backtests); INFERRED are brains' conclusions; conflicts list facts that disagree. Weigh facts first.",
+    specialization: spec ? { method: g.node(spec.dst)?.label ?? spec.dst, reason: spec.props.reason ?? null } : null,
+    myLessons: recent,
+    memory: memories(g, bee, 4),
     labLessons: g.lessons(nodeId("run", "lab"), 3).map((l) => l.text),
     adopted,
     tradeRecord: record,
     inbox: g.inbox(bee, 6).map((m) => ({ from: g.node(m.from)?.label ?? m.from, text: m.text })),
     peers,
+    graph: subgraph(g, focus, { hops: 2, maxNodes: 20 }),
+    conflicts: conflicts(g, bee).slice(0, 5).map((c) => c.text),
   };
 }
 

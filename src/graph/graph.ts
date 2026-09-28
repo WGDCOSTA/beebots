@@ -9,7 +9,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-export const NODE_TYPES = ["bee", "brain", "skill", "family", "coin", "lesson", "message", "run", "regime"] as const;
+export const NODE_TYPES = ["bee", "brain", "skill", "family", "coin", "lesson", "message", "run", "regime", "style", "memory"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
 export interface GraphNode {
@@ -109,6 +109,16 @@ export class KnowledgeGraph {
 
   nodes(type: NodeType, limit = 500): GraphNode[] {
     return (this.raw.prepare("SELECT * FROM g_nodes WHERE type = ? ORDER BY updated_at DESC LIMIT ?").all(type, limit) as Row[]).map(toNode);
+  }
+
+  /** Every node (newest first, up to `limit`), for whole-graph passes (graph/memory.ts). */
+  allNodes(limit = 20_000): GraphNode[] {
+    return (this.raw.prepare("SELECT * FROM g_nodes ORDER BY updated_at DESC LIMIT ?").all(limit) as Row[]).map(toNode);
+  }
+
+  /** Every edge (newest first, up to `limit`). */
+  allEdges(limit = 60_000): GraphEdge[] {
+    return (this.raw.prepare("SELECT * FROM g_edges ORDER BY updated_at DESC LIMIT ?").all(limit) as Row[]).map(toEdge);
   }
 
   /** Edges leaving `src` (optionally one relation), strongest first. */

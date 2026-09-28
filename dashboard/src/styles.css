@@ -1833,3 +1833,8 @@ textarea.setup-input {
   border: 1px solid var(--bee);
   color: var(--text);
 }
+.chip-t.method {
+  border-color: var(--bee);
+  color: var(--text);
+  font-weight: 700;
+}

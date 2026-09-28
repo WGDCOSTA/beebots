@@ -1,6 +1,9 @@
 import { customBrain } from "./bees/custom.js";
 import { BRAINS } from "./bees/index.js";
 import { macro } from "./bees/macro.js";
+import { skillBrain } from "./bees/skill.js";
+import type { Skill } from "./lab/skills/types.js";
+import { STYLES } from "./settings.js";
 import { allPositions, maxNotionalUsd, minutesSince, positionNotional, profitLockStop, uplUsd } from "./bees/common.js";
 import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Menu, type Position, type Side } from "./bees/types.js";
 import type { BeeId, Config } from "./config.js";
@@ -64,6 +67,21 @@ export interface EngineDeps {
    * open a coin whose session is verified open and stays open SESSION_NO_OPEN_MIN more; no calendar = nothing opens.
    */
   sessions?: () => SessionCalendar | null;
+  /**
+   * SPECIALIZATION: the method each bee's brains chose (playbook), and the lab skills by id. The engine switches the
+   * bee to it when it is flat (never mid-position) and not more often than SPECIALIZE_MIN_HOURS.
+   */
+  specialization?: (id: BeeId) => { kind: "style" | "skill"; id: string; params?: Record<string, number> } | null | undefined;
+  skillById?: (id: string) => Skill | undefined;
+}
+
+/** The method a bee trades right now when its brains chose one (null = its own style). */
+interface ActiveSpec {
+  kind: "style" | "skill";
+  id: string;
+  params: Record<string, number>;
+  key: string;
+  since: number;
 }
 
 interface LastDecision {
@@ -150,6 +168,12 @@ export class Engine {
     for (const id of this.ids) {
       this.bees[id] = db.loadBee(id) ?? freshBee(id, cfg.risk.startEquityUsd, this.now());
       await this.d.exec.init(id);
+      try {
+        const saved = JSON.parse(db.getMeta(`spec_${id}`) ?? "null") as ActiveSpec | null;
+        if (saved) this.spec[id] = saved;
+      } catch {
+        /* no specialisation remembered */
+      }
     }
 
     await this.refreshMarket();
@@ -244,7 +268,9 @@ export class Engine {
         await Promise.all(
           this.ids.map(async (id) => {
             try {
-              // Legs first (their code exits), then the bee's decision, then a leg steps up if the main position closed.
+              // A newly chosen method (only while flat), legs' code exits, the decision, then a leg steps up if the
+              // main position closed.
+              this.adoptSpecialization(id, now);
               await this.manageLegs(id, now);
               await this.decide(id, now);
               if (promoteLeg(this.bees[id])) this.d.db.saveBee(this.bees[id], now);
@@ -285,6 +311,7 @@ export class Engine {
       now,
       uplR: p && p.riskUsd > 0 ? mainUpl / p.riskUsd : null,
       slots: this.slots(id),
+      candles: (instId: string) => (typeof this.d.feed.candles1h === "function" ? this.d.feed.candles1h(instId) : []),
       ...(this.d.cfg.slots[id].market !== "crypto" ? { session: (coin: string) => sessionInfo(this.d.sessions?.() ?? null, coin, now) } : {}),
     };
   }
@@ -981,6 +1008,7 @@ export class Engine {
   }
 
   private brains = {} as Record<BeeId, BeeBrain>;
+  private spec = {} as Record<BeeId, ActiveSpec | undefined>;
   private watched = {} as Record<BeeId, { key: string; brain: BeeBrain }>;
 
   /**
@@ -989,8 +1017,7 @@ export class Engine {
    */
   private brain(id: BeeId): BeeBrain {
     const s = this.d.cfg.slots[id];
-    // The macro squad runs the macro style (bees/macro.ts) whatever crypto style its settings name.
-    const owner = (this.brains[id] ??= customBrain(s.market === "crypto" ? BRAINS[s.style] : macro, { coins: s.coins, rules: s.rules }));
+    const owner = (this.brains[id] ??= customBrain(this.baseBrain(id), { coins: s.coins, rules: s.rules }));
     const w = this.watch(id);
     if (!w) return owner;
     const key = `${w.coins.join(",")}|${w.probation.join(",")}`;
@@ -999,6 +1026,53 @@ export class Engine {
     const brain = customBrain(owner, { coins: w.coins, rules: "", coinLine: watchlistLine(w.coins, w.probation) });
     this.watched[id] = { key, brain };
     return brain;
+  }
+
+  /**
+   * The method the bee trades: the specialisation its brains chose (any style its market allows, or any lab skill),
+   * else its own style. The macro squad runs the macro style by default (bees/macro.ts).
+   */
+  private baseBrain(id: BeeId): BeeBrain {
+    const s = this.d.cfg.slots[id];
+    const a = this.spec[id];
+    if (a?.kind === "skill") {
+      const skill = this.d.skillById?.(a.id);
+      if (skill) return skillBrain({ skill, params: a.params });
+    }
+    if (a?.kind === "style") {
+      if (s.market === "crypto" && (STYLES as readonly string[]).includes(a.id)) return BRAINS[a.id as keyof typeof BRAINS];
+      if (s.market !== "crypto" && a.id === "macro") return macro;
+    }
+    return s.market === "crypto" ? BRAINS[s.style] : macro;
+  }
+
+  /** Whether a chosen method can run for this bee (a known skill, or a style its market allows). */
+  private specValid(id: BeeId, w: { kind: "style" | "skill"; id: string }): boolean {
+    const market = this.d.cfg.slots[id].market;
+    if (w.kind === "skill") return !!this.d.skillById?.(w.id);
+    return market === "crypto" ? (STYLES as readonly string[]).includes(w.id) : w.id === "macro";
+  }
+
+  /**
+   * Adopt the method the bee's brains chose, when it differs from the one it trades: only while it holds nothing, and
+   * not sooner than SPECIALIZE_MIN_HOURS after its last switch (a new bee's first choice applies at once).
+   */
+  private adoptSpecialization(id: BeeId, now: number): void {
+    if (!this.d.specialization || !this.d.cfg.lab.specialization) return;
+    const want = this.d.specialization(id) ?? null;
+    const valid = want && this.specValid(id, want) ? want : null;
+    const key = valid ? `${valid.kind}:${valid.id}:${JSON.stringify(valid.params ?? {})}` : "";
+    const cur = this.spec[id];
+    if ((cur?.key ?? "") === key) return;
+    if (allPositions(this.bees[id]).length) return; // never switch method mid-position
+    if (cur && now - cur.since < this.d.cfg.lab.specializeMinHours * 3_600_000) return;
+    this.spec[id] = valid ? { kind: valid.kind, id: valid.id, params: valid.params ?? {}, key, since: now } : undefined;
+    delete this.brains[id];
+    delete this.watched[id];
+    this.d.db.setMeta(`spec_${id}`, JSON.stringify(this.spec[id] ?? null));
+    const label = valid ? `${valid.kind === "skill" ? "skill" : "style"} ${valid.id}` : "its own style";
+    log.info("bee specialised", { bee: id, method: label });
+    this.d.bus.emit("status", { event: "specialization", bee: id, name: this.d.cfg.slots[id].name, method: label }, now);
   }
 
   /** The watchlist the engine applies right now (null = the style's normal coin choice). */
@@ -1023,7 +1097,9 @@ export class Engine {
 
   private knobs(id: BeeId) {
     const s = this.d.cfg.slots[id];
-    const k = s.market === "crypto" ? this.d.cfg.bees[s.style] : this.d.cfg.macro.knobs;
+    const a = this.spec[id];
+    const style = a?.kind === "style" && (STYLES as readonly string[]).includes(a.id) ? (a.id as keyof Config["bees"]) : s.style;
+    const k = s.market === "crypto" ? this.d.cfg.bees[style] : this.d.cfg.macro.knobs;
     const extra = this.d.evolution?.perks(id).extraTrades ?? 0;
     return extra > 0 ? { ...k, maxTradesPerDay: k.maxTradesPerDay + extra } : k;
   }
@@ -1083,6 +1159,13 @@ export class Engine {
       })(),
       market: this.d.cfg.slots[id].market,
       squad: this.d.cfg.slots[id].squad,
+      /** The method it trades: its brains' specialisation, or its own style. */
+      method: (() => {
+        const a = this.spec[id];
+        if (a?.kind === "skill") return { kind: "skill", id: a.id, name: this.d.skillById?.(a.id)?.name ?? a.id, since: a.since };
+        if (a?.kind === "style") return { kind: "style", id: a.id, name: a.id, since: a.since };
+        return { kind: "own", id: this.d.cfg.slots[id].market === "crypto" ? this.d.cfg.slots[id].style : "macro", name: null, since: null };
+      })(),
       exposureUsd: r2(allPositions(b).reduce((a, q) => {
         const qi = view.instruments.get(q.instId);
         const qm = view.tickers.get(q.instId)?.mid;

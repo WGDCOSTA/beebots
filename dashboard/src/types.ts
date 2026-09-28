@@ -55,6 +55,8 @@ export interface PublicBee {
   brain?: { id: string; model: string | null; online: boolean };
   market?: string;
   squad?: "crypto" | "macro";
+  /** The method it trades: the specialisation its brains chose, or its own style ("own"). */
+  method?: { kind: "own" | "style" | "skill"; id: string; name: string | null; since: number | null };
   /** Notional of every position it holds (main + legs) vs its cap. */
   exposureUsd?: number;
   /** Main position's unrealised P&L in R (risk at entry). */

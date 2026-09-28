@@ -65,6 +65,11 @@ function TechStrip({ bee }: { bee: PublicBee }) {
           {b.online && b.model ? <em> {b.model}</em> : <em> rules</em>}
         </span>
       )}
+      {bee.method && bee.method.kind !== "own" && (
+        <span className="chip-t method" title={`Specialisation its brains chose${bee.method.since ? ` (since ${new Date(bee.method.since).toISOString().slice(0, 16).replace("T", " ")} UTC)` : ""}`}>
+          METHOD {bee.method.kind === "skill" ? (bee.method.name ?? bee.method.id) : bee.method.id}
+        </span>
+      )}
       {bee.market && bee.market !== "crypto" && <span className="chip-t macro">MACRO · {bee.market}</span>}
       {e && (
         <span className="chip-t" title={`${e.points} points · health ${e.health}% of start`}>

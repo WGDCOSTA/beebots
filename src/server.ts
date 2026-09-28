@@ -25,7 +25,17 @@ export interface ServerDeps {
     /** "Update available" (update.ts): null unless a newer GitHub Release exists. */
     update?: () => unknown;
     /** The strategy lab and the hive mind (read-only): last ranking, the playbook, the knowledge graph. */
-    lab?: { ranking: () => unknown; playbook: () => unknown; graph: () => unknown; context: (bee: string) => unknown };
+    lab?: {
+      ranking: () => unknown;
+      playbook: () => unknown;
+      graph: () => unknown;
+      context: (bee: string) => unknown;
+      /** Graphify-style reads of the hive mind (graph/memory.ts): a question, a path, a node, the report. */
+      query?: (q: string) => unknown;
+      path?: (from: string, to: string) => unknown;
+      explain?: (node: string) => unknown;
+      report?: () => string;
+    };
   };
   /** Present only in setup mode. */
   setup?: Setup;
@@ -171,6 +181,25 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         return e.lab ? json(res, 200, e.lab.playbook() ?? { bees: {} }) : json(res, 404, { error: "lab not enabled" });
       case "/hive-mind":
         return e.lab ? json(res, 200, e.lab.graph()) : json(res, 404, { error: "lab not enabled" });
+      case "/hive-mind/query": {
+        const q = (url.searchParams.get("q") ?? "").slice(0, 200);
+        return e.lab?.query ? json(res, 200, e.lab.query(q)) : json(res, 404, { error: "lab not enabled" });
+      }
+      case "/hive-mind/path": {
+        const from = (url.searchParams.get("from") ?? "").slice(0, 120);
+        const to = (url.searchParams.get("to") ?? "").slice(0, 120);
+        return e.lab?.path ? json(res, 200, { steps: e.lab.path(from, to) }) : json(res, 404, { error: "lab not enabled" });
+      }
+      case "/hive-mind/explain": {
+        const node = (url.searchParams.get("node") ?? "").slice(0, 120);
+        const r = e.lab?.explain?.(node);
+        return r ? json(res, 200, r) : json(res, 404, { error: "no such node" });
+      }
+      case "/hive-mind/report":
+        if (!e.lab?.report) return json(res, 404, { error: "lab not enabled" });
+        res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
+        res.end(e.lab.report());
+        return;
       default:
         if (e.lab && url.pathname.startsWith("/hive-mind/")) {
           const bee = url.pathname.slice("/hive-mind/".length);

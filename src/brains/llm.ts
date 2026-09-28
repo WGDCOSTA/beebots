@@ -39,6 +39,8 @@ export interface JsonAsk<T> {
   /** Final check; the schema alone is not trusted. */
   validate: z.ZodType<T>;
   maxTokens?: number;
+  /** How hard to think for this call (Claude): routine upkeep low, rescue councils high. Default: the brain's setting. */
+  effort?: "low" | "medium" | "high";
 }
 
 export interface JsonAnswer<T> {
@@ -210,7 +212,7 @@ export class ClaudeBrain implements LlmClient {
         system: ask.system,
         messages: [{ role: "user", content: ask.user }],
         thinking: { type: "adaptive" },
-        output_config: { effort: this.effort, format: { type: "json_schema", schema: ask.schema } },
+        output_config: { effort: ask.effort ?? this.effort, format: { type: "json_schema", schema: ask.schema } },
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
       });

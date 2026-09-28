@@ -10,6 +10,11 @@
 //   pnpm lab keys                                                check the ChatGPT / Claude / Kimi keys
 //   pnpm lab graph   [--out data/lab/graph.json]                 export the hive mind (graphify node-link JSON)
 //   pnpm lab ask     <bee1|bee2|bee3>                            what that bee's brain knows right now
+//   pnpm lab query   "<question>"                               the slice of the hive mind about it (graphify-style)
+//   pnpm lab path    <from> <to>                                how two things connect (e.g. bee3 SOL)
+//   pnpm lab explain <node>                                     a node and its links, with confidence
+//   pnpm lab report                                             HIVE_REPORT.md: god nodes, communities, conflicts, memories
+//   pnpm lab remember                                           fold older lessons into memories now (rules digest)
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCouncil, type CouncilBee } from "../brains/council.js";
@@ -18,6 +23,7 @@ import { loadPlaybook, savePlaybook } from "../brains/playbook.js";
 import { BEES, labEnv, MAX_BEES, slotId, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
+import { consolidate, explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "../graph/memory.js";
 import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
 import { skillRegistry, type Skill } from "../lab/skills/index.js";
 import { rankingTable, runTournament, type Ranking } from "../lab/tournament.js";
@@ -228,13 +234,14 @@ async function cmdCouncil(ranking?: Ranking) {
   const graph = new KnowledgeGraph(env.graphPath);
   const clients = makeClients(env.creds);
   // No live market here: coin candidates come from the owner's coins, the style, the lab's datasets and the bee's record.
-  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist });
+  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist, pickMethod: env.specialization });
   savePlaybook(env.playbookPath, res.playbook);
   graph.close();
   for (const l of res.log) {
     const p = res.playbook.bees[l.bee]!;
     console.log(`\n${l.bee} thinks with ${l.brain === "rules" ? "rules" : BRAIN_INFO[l.brain as keyof typeof BRAIN_INFO].label} (${p.model})${l.error ? `  [brain failed: ${l.error}]` : ""}`);
     for (const s of p.skills) console.log(`  ${s.weight.toFixed(2)}  ${s.id.padEnd(24)} ${s.reason}`);
+    if (p.specialization) console.log(`  specialises in ${p.specialization.kind} ${p.specialization.id}: ${p.specialization.reason}`);
     for (const w of p.watchlist ?? []) console.log(`  watch ${w.coin.padEnd(8)} ${w.reason}`);
     for (const x of p.lessons) console.log(`  lesson: ${x}`);
     if (p.message) console.log(`  to the hive: ${p.message}`);
@@ -278,6 +285,27 @@ function cmdAsk(pos: string[]) {
   graph.close();
 }
 
+/** Graphify-style reads of the hive mind, and a manual consolidation. */
+async function cmdMemory(cmd: string, pos: string[]) {
+  const graph = new KnowledgeGraph(env.graphPath);
+  try {
+    if (cmd === "query") console.log(JSON.stringify(memoryQuery(graph, pos.join(" ")), null, 2));
+    else if (cmd === "path") console.log((memoryPath(graph, pos[0] ?? "", pos[1] ?? "") ?? ["not connected"]).join("\n"));
+    else if (cmd === "explain") console.log(JSON.stringify(memoryExplain(graph, pos.join(" ")) ?? { error: "no such node" }, null, 2));
+    else if (cmd === "report") {
+      const out = join(env.dir, "HIVE_REPORT.md");
+      writeFileSync(out, hiveReport(graph));
+      console.log(`${hiveReport(graph)}\nreport -> ${out}`);
+    } else {
+      let n = 0;
+      for (const b of graph.nodes("bee", 20)) n += await consolidate(graph, b.id);
+      console.log(`${n} lessons folded into memories`);
+    }
+  } finally {
+    graph.close();
+  }
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const { pos, f } = flags(rest);
@@ -304,6 +332,12 @@ async function main() {
       return cmdGraph(f);
     case "ask":
       return cmdAsk(pos);
+    case "query":
+    case "path":
+    case "explain":
+    case "report":
+    case "remember":
+      return cmdMemory(cmd, pos);
     default:
       console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").filter((l) => l.startsWith("//")).join("\n").replace(/^\/\/ ?/gm, ""));
       console.log(`\nbrains: ${BRAINS.map((b) => `${BRAIN_INFO[b].label} (${BRAIN_INFO[b].keyEnv})`).join(", ")}`);

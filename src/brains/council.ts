@@ -9,6 +9,7 @@ import { log } from "../log.js";
 import type { BeeId } from "../config.js";
 import { BRAIN_INFO, type BrainId, type LlmClient } from "./llm.js";
 import { NATURAL_FAMILY, type BeePlan, type Playbook, type PlaybookSkill } from "./playbook.js";
+import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
 import { normaliseWatchlist, rulesWatchlist, watchInput, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, type CoinInfo } from "./watchlist.js";
 
 export interface CouncilBee extends BeeProfile {
@@ -21,13 +22,14 @@ const Answer = z.object({
   lessons: z.array(z.string().max(300)).max(3),
   message: z.string().max(400),
   coins: WatchPicks.default([]),
+  specialization: SpecializationPick.optional(),
 });
 type AnswerT = z.infer<typeof Answer>;
 
 export const COUNCIL_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["skills", "lessons", "message", "coins"],
+  required: ["skills", "lessons", "message", "coins", "specialization"],
   properties: {
     skills: {
       type: "array",
@@ -42,6 +44,7 @@ export const COUNCIL_SCHEMA = {
     lessons: { type: "array", description: "Up to 3 short lessons worth remembering (max 300 chars each)", items: { type: "string" } },
     message: { type: "string", description: "One message to the other bees (max 400 chars)" },
     coins: WATCHLIST_SCHEMA,
+    specialization: SPECIALIZATION_SCHEMA,
   },
 } as const;
 
@@ -99,6 +102,7 @@ export function systemPrompt(bee: CouncilBee): string {
     "Use the hive context: your past lessons, the bee's real trade record, and what the other bees said. Write lessons that will still be useful next round,",
     "and a short message to the other bees (share what you learned, challenge them, or propose a division of labour).",
     WATCHLIST_PROMPT,
+    SPECIALIZATION_PROMPT,
     "Only use skill ids from the candidate list. This is a game on paper, not financial advice.",
   ]
     .filter(Boolean)
@@ -134,6 +138,8 @@ export async function runCouncil(opts: {
   pickCoins?: boolean;
   /** How many coins a bee may hold (grows with its level, 3 in danger). */
   watchSize?: (slot: BeeId) => number;
+  /** SPECIALIZATION: the brains also choose each bee's method (a style or any lab skill). Off = the previous one stays. */
+  pickMethod?: boolean;
 }): Promise<CouncilResult> {
   const { graph, ranking, bees, clients } = opts;
   const now = opts.now ?? Date.now;
@@ -151,6 +157,13 @@ export async function runCouncil(opts: {
     let error: string | undefined;
     const hive = contextFor(graph, bee.slot);
     const pickCoins = opts.pickCoins ?? true;
+    const pickMethod = opts.pickMethod ?? true;
+    const prevSpec = opts.previous?.bees[bee.slot]?.specialization;
+    const methods = methodOptions({
+      market: bee.market ?? "crypto",
+      current: prevSpec ? { kind: prevSpec.kind, id: prevSpec.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
+      ranking,
+    });
     const size = opts.watchSize?.(bee.slot) ?? 3;
     const watch = watchInput({
       style: bee.style,
@@ -168,6 +181,7 @@ export async function runCouncil(opts: {
           lab: { datasets: ranking.datasets.map((d) => d.id), folds: ranking.opts.folds, feeRatePerSide: ranking.opts.sim.feeRate, leverage: ranking.opts.sim.leverage },
           candidates: cands.map(compact),
           ...(pickCoins ? { watchlistSize: size, coinCandidates: watch.evidence } : {}),
+          ...(pickMethod ? { methodOptions: methods } : {}),
           hive,
         });
         const r = await client.json({ system: systemPrompt(bee), user, schema: COUNCIL_SCHEMA, name: "council_pick", validate: Answer });
@@ -210,7 +224,25 @@ export async function runCouncil(opts: {
       for (const w of watchlist) graph.link(beeId, "watches", graph.upsert("coin", w.coin, w.coin), 1, { reason: w.reason, brain });
     }
 
-    playbook.bees[bee.slot] = { brain, model, skills, lessons: answer.lessons, message: answer.message, decidedAt: now(), ...(watchlist ? { watchlist } : {}) };
+    // Specialisation: the brain's pick when it is on offer; "keep" (or no brain) keeps the previous choice.
+    const picked = pickMethod ? resolvePick(answer.specialization, methods, now()) : null;
+    const specialization = picked ?? prevSpec;
+    if (picked) {
+      graph.unlink(beeId, "specialises_in");
+      graph.link(beeId, "specialises_in", picked.kind === "skill" ? skillNode(picked.id) : graph.upsert("style", picked.id, picked.id), 1, { reason: picked.reason, brain });
+      graph.learn(beeId, `Specialisation: ${picked.kind} ${picked.id}. ${picked.reason}`, [], { brain, source: "council", kind: "diary" });
+    }
+
+    playbook.bees[bee.slot] = {
+      brain,
+      model,
+      skills,
+      lessons: answer.lessons,
+      message: answer.message,
+      decidedAt: now(),
+      ...(watchlist ? { watchlist } : {}),
+      ...(specialization ? { specialization } : {}),
+    };
     out.push({ bee: bee.slot, brain, ok: !error && brain !== "rules", ...(error ? { error } : {}), picked: skills.map((s) => s.id), coins: watchlist?.map((w) => w.coin) ?? [] });
   }
   playbook.updatedAt = now();

@@ -38,7 +38,9 @@ import { beeNode } from "./graph/hive-mind.js";
 import type { Ranking } from "./lab/tournament.js";
 import { KnowledgeGraph } from "./graph/graph.js";
 import { contextFor, registerBees } from "./graph/hive-mind.js";
+import { explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "./graph/memory.js";
 import { skillRegistry } from "./lab/skills/index.js";
+import type { Skill } from "./lab/skills/types.js";
 
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
 // Reference portraits for generated bees: the dashboard's default art (copied into the image by the Dockerfile).
@@ -166,7 +168,13 @@ async function main() {
   const playbook = new PlaybookWatcher(cfg.lab.playbookPath);
   const registry = skillRegistry(cfg.lab.skillsDirs);
   for (const e of registry.errors) log.warn("skill import failed", { error: e });
-  const signals = cfg.lab.signals ? new LabSignals(new Map(registry.skills.map((s) => [s.id, s])), () => playbook.get()) : null;
+  // One registry of every skill (built-in, imported, learned): the lab votes and the bees' specialisations share it.
+  const skillMap = new Map(registry.skills.map((s) => [s.id, s]));
+  const signals = cfg.lab.signals ? new LabSignals(skillMap, () => playbook.get()) : null;
+  const addSkill = (skill: Skill) => {
+    skillMap.set(skill.id, skill);
+    signals?.register(skill);
+  };
   if (cfg.skippedBees.length) log.warn("extra bees sit out: no exchange keys for this mode", { bees: cfg.skippedBees.join(",") });
   log.info("brains", { brains: cfg.beeIds.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, watchlist: cfg.lab.watchlist, coachMin: cfg.lab.coachIntervalMin });
 
@@ -223,7 +231,7 @@ async function main() {
     learnedDir: join(cfg.lab.dir, "learned"),
     historyDir: join(cfg.lab.dir, "history"),
     ranking: readRanking,
-    onNewSkill: (skill) => signals?.register(skill),
+    onNewSkill: addSkill,
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
     watchlist: cfg.lab.watchlist,
     universe: () => coinInfos(feed.view()),
@@ -255,6 +263,7 @@ async function main() {
     cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
     sessions: () => sessions.calendar,
     ...(cfg.lab.watchlist ? { watchlist: (id: BeeId) => playbook.get()?.bees[id]?.watchlist ?? null } : {}),
+    ...(cfg.lab.specialization ? { specialization: (id: BeeId) => playbook.get()?.bees[id]?.specialization ?? null, skillById: (sid: string) => skillMap.get(sid) } : {}),
     ...(signals
       ? {
           labVotes: (id: BeeId, instIds: string[]) => {
@@ -273,6 +282,7 @@ async function main() {
     universe: () => coinInfos(feed.view()),
     ranking: readRanking,
     watchSize: (id) => watchlistSize(evolution.bees[id]?.level ?? 0, evolution.bees[id]?.tier ?? null),
+    specialization: cfg.lab.specialization,
   });
   coach.start();
   let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
@@ -397,7 +407,7 @@ async function main() {
       return survival?.convene(bee, "manual");
     },
     evolution: () => engine?.snapshot().evolution ?? null,
-    registerSkill: (skill) => signals?.register(skill),
+    registerSkill: addSkill,
     labDir: cfg.lab.dir,
   });
 
@@ -405,7 +415,16 @@ async function main() {
     {
       engine: {
         bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
-        lab: { ranking: labRanking, playbook: () => playbook.get(), graph: () => graph.export(), context: (bee) => contextFor(graph, bee) },
+        lab: {
+          ranking: labRanking,
+          playbook: () => playbook.get(),
+          graph: () => graph.export(),
+          context: (bee) => contextFor(graph, bee),
+          query: (q) => memoryQuery(graph, q),
+          path: (from, to) => memoryPath(graph, from, to),
+          explain: (node) => memoryExplain(graph, node),
+          report: () => hiveReport(graph),
+        },
       },
       hive,
       admin,
