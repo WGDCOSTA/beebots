@@ -52,7 +52,7 @@ export interface PublicBee {
   /** Survival and rewards (engine evolution.ts); null when off. */
   evo?: { tier: Tier; health: number; points: number; level: number; deaths: number } | null;
   /** The coins its AI brains chose that the engine applies right now (null = the style's normal choice). */
-  watchlist?: { coins: string[]; probation: string[] } | null;
+  watchlist?: { coins: string[]; probation: string[]; items?: Array<{ coin: string; reason: string; probation: boolean; addedAt: number | null }> } | null;
   /** The LLM brain that plans for it, and whether that brain has a key or sign-in. */
   brain?: { id: string; model: string | null; online: boolean };
   market?: string;
@@ -66,6 +66,24 @@ export interface PublicBee {
   /** Multi-orders: extra positions, and how many positions its performance allows. */
   legs?: Array<{ coin: string; side: "long" | "short"; sizeUsd: number | null; entryPx: number; markPx: number | null; stopPx: number | null; uplUsd: number | null; minutesHeld: number }>;
   slots?: number;
+}
+
+/** One row of the home page's market board (engine marketBoard()). */
+export interface BoardCoin {
+  coin: string;
+  kind: string;
+  px: number;
+  ret1hPct: number | null;
+  ret24hPct: number | null;
+  ret7dPct: number | null;
+  vol24hUsd: number;
+  spreadBp: number | null;
+  atrPct: number | null;
+  rsi: number | null;
+  fundingPct: number | null;
+  oiUsd: number | null;
+  cmcRank: number | null;
+  mcapUsd: number | null;
 }
 
 /** Engine telemetry for the system bar. */
@@ -129,7 +147,7 @@ export interface Snapshot {
   totals: { feesUsd: number; fundingUsd: number; jevUsd: number; pnlUsd: number };
   jev: { spentTodayUsd: number; dailyCapUsd: number; capTripped: boolean; down: boolean };
   recon: { ok: boolean | null; detail: string; ts: number };
-  market: { refreshedAt: number; universe: string[]; spreadBlocked: Array<{ coin: string; spreadBp: number }>; attention: "news" | "volume" };
+  market: { refreshedAt: number; universe: string[]; spreadBlocked: Array<{ coin: string; spreadBp: number }>; attention: "news" | "volume"; board?: BoardCoin[] };
   visitors?: { total: number; watching: number };
   evolution?: { survival: boolean; rewards: boolean; board: EvolutionRow[] } | null;
   /** Set when a newer GitHub Release exists than the version this install runs. */

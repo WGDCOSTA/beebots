@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BeeColumn, money } from "./BeeColumn";
 import { Header, SystemBar } from "./Header";
+import { MarketView, PositionsView, VIEWS, ViewTabs, WatchlistsView, type ViewId } from "./HomeViews";
 import { unlockAudio } from "./sound";
 import { Ticker } from "./Ticker";
 import { Toasts } from "./Toasts";
@@ -15,8 +16,24 @@ function readSoundPref(): boolean {
   }
 }
 
+/** The home view lives in the URL (#/?v=market) so it can be linked and survives a reload. */
+function readView(): ViewId {
+  const v = new URLSearchParams(location.hash.split("?")[1] ?? "").get("v");
+  return VIEWS.some((x) => x.id === v) ? (v as ViewId) : "overview";
+}
+
 export function App() {
   const [soundOn, setSoundOn] = useState(false);
+  const [view, setView] = useState<ViewId>(readView);
+  useEffect(() => {
+    const on = () => setView(readView());
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  const openView = (v: ViewId) => {
+    setView(v);
+    history.replaceState(null, "", v === "overview" ? "#/" : `#/?v=${v}`);
+  };
   const feed = useFeed(soundOn);
   const [, force] = useState(0);
 
@@ -57,65 +74,76 @@ export function App() {
     <div className="app">
       <Header snap={feed.snap} connected={feed.connected} stalled={stalled} soundOn={soundOn} onSound={toggleSound} />
       <SystemBar snap={feed.snap} />
-      <main className="grid">
-        {BEE_NAMES.map((name) => {
-          const bee = feed.bees[name];
-          return (
-            <BeeColumn
-              key={name}
-              name={name}
-              bee={bee}
-              curve={feed.curves[name]}
-              baseline={bee?.startEquityUsd ?? baseline}
-              rank={board.indexOf(name) + 1}
-              gap={bee ? Math.max(0, leaderEq - bee.equityUsd) : null}
-              flash={feed.flashes[name]}
-            />
-          );
-        })}
-        <aside className="rail">
-          <section className="rail-card board">
-            <div className="rail-head">
-              <span className="eyebrow">Leaderboard</span>
-              <span className="dim num">lvl · pnl · equity</span>
-            </div>
-            {board.map((name, i) => {
-              const b = feed.bees[name];
-              const width = b ? Math.max(4, (b.equityUsd / Math.max(leaderEq, 1)) * 100) : 0;
-              return (
-                <div className="board-row" key={name} style={{ ["--bee" as string]: beeMeta(name).color }}>
-                  <span className="board-rank num">{i + 1}</span>
-                  <img src={beeMeta(name).img} alt="" />
-                  <span className="board-name">{beeMeta(name).short}</span>
-                  <span className="board-bar">
-                    <span style={{ width: `${width}%` }} />
-                  </span>
-                  <span className="board-meta num">
-                    {b?.evo ? <span className={TIER_INFO[b.evo.tier].tone}>L{b.evo.level}</span> : null}
-                    {b ? <span className={b.pnlPct >= 0 ? "good" : "bad"}>{b.pnlPct >= 0 ? "+" : ""}{b.pnlPct.toFixed(2)}%</span> : null}
-                  </span>
-                  <span className="board-eq num">{b ? money(b.equityUsd) : "–"}</span>
-                </div>
-              );
-            })}
-          </section>
-          {challengers.length > 0 && <SquadCard title="Challengers" bees={challengers} feed={feed} />}
-          {macroSquad.length > 0 && <SquadCard title="Macro squad" hint="gold · oil · stocks" bees={macroSquad} feed={feed} />}
-          <Ticker decisions={feed.decisions} perMin={feed.decisionTimes.length} />
-          {blocked.length > 0 && (
-            <section className="rail-card blocked">
-              <span className="eyebrow">Spread gate says no</span>
-              <div className="blocked-list num">
-                {blocked.slice(0, 6).map((b) => (
-                  <span key={b.coin}>
-                    {b.coin} <span className="dim">{b.spreadBp}bp</span>
-                  </span>
-                ))}
+      <ViewTabs view={view} onView={openView} snap={feed.snap} bees={feed.bees} />
+      {view === "market" && <MarketView snap={feed.snap} bees={feed.bees} />}
+      {view === "watchlists" && <WatchlistsView snap={feed.snap} bees={feed.bees} />}
+      {view === "positions" && <PositionsView bees={feed.bees} />}
+      {view === "overview" && (
+        <main className="grid">
+          {BEE_NAMES.map((name) => {
+            const bee = feed.bees[name];
+            return (
+              <BeeColumn
+                key={name}
+                name={name}
+                bee={bee}
+                curve={feed.curves[name]}
+                baseline={bee?.startEquityUsd ?? baseline}
+                rank={board.indexOf(name) + 1}
+                gap={bee ? Math.max(0, leaderEq - bee.equityUsd) : null}
+                flash={feed.flashes[name]}
+              />
+            );
+          })}
+          <aside className="rail">
+            <section className="rail-card board">
+              <div className="rail-head">
+                <span className="eyebrow">Leaderboard</span>
+                <span className="dim num">lvl · pnl · equity</span>
               </div>
+              {board.map((name, i) => {
+                const b = feed.bees[name];
+                const width = b ? Math.max(4, (b.equityUsd / Math.max(leaderEq, 1)) * 100) : 0;
+                return (
+                  <div className="board-row" key={name} style={{ ["--bee" as string]: beeMeta(name).color }}>
+                    <span className="board-rank num">{i + 1}</span>
+                    <img src={beeMeta(name).img} alt="" />
+                    <span className="board-name">{beeMeta(name).short}</span>
+                    <span className="board-bar">
+                      <span style={{ width: `${width}%` }} />
+                    </span>
+                    <span className="board-meta num">
+                      {b?.evo ? <span className={TIER_INFO[b.evo.tier].tone}>L{b.evo.level}</span> : null}
+                      {b ? (
+                        <span className={b.pnlPct >= 0 ? "good" : "bad"}>
+                          {b.pnlPct >= 0 ? "+" : ""}
+                          {b.pnlPct.toFixed(2)}%
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="board-eq num">{b ? money(b.equityUsd) : "–"}</span>
+                  </div>
+                );
+              })}
             </section>
-          )}
-        </aside>
-      </main>
+            {challengers.length > 0 && <SquadCard title="Challengers" bees={challengers} feed={feed} />}
+            {macroSquad.length > 0 && <SquadCard title="Macro squad" hint="gold · oil · stocks" bees={macroSquad} feed={feed} />}
+            <Ticker decisions={feed.decisions} perMin={feed.decisionTimes.length} />
+            {blocked.length > 0 && (
+              <section className="rail-card blocked">
+                <span className="eyebrow">Spread gate says no</span>
+                <div className="blocked-list num">
+                  {blocked.slice(0, 6).map((b) => (
+                    <span key={b.coin}>
+                      {b.coin} <span className="dim">{b.spreadBp}bp</span>
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+          </aside>
+        </main>
+      )}
       <Toasts toasts={feed.toasts} />
     </div>
   );
@@ -142,7 +170,9 @@ function SquadCard({ title, hint, bees, feed }: { title: string; hint?: string; 
           <div className="ch-row" key={name} style={{ ["--bee" as string]: m.color }}>
             <span className="ch-dot" aria-hidden />
             <span className="ch-name">{m.short}</span>
-            <span className={`ch-pos num ${b?.position ? b.position.side : "dim"}`}>{b?.position ? `${b.position.side === "long" ? "▲" : "▼"} ${b.position.coin}` : "flat"}</span>
+            <span className={`ch-pos num ${b?.position ? b.position.side : "dim"}`}>
+              {b?.position ? `${b.position.side === "long" ? "▲" : "▼"} ${b.position.coin}` : "flat"}
+            </span>
             <span className={`num ${b && b.pnlUsd >= 0 ? "good" : "bad"}`}>{b ? `${b.pnlPct >= 0 ? "+" : ""}${b.pnlPct.toFixed(1)}%` : "–"}</span>
             {t && (
               <span className={`ch-tier ${t.tone}`} title={`${t.label} · level ${b!.evo!.level}`}>

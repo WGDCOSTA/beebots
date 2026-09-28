@@ -1096,19 +1096,24 @@ export class Engine {
   }
 
   /** The watchlist the engine applies right now (null = the style's normal coin choice). */
-  private watch(id: BeeId): { coins: string[]; probation: string[] } | null {
+  private watch(id: BeeId): { coins: string[]; probation: string[]; items: Array<{ coin: string; reason: string; probation: boolean; addedAt: number | null }> } | null {
     if (!this.d.watchlist) return null;
     const s = this.d.cfg.slots[id];
     try {
-      return effectiveWatchlist({
+      const picks = this.d.watchlist(id);
+      const w = effectiveWatchlist({
         enabled: true,
-        picks: this.d.watchlist(id),
+        picks,
         style: s.style,
         market: s.market,
         ownerCoins: s.coins.map((c) => c.toUpperCase()),
         tier: this.d.evolution?.bees[id]?.tier ?? null,
         liquid: (s.market === "crypto" ? this.d.feed.view().gated : this.d.feed.view().macro).map((i) => i.split("-")[0]!.toUpperCase()),
       });
+      if (!w) return null;
+      // Why each coin is there, as the brains wrote it (the dashboard's Watchlists view).
+      const why = new Map((picks ?? []).map((p) => [p.coin, p]));
+      return { ...w, items: w.coins.map((c) => ({ coin: c, reason: why.get(c)?.reason ?? "", probation: w.probation.includes(c), addedAt: why.get(c)?.addedAt ?? null })) };
     } catch (err) {
       log.warn("watchlist failed", { bee: id, err: safeError(err) });
       return null;
@@ -1144,6 +1149,42 @@ export class Engine {
   }
 
   // ---------- read-only views for the dashboard ----------
+
+  /**
+   * The home page's market board: the most liquid gated coins (and macro instruments when a macro bee runs), with the
+   * numbers the bees trade on and CoinMarketCap's rank and market cap when it is on.
+   */
+  private marketBoard() {
+    const view = this.d.feed.view();
+    const cmc = this.d.cmc?.() ?? null;
+    const macro = this.ids.some((id) => this.d.cfg.slots[id].squad === "macro");
+    const ids = [...view.gated.slice(0, 40), ...(macro ? view.macro.slice(0, 12) : [])];
+    const r = (x: number | null | undefined, dp = 2) => (x === null || x === undefined || !Number.isFinite(x) ? null : Number(x.toFixed(dp)));
+    const out = [];
+    for (const instId of ids) {
+      const s = view.stats.get(instId);
+      if (!s) continue;
+      const coin = s.coin.toUpperCase();
+      const c = cmc?.coins.get(coin);
+      out.push({
+        coin,
+        kind: view.instruments.get(instId)?.kind ?? "crypto",
+        px: s.mid,
+        ret1hPct: r(s.ret1hPct),
+        ret24hPct: r(s.ret24hPct),
+        ret7dPct: r(s.ret7dPct),
+        vol24hUsd: Math.round(s.vol24hUsd),
+        spreadBp: r(s.spreadBp, 1),
+        atrPct: r(s.atr14Pct),
+        rsi: r(s.rsi14, 0),
+        fundingPct: r(s.fundingPct, 4),
+        oiUsd: s.oiUsd === null ? null : Math.round(s.oiUsd),
+        cmcRank: c?.rank ?? null,
+        mcapUsd: c?.mcapUsd === null || c?.mcapUsd === undefined ? null : Math.round(c.mcapUsd),
+      });
+    }
+    return out;
+  }
 
   /** CoinMarketCap's market mood for the system bar (null when off or stale). */
   private cmcView() {
@@ -1280,6 +1321,7 @@ export class Engine {
         universe: view.gated.map((i) => i.split("-")[0]),
         spreadBlocked: view.spreadBlocked.map((i) => ({ coin: i.split("-")[0], spreadBp: Number((view.tickers.get(i)?.spreadBp ?? 0).toFixed(1)) })),
         attention: view.newsAvailable ? "news" : "volume",
+        board: this.marketBoard(),
       },
     };
   }

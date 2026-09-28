@@ -197,7 +197,13 @@ describe("engine with a watchlist", () => {
     const boozy = reqs.find((r) => Object.keys(r.questions.action.criteria).some((k) => k.startsWith("APE_")))!;
     expect(Object.keys(boozy.questions.action.criteria).sort()).toEqual(["APE_BTC", "APE_ETH"]);
     expect(boozy.questions.action.instructions).toContain("Watchlist chosen by this bee's AI brains");
-    expect(engine.snapshot().bees.find((b) => b.bee === "bee3")!.watchlist).toEqual({ coins: ["ETH", "BTC"], probation: [] });
+    const w = engine.snapshot().bees.find((b) => b.bee === "bee3")!.watchlist!;
+    expect(w).toMatchObject({ coins: ["ETH", "BTC"], probation: [] });
+    // The dashboard's Watchlists view shows each coin with the brains' reason.
+    expect(w.items.map((i) => [i.coin, i.reason, i.probation])).toEqual([
+      ["ETH", item("ETH").reason, false],
+      ["BTC", item("BTC").reason, false],
+    ]);
     const plain = await run(null);
     expect(Object.keys(plain.reqs.find((r) => Object.keys(r.questions.action.criteria).some((k) => k.startsWith("APE_")))!.questions.action.criteria)).toContain("APE_SOL");
   });

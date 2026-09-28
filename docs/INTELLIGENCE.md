@@ -335,6 +335,16 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
 
 ## Dashboard pages
 
+- **`#/` – Home**, with four views in a tab bar (each one linkable, e.g. `#/?v=market`):
+  - **Overview**: the live bee columns (each shows its **AI WATCHLIST** chips under the tech strip), leaderboard,
+    squads and the decision stream;
+  - **Market**: Fear & Greed, BTC dominance and total market cap (CoinMarketCap), 24h breadth and volume, then a
+    sortable, filterable table of every coin the bees can trade (CMC rank and market cap, price, 1h/24h/7d, volume,
+    open interest, funding, spread, ATR, RSI) with which bees watch or hold each one;
+  - **AI watchlists**: a coin × bee matrix of what each bee's brains chose (trial coins marked), and per bee the
+    reason the brains gave for every coin and when it was added;
+  - **Positions**: every open position and leg across bees (size, entry, mark, stop, distance to stop, uP&L, R,
+    time held), gross exposure and long/short split, and each bee's exposure against its cap.
 - **`#/lab` – Lab & hive mind** (public, read-only, like the rest of the dashboard):
   - the last ranking, sortable and filterable by family, with a diverging score bar; click a skill to see every
     out-of-sample fold and the parameters picked on the past;
@@ -355,8 +365,8 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
     survival and rewards;
   - **Security**: change the owner password.
 
-  Saved changes apply after **Restart engine** (the engine exits and Docker starts it again). The trading mode,
-  `LIVE_ACK` and exchange keys are deliberately not in the panel: real money stays an `.env` decision.
+  Saved changes apply after **Restart engine** (the engine exits and Docker starts it again). The trading mode and
+  `LIVE_ACK` are deliberately not in the panel: real money stays an `.env` decision.
 
 ## Suggested routine
 

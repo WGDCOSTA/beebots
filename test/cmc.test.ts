@@ -132,7 +132,7 @@ describe("CoinMarketCap in Jev's state", () => {
     await engine.start();
     engine.stop();
     await engine.tick();
-    return { seen, system: engine.snapshot().system };
+    return { seen, system: engine.snapshot().system, board: engine.snapshot().market.board };
   }
 
   it("crypto bees see the mkt line and the note; the system bar gets the mood", async () => {
@@ -141,6 +141,15 @@ describe("CoinMarketCap in Jev's state", () => {
     expect(seen.some((s) => s.includes('\\"fear_greed\\":38') || s.includes('"fear_greed":38'))).toBe(true);
     expect(seen.some((s) => s.includes("CoinMarketCap"))).toBe(true);
     expect(system.cmc).toMatchObject({ fearGreed: { value: 38, label: "Fear" }, btcDominancePct: 57.3 });
+  });
+
+  it("the home page's market board lists the coins with CoinMarketCap's rank", async () => {
+    const { board } = await run({});
+    expect(board.map((c) => c.coin)).toEqual(expect.arrayContaining(["BTC", "SOL", "ETH"]));
+    const btc = board.find((c) => c.coin === "BTC")!;
+    expect(btc).toMatchObject({ cmcRank: 1, mcapUsd: 1.9e12, kind: "crypto" });
+    expect(btc.px).toBeGreaterThan(0);
+    expect(board.find((c) => c.coin === "ETH")!.cmcRank).toBeNull();
   });
 
   it("CMC_IN_JEV=false keeps it out of Jev's state", async () => {
