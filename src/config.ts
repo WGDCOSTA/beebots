@@ -107,9 +107,16 @@ const EnvSchema = z.object({
   ALLOW_NON_CRYPTO: bool(false),
   // Macro squad gates: stocks and gold trade far less than crypto on OKX, so they get their own volume and spread gates.
   MACRO_MIN_24H_VOL_USD: num(200_000),
-  MACRO_SPREAD_GATE_BPS: num(15),
   // No new position this close (minutes) to a session's end; the calendar is learned from the market (sessions.ts).
   SESSION_NO_OPEN_MIN: num(30),
+  // Flatten a macro position before its session ends: "all" closes, "weekend" (closures of a day or more), or "off".
+  SESSION_FLATTEN: oneOf(["all", "weekend", "off"] as const, "all"),
+  // How many minutes before the close the flatten fires.
+  SESSION_FLATTEN_MIN: num(10),
+  // Macro bees' leverage cap (x equity), below MAX_LEVERAGE: gold and stocks gap.
+  MACRO_MAX_LEVERAGE: num(1),
+  // Size factor for a macro open late in a session (under 2 h to the close): less to lose to a gap.
+  MACRO_LATE_SESSION_SIZE: num(0.5),
   TAKER_FEE_RATE: num(0.0005),
 
   BREEZY_MIN_OPEN_PROB: num(0.7),
@@ -122,6 +129,8 @@ const EnvSchema = z.object({
   ...perStyle("BREEZY", { trades: 3, fee: 1.0, spread: 5, cooldown: 240, stopAtr: 2, maxFlat: 0 }),
   ...perStyle("BIZZY", { trades: 1, fee: 1.0, spread: 5, cooldown: 5, stopAtr: 1.5, maxFlat: 20 }),
   ...perStyle("BOOZY", { trades: 3, fee: 3.0, spread: 15, cooldown: 2, stopAtr: 2, maxFlat: 0 }),
+  // The macro squad's style (bees/macro.ts): few trades, wider stops, a spread gate that suits stocks and gold.
+  ...perStyle("MACRO", { trades: 4, fee: 2.0, spread: 15, cooldown: 30, stopAtr: 2.5, maxFlat: 0 }),
   ...perSlot("BEE1"),
   ...perSlot("BEE2"),
   ...perSlot("BEE3"),
@@ -265,7 +274,18 @@ export interface Config {
   };
   universe: { min24hVolUsd: number; allowNonCrypto: boolean };
   /** The macro squad: gates, the session rule and where the learned calendar lives. */
-  macro: { min24hVolUsd: number; spreadGateBps: number; noOpenMin: number; sessionsPath: string };
+  macro: {
+    min24hVolUsd: number;
+    spreadGateBps: number;
+    noOpenMin: number;
+    sessionsPath: string;
+    /** The macro style's knobs (MACRO_*), used by every macro bee instead of its crypto style's. */
+    knobs: BeeKnobs;
+    maxLeverage: number;
+    flatten: "all" | "weekend" | "off";
+    flattenMin: number;
+    lateSessionSize: number;
+  };
   /** Knobs per trading style. */
   bees: Record<StyleId, BeeKnobs>;
   breezy: { minOpenProb: number; minSizeUsd: number };
@@ -362,7 +382,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     throw new ConfigError(`MODE=${mode} needs these settings, which are blank or missing:\n  ${missing.join("\n  ")}`);
   }
 
-  const knobs = (style: StyleId): BeeKnobs => {
+  const knobs = (style: StyleId | "macro"): BeeKnobs => {
     const p = style.toUpperCase();
     const n = (k: string) => e[`${p}_${k}`] as number;
     return {
@@ -409,9 +429,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     universe: { min24hVolUsd: e.MIN_24H_VOL_USD, allowNonCrypto: e.ALLOW_NON_CRYPTO },
     macro: {
       min24hVolUsd: Math.max(0, e.MACRO_MIN_24H_VOL_USD),
-      spreadGateBps: Math.max(0, e.MACRO_SPREAD_GATE_BPS),
+      spreadGateBps: Math.max(0, e.MACRO_SPREAD_GATE_BPS as number),
       noOpenMin: Math.max(0, e.SESSION_NO_OPEN_MIN),
       sessionsPath: `${e.LAB_DIR.replace(/\/+$/, "")}/sessions.json`,
+      knobs: knobs("macro"),
+      maxLeverage: Math.max(0, Math.min(e.MACRO_MAX_LEVERAGE, e.MAX_LEVERAGE)),
+      flatten: e.SESSION_FLATTEN,
+      flattenMin: Math.max(0, e.SESSION_FLATTEN_MIN),
+      lateSessionSize: Math.max(0, Math.min(1, e.MACRO_LATE_SESSION_SIZE)),
     },
     bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy") },
     breezy: { minOpenProb: e.BREEZY_MIN_OPEN_PROB, minSizeUsd: e.BREEZY_MIN_SIZE_USD },

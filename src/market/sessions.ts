@@ -43,6 +43,8 @@ export interface SessionInfo {
   closesInMin: number | null;
   /** Not open: minutes until the next open slot (null = none known). */
   opensInMin: number | null;
+  /** Open: how long the coming closure lasts, in minutes (null = no close, or it never reopens in the calendar). */
+  closedForMin?: number | null;
 }
 
 /** Hour of the week in UTC, Monday 00:00 = 0 .. Sunday 23:00 = 167. */
@@ -123,8 +125,14 @@ export function sessionInfo(cal: SessionCalendar | null, coin: string, now: numb
   const status = slotStatus(c, h);
   const minsLeftInHour = 60 - new Date(now).getUTCMinutes();
   if (status === "open") {
-    for (let k = 1; k < WEEK_SLOTS; k++) if (slotStatus(c, (h + k) % WEEK_SLOTS) !== "open") return { status, closesInMin: minsLeftInHour + (k - 1) * 60, opensInMin: null };
-    return { status, closesInMin: null, opensInMin: null };
+    for (let k = 1; k < WEEK_SLOTS; k++) {
+      if (slotStatus(c, (h + k) % WEEK_SLOTS) === "open") continue;
+      // The closure: hours until the next open slot (unverified counts as closed).
+      let j = 1;
+      while (j < WEEK_SLOTS && slotStatus(c, (h + k + j) % WEEK_SLOTS) !== "open") j++;
+      return { status, closesInMin: minsLeftInHour + (k - 1) * 60, opensInMin: null, closedForMin: j < WEEK_SLOTS ? j * 60 : null };
+    }
+    return { status, closesInMin: null, opensInMin: null, closedForMin: null };
   }
   for (let k = 1; k < WEEK_SLOTS; k++) if (slotStatus(c, (h + k) % WEEK_SLOTS) === "open") return { status, closesInMin: null, opensInMin: minsLeftInHour + (k - 1) * 60 };
   return { status, closesInMin: null, opensInMin: null };
@@ -193,3 +201,17 @@ export function sessionLabel(info: SessionInfo): string {
 export const SESSION_NOTE =
   "state.session: each coin's session (open with minutes to the close, closed, or unverified). Stocks and commodities gap when their market is shut: " +
   "new positions are only offered well before a close; near a close prefer taking profit or tightening risk over holding through it.";
+
+/** A closure this long (minutes) or more is a "weekend" for SESSION_FLATTEN=weekend. */
+export const LONG_CLOSURE_MIN = 24 * 60;
+
+/**
+ * Flatten-before-close: should a held position on this coin be closed now? Only in a verified open session whose end
+ * is within `withinMin`; "weekend" only before a closure of a day or more. Unverified/closed: never (it is managed as
+ * usual, the gap already happened or the calendar does not know).
+ */
+export function mustFlatten(info: SessionInfo, mode: "all" | "weekend" | "off", withinMin: number): boolean {
+  if (mode === "off" || info.status !== "open" || info.closesInMin === null) return false;
+  if (info.closesInMin > withinMin) return false;
+  return mode === "all" || (info.closedForMin ?? Infinity) >= LONG_CLOSURE_MIN;
+}

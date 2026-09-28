@@ -58,7 +58,7 @@ function profile(cfg: Config | null) {
             name: s.name,
             tagline: s.tagline,
             style: s.style,
-            styleLabel: STYLE_INFO[s.style].label,
+            styleLabel: s.squad === "macro" ? "Macro" : STYLE_INFO[s.style].label,
             rules: s.rules,
             coins: s.coins,
             market: s.market,

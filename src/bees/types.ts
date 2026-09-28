@@ -1,6 +1,7 @@
 import type { BeeId, BeeKnobs, Config } from "../config.js";
 import type { StyleId } from "../settings.js";
 import type { CoinStats, MarketView } from "../market/types.js";
+import type { SessionInfo } from "../market/sessions.js";
 
 export type Side = "long" | "short";
 
@@ -81,10 +82,13 @@ export interface BeeContext {
   now: number;
   /** Unrealised P&L of the open position, in R (null when flat). */
   uplR: number | null;
+  /** Macro bees: a coin's trading session right now (market/sessions.ts). Absent for crypto bees. */
+  session?: (coin: string) => SessionInfo;
 }
 
 export interface BeeBrain {
-  id: StyleId;
+  /** A crypto style, or "macro" for the macro squad (stocks, commodities). */
+  id: StyleId | "macro";
   /** Condensed from strategies/<BEE>.md; sent to Jev as the question instructions. */
   strategy: string;
   convictionLabels: readonly [string, string, string, string];
@@ -116,6 +120,8 @@ export interface BeeBrain {
   requiresStrictSetup?: boolean;
   /** Veto longs when the coin's 30-day funding z exceeds this. */
   fundingVetoLongZ?: number;
+  /** A reason to close the held position now whatever Jev says (e.g. "session_close" before a market shuts), or null. */
+  forcedClose?: (ctx: BeeContext) => string | null;
   /** Close any position older than this many minutes. */
   timeStopMinutes?: (ctx: BeeContext) => number;
   /** Code-side sizing: an add that brings an undersized position back to target (fires when Jev holds). */
