@@ -136,6 +136,8 @@ export async function runCouncil(opts: {
   universe?: CoinInfo[];
   /** The market mood (CoinMarketCap: Fear & Greed, dominance, market cap move), or null. */
   market?: Record<string, unknown> | null;
+  /** The scalper is on offer as a method (its lab gate is open). */
+  scalp?: boolean;
   /** Let the brains choose each bee's coins (BRAIN_WATCHLIST). Off = the previous watchlist is kept. */
   pickCoins?: boolean;
   /** How many coins a bee may hold (grows with its level, 3 in danger). */
@@ -165,6 +167,7 @@ export async function runCouncil(opts: {
       market: bee.market ?? "crypto",
       current: prevSpec ? { kind: prevSpec.kind, id: prevSpec.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
       ranking,
+      extraStyles: opts.scalp ? ["scalp"] : [],
     });
     const size = opts.watchSize?.(bee.slot) ?? 3;
     const watch = watchInput({

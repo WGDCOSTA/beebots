@@ -180,6 +180,7 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
       <span className="sys-group">
         <span className="sys-key">RISK</span>
         <span className="sys-val">≤{s.maxLeverage}x lev</span>
+        {s.scalp?.enabled && flag(s.scalp.gateOpen, "scalper", s.scalp.gateOpen ? `Open: ${s.scalp.reason}` : `Closed: ${s.scalp.reason}`, s.scalp.bees ? String(s.scalp.bees) : undefined)}
         {flag(s.macroTrading, "macro squad", s.macroTrading ? "Stocks and commodities trade in verified sessions" : "Macro bees watch and learn only (ALLOW_NON_CRYPTO off)", s.macroBees ? String(s.macroBees) : undefined)}
       </span>
     </div>

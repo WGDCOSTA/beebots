@@ -70,6 +70,14 @@ function TechStrip({ bee }: { bee: PublicBee }) {
           METHOD {bee.method.kind === "skill" ? (bee.method.name ?? bee.method.id) : bee.method.id}
         </span>
       )}
+      {bee.scalp && (
+        <span
+          className={`chip-t scalp ${bee.scalp.pausedUntil ? "bad" : bee.scalp.mandate ? "good" : ""}`}
+          title={`${bee.scalp.note}${bee.scalp.last ? `. Last look: ${bee.scalp.last}` : ""}`}
+        >
+          SCALP {bee.scalp.pausedUntil ? "paused" : bee.scalp.mandate ? `${bee.scalp.mandate.coin} ${bee.scalp.mandate.used}/${bee.scalp.mandate.maxTrades}` : "idle"}
+        </span>
+      )}
       {bee.market && bee.market !== "crypto" && <span className="chip-t macro">MACRO · {bee.market}</span>}
       {e && (
         <span className="chip-t" title={`${e.points} points · health ${e.health}% of start`}>

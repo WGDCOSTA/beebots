@@ -21,6 +21,9 @@ import { safeError } from "./redact.js";
 import { SURVIVAL_NOTE, type Evolution } from "./evolution.js";
 import { effectiveWatchlist, watchlistLine, type WatchItem } from "./brains/watchlist.js";
 import { CMC_NOTE, jevMarketLine, type CmcState } from "./market/cmc.js";
+import { isScalpBrain, scalpBrain, type GateRule, type ScalpDeps } from "./bees/scalp.js";
+import { DEFAULT_COSTS, type CostModel, type ScalpGate } from "./lab/scalp.js";
+import { UNFILLED } from "./exec/executor.js";
 import { marketKinds, mayOpen, sessionInfo, sessionLabel, SESSION_NOTE, type SessionCalendar } from "./market/sessions.js";
 import type { MarketView } from "./market/types.js";
 import { applyRisk, type JevStatus, type Proposal } from "./risk.js";
@@ -59,6 +62,8 @@ export interface EngineDeps {
   labNote?: string;
   /** CoinMarketCap context (market/cmc.ts), or null when off or stale. Crypto bees see its `mkt` line (CMC_IN_JEV). */
   cmc?: () => CmcState | null;
+  /** The strategy lab's verdict on the scalper (lab/scalp.ts scalpGate): what it may trade, or closed. */
+  scalpGate?: () => ScalpGate;
   /** Survival and rewards (evolution.ts): size factor, limit boosts, the survival line in Jev's state. */
   evolution?: Evolution;
   /**
@@ -116,6 +121,11 @@ export class Engine {
   private orderPauseUntil = {} as Partial<Record<BeeId, number>>;
   private now: () => number;
   private ticking = false;
+  /** Bees being worked on right now (the slow tick or the scalp loop): the other leaves them alone. */
+  private beeBusy = new Set<BeeId>();
+  private scalping = false;
+  /** Why each scalping bee did or did not enter on its last look (the dashboard's status line). */
+  private scalpNote = {} as Partial<Record<BeeId, string>>;
   private stopped = false;
   private refreshing = false;
   private timers: NodeJS.Timeout[] = [];
@@ -188,6 +198,8 @@ export class Engine {
 
     this.loop(() => this.tick(), cfg.tickMs);
     this.loop(() => this.refreshMarket(), cfg.dataRefreshMs);
+    // The scalper's fast loop (code only, no Jev call per trade). Off unless SCALP=true.
+    if (cfg.scalp.enabled) this.loop(() => this.scalpTick(), cfg.scalp.tickMs);
     this.timers.push(setInterval(() => this.d.bus.emit("heartbeat", {}), 15_000));
     this.timers.push(setInterval(() => this.d.db.pruneEvents(this.now() - 3 * 86_400_000), 3_600_000));
   }
@@ -271,6 +283,9 @@ export class Engine {
       else
         await Promise.all(
           this.ids.map(async (id) => {
+            // The scalp loop may be working this bee right now: it and this tick never act on it at the same time.
+            if (this.beeBusy.has(id)) return;
+            this.beeBusy.add(id);
             try {
               // A newly chosen method (only while flat), legs' code exits, the decision, then a leg steps up if the
               // main position closed.
@@ -280,6 +295,8 @@ export class Engine {
               if (promoteLeg(this.bees[id])) this.d.db.saveBee(this.bees[id], now);
             } catch (err) {
               log.error("decision failed", { bee: id, err: safeError(err) });
+            } finally {
+              this.beeBusy.delete(id);
             }
           }),
         );
@@ -316,6 +333,7 @@ export class Engine {
       uplR: p && p.riskUsd > 0 ? mainUpl / p.riskUsd : null,
       slots: this.slots(id),
       candles: (instId: string) => (typeof this.d.feed.candles1h === "function" ? this.d.feed.candles1h(instId) : []),
+      candles1m: (instId: string) => (typeof this.d.feed.candles1m === "function" ? this.d.feed.candles1m(instId) : []),
       ...(this.d.cfg.slots[id].market !== "crypto" ? { session: (coin: string) => sessionInfo(this.d.sessions?.() ?? null, coin, now) } : {}),
     };
   }
@@ -325,6 +343,7 @@ export class Engine {
    * 2 from level 3, 3 from level 5); a bee in danger or worse is back to one.
    */
   private slots(id: BeeId): number {
+    if (this.spec[id]?.kind === "style" && this.spec[id]?.id === "scalp") return 1; // a scalper holds one position
     const ev = this.d.evolution;
     if (!ev) return 1;
     const tier = ev.bees[id]?.tier;
@@ -540,6 +559,8 @@ export class Engine {
       const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, mkt ? CMC_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
       r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
+      // Only a real Jev answer: the scalper turns SCALP_ON_* into a mandate, and any answer restarts its ask timer.
+      else brain.onChoice?.(r.choice, ctx);
     }
     const proposal: Proposal | null =
       r && r.ok ? { label: r.choice, intent: menu[r.choice]!.intent, prob: r.probabilities[r.choice] ?? 0, conviction: r.conviction } : null;
@@ -629,6 +650,104 @@ export class Engine {
 
     if (risk.action.kind !== "none") await this.execute(id, risk.action, decisionId, ctx, proposal?.conviction ?? 0);
     db.saveBee(bee, now);
+  }
+
+  // ---------- the scalp loop ----------
+
+  /**
+   * The scalper's fast clock (SCALP_TICK_MS, code only): refresh the coins' tickers and 1-minute candles, then for each
+   * scalping bee manage its position or look for its next entry. Jev is not involved; it set the mandate.
+   */
+  async scalpTick(): Promise<void> {
+    if (this.scalping || this.closedAt !== null) return;
+    const ids = this.ids.filter((id) => isScalpBrain(this.brain(id)));
+    if (!ids.length) return;
+    this.scalping = true;
+    try {
+      try {
+        await this.d.feed.refreshTickers();
+      } catch (err) {
+        log.warn("scalp: ticker refresh failed", { err: safeError(err) });
+      }
+      const now = this.now();
+      const follow = new Set<string>();
+      for (const id of ids) {
+        const sb = this.brain(id);
+        if (!isScalpBrain(sb)) continue;
+        const m = sb.scalp.mandate(now);
+        if (m) follow.add(m.instId);
+        const held = this.bees[id].position?.instId;
+        if (held) follow.add(held);
+      }
+      if (follow.size) await this.d.feed.refreshScalp?.([...follow], now);
+      await Promise.all(ids.map((id) => this.scalpStep(id, this.now())));
+    } catch (err) {
+      log.error("scalp loop error", { err: safeError(err) });
+    } finally {
+      this.scalping = false;
+    }
+  }
+
+  private async scalpStep(id: BeeId, now: number): Promise<void> {
+    if (this.beeBusy.has(id)) return;
+    this.beeBusy.add(id);
+    try {
+      const brain = this.brain(id);
+      if (!isScalpBrain(brain)) return;
+      this.markBee(id, now);
+      const bee = this.bees[id];
+      // Holding: stops, the time stop, the target and every cap run through the same risk layer as everything else.
+      if (bee.position) return await this.decideBenched(id, now);
+      if (bee.cap === "retired" || bee.cap === "loss_stop") return;
+      const ctx = this.ctx(id, now);
+      const plan = brain.scalp.entry(ctx);
+      if ("why" in plan) {
+        this.scalpNote[id] = plan.why;
+        return;
+      }
+      if (plan.maker && !this.d.exec.limit) {
+        this.scalpNote[id] = "this executor cannot place maker orders";
+        return;
+      }
+      const { db, bus } = this.d;
+      const risk = applyRisk({
+        ctx,
+        brain,
+        proposal: { label: plan.label, intent: plan.intent, prob: 1, conviction: 2 },
+        jev: "ok",
+        sizeMult: this.sizeMult(now, id),
+        dataAgeMs: now - this.d.feed.lastRefreshAt,
+        maxDataAgeMs: 3 * this.d.cfg.dataRefreshMs + 30_000,
+      });
+      if (risk.capTripped) {
+        db.insertCap(id, now, risk.capTripped, risk.status);
+        bus.emit("cap", { bee: id, cap: risk.capTripped, detail: risk.status }, now);
+        this.d.alerts.send(`${this.d.cfg.slots[id].name}: ${risk.status}`);
+      }
+      bee.cap = risk.cap;
+      this.scalpNote[id] = risk.action.kind === "open" ? plan.label : `${plan.label}: ${risk.status}`;
+      // Recorded before it is acted on (hard rule 10), with the plan behind it.
+      const decisionId = db.insertDecision({
+        bee: id, ts: now, stateHash: "scalp", stateJson: JSON.stringify({ plan: { ...plan, intent: undefined } }), menuJson: JSON.stringify([plan.label]),
+        choice: plan.label, probabilities: { [plan.label]: 1 }, confidence: 1, conviction: 2, latencyMs: 0, inputTokens: 0, jevCostUsd: 0, jevError: null,
+        action: risk.action, vetoedBy: risk.vetoedBy, forcedBy: risk.forcedBy, status: risk.status,
+      });
+      bee.totals.decisions++;
+      bus.emit("decision", {
+        bee: id, choice: plan.label, probabilities: [], confidence: null, conviction: null, latencyMs: null, tokens: null, jevUsd: 0,
+        action: describeAction(risk.action), vetoedBy: risk.vetoedBy, forcedBy: risk.forcedBy, status: risk.status, jev: "scalp", required: true,
+        ...this.liveChip(id),
+      }, now);
+      if (risk.action.kind === "open") {
+        brain.scalp.begin(plan);
+        await this.openPosition(id, decisionId, risk.action.instId, risk.action.side, risk.action.notionalUsd, false, plan.maker ? { px: plan.limitPx, waitMs: this.d.cfg.scalp.makerWaitMs } : undefined);
+      }
+      db.saveBee(bee, now);
+    } catch (err) {
+      log.error("scalp step failed", { bee: id, err: safeError(err) });
+    } finally {
+      this.beeBusy.delete(id);
+    }
   }
 
   // ---------- benched: ride the position ----------
@@ -778,7 +897,19 @@ export class Engine {
     const p = bee.position;
     switch (action.kind) {
       case "close":
-        if (p) await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", p.contracts, true, action.reason);
+        if (!p) return;
+        {
+          const sb = this.brain(id);
+          // A scalp's target rests as a maker limit at the touch; if it does not fill it is tried again next look
+          // (the stop and the time stop still protect the trade). Everything else closes at the market.
+          if (action.reason === "scalp_target" && isScalpBrain(sb) && sb.scalp.makerTarget() && this.d.exec.limit) {
+            const t = this.d.feed.view().tickers.get(p.instId);
+            const px = t ? (p.side === "long" ? t.ask : t.bid) : 0;
+            if (px > 0) await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", p.contracts, true, "scalp_target", false, { px, waitMs: this.d.cfg.scalp.exitWaitMs });
+            return;
+          }
+        }
+        await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", p.contracts, true, action.reason);
         return;
       case "trim": {
         if (!p) return;
@@ -822,7 +953,7 @@ export class Engine {
     }
   }
 
-  private async openPosition(id: BeeId, decisionId: number, instId: string, side: Side, notionalUsd: number, leg = false): Promise<void> {
+  private async openPosition(id: BeeId, decisionId: number, instId: string, side: Side, notionalUsd: number, leg = false, maker?: { px: number; waitMs: number }): Promise<void> {
     const view = this.d.feed.view();
     const inst = view.instruments.get(instId);
     const s = view.stats.get(instId);
@@ -832,7 +963,7 @@ export class Engine {
       log.info("order rounds to zero contracts, skipped", { bee: id, coin: inst.coin, notionalUsd });
       return;
     }
-    const ok = await this.order(id, decisionId, instId, side === "long" ? "buy" : "sell", contracts, false, leg ? "leg_open" : "open", leg);
+    const ok = await this.order(id, decisionId, instId, side === "long" ? "buy" : "sell", contracts, false, leg ? "leg_open" : maker ? "scalp_open" : "open", leg, maker);
     const bee = this.bees[id];
     const p = leg ? bee.legs?.find((l) => l.instId === instId) : bee.position;
     if (!ok || !p) return;
@@ -846,7 +977,7 @@ export class Engine {
   }
 
   /** Record the order, send it, apply the fill. Returns true when it filled. */
-  private async order(id: BeeId, decisionId: number, instId: string, side: "buy" | "sell", contracts: number, reduceOnly: boolean, purpose: string, leg = false): Promise<boolean> {
+  private async order(id: BeeId, decisionId: number, instId: string, side: "buy" | "sell", contracts: number, reduceOnly: boolean, purpose: string, leg = false, maker?: { px: number; waitMs: number }): Promise<boolean> {
     const { db, bus, exec } = this.d;
     const now = this.now();
     const inst = this.d.feed.view().instruments.get(instId);
@@ -857,10 +988,21 @@ export class Engine {
       log.info("new orders paused after an exchange rejection", { bee: id, coin: inst.coin, purpose, untilS: Math.round(((this.orderPauseUntil[id] ?? 0) - now) / 1000) });
       return false;
     }
-    const clOrdId = `${id.slice(0, 2)}${now.toString(36)}${(this.seq++ % 1296).toString(36).padStart(2, "0")}`;
+    // Maker orders carry the scalper prefix, so a start after a crash can find and cancel any that were left resting.
+    const clOrdId = `${maker ? "sc" : id.slice(0, 2)}${now.toString(36)}${(this.seq++ % 1296).toString(36).padStart(2, "0")}`;
+    if (maker && !exec.limit) {
+      log.warn("maker order needed but the executor cannot place limits: nothing sent", { bee: id, purpose });
+      return false;
+    }
     const orderId = db.insertOrder({ decisionId, bee: id, ts: now, clOrdId, instId, side, contracts, reduceOnly, purpose });
     bus.emit("order", { bee: id, coin: inst.coin, side, contracts, purpose, clOrdId, state: "sent" }, now);
-    const res = await exec.market(id, { instId, side, contracts, reduceOnly, clOrdId });
+    const res = maker ? await exec.limit!(id, { instId, side, contracts, reduceOnly, clOrdId, px: maker.px, waitMs: maker.waitMs }) : await exec.market(id, { instId, side, contracts, reduceOnly, clOrdId });
+    // A maker order that simply did not fill traded nothing and left nothing on the book: not an error, not a pause.
+    if (!res.ok && res.error.code === UNFILLED) {
+      db.updateOrder(orderId, "rejected", null, UNFILLED);
+      bus.emit("order", { bee: id, coin: inst.coin, side, contracts, purpose, state: "unfilled" });
+      return false;
+    }
     if (!res.ok) {
       db.updateOrder(orderId, res.state, null, `${res.error.code} ${res.error.message}`);
       bus.emit("order", { bee: id, coin: inst.coin, side, contracts, purpose, state: res.state, error: res.error });
@@ -878,6 +1020,12 @@ export class Engine {
     const notionalUsd = res.contracts * inst.ctVal * res.avgPx;
     db.insertFill({ orderId, bee: id, ts: res.ts, instId, side, contracts: res.contracts, px: res.avgPx, notionalUsd, feeUsd: res.feeUsd, realisedUsd: realised });
     this.remark(id, instId, res.avgPx);
+    // The scalper keeps its own books: a mandate's trade count, and the loss streak behind its circuit breaker.
+    const sb = this.brain(id);
+    if (isScalpBrain(sb) && !leg) {
+      if (!reduceOnly) sb.scalp.opened(res.avgPx, res.feeUsd, now);
+      else if (this.bees[id].position === null) sb.scalp.closed(realised, res.feeUsd, now);
+    }
     const dir = reduceOnly ? "CLOSE" : side === "buy" ? "LONG" : "SHORT";
     bus.emit("fill", {
       bee: id,
@@ -1060,6 +1208,7 @@ export class Engine {
       if (skill) return skillBrain({ skill, params: a.params });
     }
     if (a?.kind === "style") {
+      if (s.market === "crypto" && a.id === "scalp" && this.scalpAvailable()) return scalpBrain(this.scalpDeps());
       if (s.market === "crypto" && (STYLES as readonly string[]).includes(a.id)) return BRAINS[a.id as keyof typeof BRAINS];
       if (s.market !== "crypto" && a.id === "macro") return macro;
     }
@@ -1070,7 +1219,27 @@ export class Engine {
   private specValid(id: BeeId, w: { kind: "style" | "skill"; id: string }): boolean {
     const market = this.d.cfg.slots[id].market;
     if (w.kind === "skill") return !!this.d.skillById?.(w.id);
-    return market === "crypto" ? (STYLES as readonly string[]).includes(w.id) : w.id === "macro";
+    return market === "crypto" ? (STYLES as readonly string[]).includes(w.id) || (w.id === "scalp" && this.scalpAvailable()) : w.id === "macro";
+  }
+
+  // ---------- the scalper: gate, deps ----------
+
+  /** What the lab lets the scalper trade right now. With SCALP_REQUIRE_LAB off (never in live) default rules stand in. */
+  private scalpRules(): GateRule[] {
+    const sc = this.d.cfg.scalp;
+    if (!sc.enabled) return [];
+    if (!sc.requireLab) return sc.coins.map((coin) => ({ coin, ruleId: "micro_breakout", params: {}, netBps: 0, trades: 0 }));
+    const g = this.d.scalpGate?.();
+    return g?.open ? g.rules.filter((r) => sc.coins.includes(r.coin)) : [];
+  }
+  private scalpAvailable = () => this.scalpRules().length > 0;
+  private scalpCosts(): CostModel {
+    const lab = this.d.scalpGate?.().costs ?? DEFAULT_COSTS;
+    // Today's fees, the lab's slippage, spread and fill haircut.
+    return { ...lab, makerFee: this.d.cfg.scalp.makerFee, takerFee: this.d.cfg.risk.takerFeeRate };
+  }
+  private scalpDeps(): ScalpDeps {
+    return { rules: () => this.scalpRules(), costs: () => this.scalpCosts(), cfg: this.d.cfg.scalp };
   }
 
   /**
@@ -1124,7 +1293,7 @@ export class Engine {
     const s = this.d.cfg.slots[id];
     const a = this.spec[id];
     const style = a?.kind === "style" && (STYLES as readonly string[]).includes(a.id) ? (a.id as keyof Config["bees"]) : s.style;
-    const k = s.market === "crypto" ? this.d.cfg.bees[style] : this.d.cfg.macro.knobs;
+    const k = s.market !== "crypto" ? this.d.cfg.macro.knobs : a?.kind === "style" && a.id === "scalp" ? this.d.cfg.scalp.knobs : this.d.cfg.bees[style];
     const extra = this.d.evolution?.perks(id).extraTrades ?? 0;
     return extra > 0 ? { ...k, maxTradesPerDay: k.maxTradesPerDay + extra } : k;
   }
@@ -1280,6 +1449,20 @@ export class Engine {
       })(),
       /** The AI-chosen coins the engine applies right now (null = the style's normal choice). */
       watchlist: this.watch(id),
+      /** The scalper's mandate, circuit breaker and last look, when this bee scalps. */
+      scalp: (() => {
+        const sb = this.brain(id);
+        if (!isScalpBrain(sb)) return null;
+        const st = sb.scalp.status(this.now());
+        return {
+          gateOpen: st.gateOpen,
+          note: st.note,
+          last: this.scalpNote[id] ?? null,
+          mandate: st.mandate ? { coin: st.mandate.coin, bias: st.mandate.bias, used: st.mandate.used, maxTrades: st.mandate.maxTrades, expiresAt: st.mandate.expiresAt } : null,
+          pausedUntil: st.pausedUntil > this.now() ? st.pausedUntil : null,
+          lossStreak: st.lossStreak,
+        };
+      })(),
     };
   }
 
@@ -1300,6 +1483,7 @@ export class Engine {
         brains: (["openai", "claude", "kimi"] as const).map((bid) => ({ id: bid, model: this.d.cfg.brains.creds[bid]?.model ?? null, online: !!this.d.cfg.brains.creds[bid] })),
         labSignals: !!this.d.labVotes,
         cmc: this.cmcView(),
+        scalp: { enabled: this.d.cfg.scalp.enabled, gateOpen: this.scalpAvailable(), reason: this.d.cfg.scalp.enabled ? (this.d.cfg.scalp.requireLab ? (this.d.scalpGate?.().reason ?? "no lab report") : "lab gate off (paper only)") : "SCALP is off", bees: this.ids.filter((id) => isScalpBrain(this.brain(id))).length },
         watchlist: !!this.d.watchlist,
         survival: this.d.evolution?.opts.survival ?? false,
         rewards: this.d.evolution?.opts.rewards ?? false,

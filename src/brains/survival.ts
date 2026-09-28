@@ -106,6 +106,8 @@ export interface SurvivalOpts {
   universe?: () => CoinInfo[];
   /** The market mood (CoinMarketCap), or null. */
   market?: () => Record<string, unknown> | null;
+  /** The scalper is on offer as a method (SCALP on and the lab gate open). */
+  scalp?: () => boolean;
   now?: () => number;
 }
 
@@ -234,6 +236,7 @@ export class SurvivalCouncil {
       market: bee.market ?? "crypto",
       current: prevSpec ? { kind: prevSpec.kind, id: prevSpec.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
       ranking,
+      extraStyles: this.o.scalp?.() ? ["scalp"] : [],
     });
     const answers: Array<{ brain: BrainId; a: AnswerT }> = [];
     for (const b of brains) {

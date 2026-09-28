@@ -256,6 +256,49 @@ three calls, under the free Basic plan's 10,000 monthly credits, with `CMC_MAX_C
 It is read-only and optional: without a key, or if CMC is down (the last good values are kept up to 2 hours), the
 bees trade on the exchange feed alone. The key only travels in CMC's request header; it is never logged or shown.
 
+## The scalper (optional, off)
+
+A scalp aims at a few basis points and a round trip costs about as much: the taker fee alone is 10 bp in and out. So the
+scalper is built around costs, in three stages, and it stays off unless every one of them says yes.
+
+1. **The lab decides whether it may exist** (`src/lab/scalp.ts`, `pnpm lab fetch --bar 1m --days 14`, `pnpm lab scalp`).
+   A cost-first simulator: maker entries fill only when price trades *through* the limit, targets rest as maker limits,
+   stops and time exits are taker fills with slippage and half a spread, bars are ordered pessimistically, and a cost
+   gate skips a trade whose target is under 3x its own round trip. Two rules (a micro breakout, a stretch-and-revert)
+   are picked on expanding walk-forward windows and judged on the next chunk, with a plateau check (an isolated peak is
+   rejected). The report (`<LAB_DIR>/scalp-report.md`) says **EDGE FOUND** or **NO EDGE** and why. Synthetic data can
+   exercise the lab but never opens the gate. A random walk correctly shows no edge.
+2. **A bee may choose it** (`bees/scalp.ts`). With `SCALP=true` the councils, the coach and the survival councils are
+   offered the `scalp` method, but only while the report is real, positive and under `SCALP_LAB_MAX_AGE_DAYS` old.
+   Jev is the slow clock: with no mandate it is asked, at most every `SCALP_MANDATE_MIN` minutes, for `SCALP_ON_<coin>_<bias>`
+   or WAIT (each coin shows the lab's edge, its 1-minute ATR and how many times its target covers the round trip). The
+   answer is a **mandate**: a coin, long/short/both, a lifetime and a trade budget. Inside it, code (the engine's scalp
+   loop, every `SCALP_TICK_MS`) runs the lab's rule on the coin's 1-minute candles and trades it with no Jev call per
+   trade. The risk layer keeps its last word on every entry, stop and cap; a scalper holds one position; stops and the
+   time stop run through the same `applyRisk` as everything else.
+3. **Maker execution** (`exec/executor.ts`). Entries and targets are post-only limits at the touch that wait up to
+   `SCALP_MAKER_WAIT_S` and are then cancelled: a missed fill is not an error and never becomes a taker order. On OKX
+   the order is placed with `--ordType post_only`, polled, cancelled on timeout, and its final state read (a fill that
+   lands while cancelling is booked as the fill it is); if the state is uncertain the result is "unknown" and
+   reconciliation settles it. Every scalper order id starts with `sc`, so a start after a crash cancels any leftovers, and
+   only those. Paper trading fills a limit only when the market trades through it and refuses one that would cross the
+   book, but it cannot see queue position or adverse selection: a paper fill rate is an upper bound, not a forecast.
+   Confirm on OKX demo before trusting any result.
+
+Safety: a circuit breaker pauses the bee after `SCALP_MAX_LOSS_STREAK` losses in a row (counted net of both fees) for
+`SCALP_PAUSE_MIN` minutes; per-day trade and fee caps apply; with real money the lab gate cannot be switched off
+(`SCALP_REQUIRE_LAB` is forced on). Scalping loses to fees in dead or wild markets, and it may well be that no rule ever
+passes the lab: that is a valid answer, and the bee then never scalps.
+
+## Gold breakout research (a lab tool, not a live style)
+
+`pnpm gold ...` runs the multi-strategy gold breakout engine (`src/lab/gold`, the `skills/multi-strategy-gold-breakout`
+package): structural support/resistance breakouts on XAUUSD with pending stop orders, nine strategy profiles S1-S9, a
+fake-breakout filter, break-even and trailing exits, and portfolio risk limits. It is simulation and research only:
+it has no execution adapter and refuses `live_trading`. Backtests, walk-forward, Monte Carlo, parameter stability,
+ablation and a black-box calibration (estimates, never facts) all write a 13-part report that leads with the drawdown and
+counts any validation that was not run as not passed. See `skills/multi-strategy-gold-breakout/SKILL.md`.
+
 ## The profit-lock ratchet
 
 Every style keeps its own stops, and on top of them the engine runs a dynamic profit-locking ratchet

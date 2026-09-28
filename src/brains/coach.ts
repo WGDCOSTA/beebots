@@ -98,6 +98,8 @@ export interface CoachOpts {
   ranking?: () => Ranking | null;
   /** The market mood (CoinMarketCap), or null. */
   market?: () => Record<string, unknown> | null;
+  /** The scalper is on offer as a method (SCALP on and the lab gate open). */
+  scalp?: () => boolean;
   /** How many coins a bee may hold. */
   watchSize?: (slot: BeeId) => number;
   /** SPECIALIZATION: the review may also switch the bee's method on its real results. */
@@ -235,6 +237,7 @@ export class Coach {
           market: bee.market ?? "crypto",
           current: plan.specialization ? { kind: plan.specialization.kind, id: plan.specialization.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
           ranking: this.o.ranking?.() ?? null,
+          extraStyles: this.o.scalp?.() ? ["scalp"] : [],
         })
       : null;
     const system = [

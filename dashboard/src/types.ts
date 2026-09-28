@@ -53,6 +53,8 @@ export interface PublicBee {
   evo?: { tier: Tier; health: number; points: number; level: number; deaths: number } | null;
   /** The coins its AI brains chose that the engine applies right now (null = the style's normal choice). */
   watchlist?: { coins: string[]; probation: string[]; items?: Array<{ coin: string; reason: string; probation: boolean; addedAt: number | null }> } | null;
+  /** The scalper's mandate, circuit breaker and last look (null unless this bee scalps). */
+  scalp?: { gateOpen: boolean; note: string; last: string | null; mandate: { coin: string; bias: string; used: number; maxTrades: number; expiresAt: number } | null; pausedUntil: number | null; lossStreak: number } | null;
   /** The LLM brain that plans for it, and whether that brain has a key or sign-in. */
   brain?: { id: string; model: string | null; online: boolean };
   market?: string;
@@ -98,6 +100,8 @@ export interface SystemInfo {
   macroTrading: boolean;
   macroBees: number;
   maxLeverage: number;
+  /** The scalper: master switch, whether the lab's gate is open, and how many bees scalp. */
+  scalp?: { enabled: boolean; gateOpen: boolean; reason: string; bees: number };
   /** CoinMarketCap's market mood (null when no key or stale). */
   cmc?: {
     fearGreed: { value: number; label: string } | null;

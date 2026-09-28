@@ -97,6 +97,8 @@ export interface BeeContext {
   uplR: number | null;
   /** Latest 1h candles of a coin (oldest first), for brains that run lab skills live. */
   candles?: (instId: string) => Candle[];
+  /** Latest confirmed 1-minute candles of a coin (oldest first), for the scalper. Absent without a scalp feed. */
+  candles1m?: (instId: string) => Candle[];
   /** Positions this bee may hold at once (1, or more once its performance earned multi-orders). */
   slots?: number;
   /** Macro bees: a coin's trading session right now (market/sessions.ts). Absent for crypto bees. */
@@ -104,8 +106,8 @@ export interface BeeContext {
 }
 
 export interface BeeBrain {
-  /** A crypto style, "macro" for the macro squad, or "skill" for a bee specialised in a lab skill (bees/skill.ts). */
-  id: StyleId | "macro" | "skill";
+  /** A crypto style, "macro" for the macro squad, "skill" for a bee specialised in a lab skill (bees/skill.ts), or "scalp". */
+  id: StyleId | "macro" | "skill" | "scalp";
   /** Condensed from strategies/<BEE>.md; sent to Jev as the question instructions. */
   strategy: string;
   convictionLabels: readonly [string, string, string, string];
@@ -147,6 +149,8 @@ export interface BeeBrain {
   neverForce?: boolean;
   /** Status line while flat with nothing on the menu (e.g. "waiting for a breakout"). */
   idleStatus?: (ctx: BeeContext) => string;
+  /** Called with the label Jev chose (before the risk layer acts): the scalper turns a SCALP_ON_* label into a mandate. */
+  onChoice?: (label: string, ctx: BeeContext) => void;
 }
 
 export const coinOf = (instId: string) => instId.split("-")[0]!;
