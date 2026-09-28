@@ -1661,3 +1661,12 @@ textarea.setup-input {
 .ch-tier.good {
   color: var(--good-text);
 }
+.watch-badge {
+  margin-top: 0.15rem;
+  font-size: 0.6rem;
+  color: var(--text-2);
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

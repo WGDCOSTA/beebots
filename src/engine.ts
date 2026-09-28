@@ -14,6 +14,7 @@ import { log } from "./log.js";
 import type { MarketFeed } from "./market/data.js";
 import { safeError } from "./redact.js";
 import { SURVIVAL_NOTE, type Evolution } from "./evolution.js";
+import { effectiveWatchlist, watchlistLine, type WatchItem } from "./brains/watchlist.js";
 import { applyRisk, type JevStatus, type Proposal } from "./risk.js";
 import { buildSnapshot } from "./snapshot.js";
 
@@ -46,6 +47,11 @@ export interface EngineDeps {
   labNote?: string;
   /** Survival and rewards (evolution.ts): size factor, limit boosts, the survival line in Jev's state. */
   evolution?: Evolution;
+  /**
+   * BRAIN_WATCHLIST: the coins the bee's brains chose (playbook), or null. The engine narrows the bee's market to them
+   * after the owner's coins, the style and the survival tier (brains/watchlist.ts); probation coins trade at half size.
+   */
+  watchlist?: (id: BeeId) => WatchItem[] | null | undefined;
 }
 
 interface LastDecision {
@@ -323,12 +329,16 @@ export class Engine {
     const proposal: Proposal | null =
       r && r.ok ? { label: r.choice, intent: menu[r.choice]!.intent, prob: r.probabilities[r.choice] ?? 0, conviction: r.conviction } : null;
 
+    // A coin on probation (added by the coach, not yet proven) trades at half size.
+    const probationIds = this.watch(id)?.probation ?? [];
+    const target = proposal && (proposal.intent.kind === "open" || proposal.intent.kind === "switch") ? proposal.intent.instId : null;
+    const onProbation = target !== null && probationIds.includes(target.split("-")[0]!.toUpperCase());
     const risk = applyRisk({
       ctx,
       brain,
       proposal,
       jev: jevStatus,
-      sizeMult: this.sizeMult(now, id),
+      sizeMult: this.sizeMult(now, id) * (onProbation ? 0.5 : 1),
       dataAgeMs: now - this.d.feed.lastRefreshAt,
       maxDataAgeMs: 3 * cfg.dataRefreshMs + 30_000,
     });
@@ -783,11 +793,42 @@ export class Engine {
   }
 
   private brains = {} as Record<BeeId, BeeBrain>;
+  private watched = {} as Record<BeeId, { key: string; brain: BeeBrain }>;
 
-  /** The slot's style brain, narrowed to the owner's coins and carrying the owner's rules (bees/custom.ts). */
+  /**
+   * The slot's style brain, narrowed to the owner's coins and carrying the owner's rules (bees/custom.ts), then
+   * narrowed again to the watchlist its AI brains chose, when there is a usable one.
+   */
   private brain(id: BeeId): BeeBrain {
     const s = this.d.cfg.slots[id];
-    return (this.brains[id] ??= customBrain(BRAINS[s.style], { coins: s.coins, rules: s.rules }));
+    const owner = (this.brains[id] ??= customBrain(BRAINS[s.style], { coins: s.coins, rules: s.rules }));
+    const w = this.watch(id);
+    if (!w) return owner;
+    const key = `${w.coins.join(",")}|${w.probation.join(",")}`;
+    const hit = this.watched[id];
+    if (hit?.key === key) return hit.brain;
+    const brain = customBrain(owner, { coins: w.coins, rules: "", coinLine: watchlistLine(w.coins, w.probation) });
+    this.watched[id] = { key, brain };
+    return brain;
+  }
+
+  /** The watchlist the engine applies right now (null = the style's normal coin choice). */
+  private watch(id: BeeId): { coins: string[]; probation: string[] } | null {
+    if (!this.d.watchlist) return null;
+    const s = this.d.cfg.slots[id];
+    try {
+      return effectiveWatchlist({
+        enabled: true,
+        picks: this.d.watchlist(id),
+        style: s.style,
+        ownerCoins: s.coins.map((c) => c.toUpperCase()),
+        tier: this.d.evolution?.bees[id]?.tier ?? null,
+        liquid: this.d.feed.view().gated.map((i) => i.split("-")[0]!.toUpperCase()),
+      });
+    } catch (err) {
+      log.warn("watchlist failed", { bee: id, err: safeError(err) });
+      return null;
+    }
   }
 
   private knobs(id: BeeId) {
@@ -856,6 +897,8 @@ export class Engine {
         const e = this.d.evolution?.bees[id];
         return e ? { tier: e.tier, health: Math.round(e.health * 10) / 10, points: e.points, level: e.level, deaths: e.deaths } : null;
       })(),
+      /** The AI-chosen coins the engine applies right now (null = the style's normal choice). */
+      watchlist: this.watch(id),
     };
   }
 

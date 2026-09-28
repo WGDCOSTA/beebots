@@ -13,6 +13,8 @@ export interface CustomRules {
   coins: string[];
   /** The owner's rules, in plain English. */
   rules: string;
+  /** What Jev is told about the coin limit (default: "This bee only ever trades ..."). */
+  coinLine?: string;
 }
 
 /**
@@ -48,7 +50,7 @@ export function customBrain(base: BeeBrain, o: CustomRules): BeeBrain {
     return { ...ctx, view };
   };
 
-  const coinLine = coins.length ? ` This bee only ever trades ${coins.join(", ")}.` : "";
+  const coinLine = coins.length ? ` ${o.coinLine ?? `This bee only ever trades ${coins.join(", ")}.`}` : "";
   return {
     ...base,
     strategy: `${base.strategy}${rules ? ` Owner's rules for this bee (they come first, within the moves offered): ${rules}` : ""}${coinLine}`,

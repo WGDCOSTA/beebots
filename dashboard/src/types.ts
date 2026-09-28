@@ -49,6 +49,8 @@ export interface PublicBee {
   last: LastDecision | null;
   /** Survival and rewards (engine evolution.ts); null when off. */
   evo?: { tier: Tier; health: number; points: number; level: number; deaths: number } | null;
+  /** The coins its AI brains chose that the engine applies right now (null = the style's normal choice). */
+  watchlist?: { coins: string[]; probation: string[] } | null;
 }
 
 export type Tier = "thriving" | "healthy" | "danger" | "critical" | "dead";

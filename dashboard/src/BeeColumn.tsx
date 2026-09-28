@@ -92,6 +92,11 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
               {TIER_INFO[bee.evo.tier].icon} {TIER_INFO[bee.evo.tier].label} · L{bee.evo.level}
             </div>
           )}
+          {bee?.watchlist && (
+            <div className="watch-badge small" title={`Coins its AI brains chose${bee.watchlist.probation.length ? `; on trial at half size: ${bee.watchlist.probation.join(", ")}` : ""}`}>
+              👁 {bee.watchlist.coins.join(" · ")}
+            </div>
+          )}
           {gap !== null && <div className="rank-gap num">{gap === 0 ? "leading" : `${money(gap)} behind`}</div>}
         </div>
       </header>

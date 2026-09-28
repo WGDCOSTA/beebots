@@ -24,6 +24,11 @@ const BeePlan = z.object({
   lessons: z.array(z.string()).max(10).default([]),
   message: z.string().default(""),
   decidedAt: z.number(),
+  // The coins the brains chose for this bee (brains/watchlist.ts). Absent = the style's normal coin choice.
+  watchlist: z
+    .array(z.object({ coin: z.string(), reason: z.string().default(""), probation: z.boolean().default(false), addedAt: z.number().optional() }))
+    .max(12)
+    .optional(),
 });
 export type BeePlan = z.infer<typeof BeePlan>;
 

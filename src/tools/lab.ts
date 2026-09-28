@@ -227,13 +227,15 @@ async function cmdCouncil(ranking?: Ranking) {
   if (!r) throw new Error(`No ranking yet. Run "pnpm lab run" first.`);
   const graph = new KnowledgeGraph(env.graphPath);
   const clients = makeClients(env.creds);
-  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath) });
+  // No live market here: coin candidates come from the owner's coins, the style, the lab's datasets and the bee's record.
+  const res = await runCouncil({ graph, ranking: r, bees: councilBees(), clients, previous: loadPlaybook(env.playbookPath), pickCoins: env.watchlist });
   savePlaybook(env.playbookPath, res.playbook);
   graph.close();
   for (const l of res.log) {
     const p = res.playbook.bees[l.bee]!;
     console.log(`\n${l.bee} thinks with ${l.brain === "rules" ? "rules" : BRAIN_INFO[l.brain as keyof typeof BRAIN_INFO].label} (${p.model})${l.error ? `  [brain failed: ${l.error}]` : ""}`);
     for (const s of p.skills) console.log(`  ${s.weight.toFixed(2)}  ${s.id.padEnd(24)} ${s.reason}`);
+    for (const w of p.watchlist ?? []) console.log(`  watch ${w.coin.padEnd(8)} ${w.reason}`);
     for (const x of p.lessons) console.log(`  lesson: ${x}`);
     if (p.message) console.log(`  to the hive: ${p.message}`);
   }

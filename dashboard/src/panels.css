@@ -878,3 +878,15 @@
 .plabel .pinput {
   font-weight: 400;
 }
+
+/* Watchlist chosen by the brains */
+.watch-chips {
+  margin: 4px 0 8px;
+}
+.watch-chips .chip {
+  cursor: help;
+}
+.watch-chips .chip.probation {
+  border-style: dashed;
+  opacity: 0.8;
+}
