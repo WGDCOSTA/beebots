@@ -32,10 +32,18 @@ export interface PlaybookSkill {
   score: number;
 }
 
+export interface WatchItem {
+  coin: string;
+  reason: string;
+  /** Added by the coach, not yet kept: half size. */
+  probation: boolean;
+  addedAt?: number;
+}
+
 export interface Playbook {
   updatedAt: number;
   rankingAt: number;
-  bees: Record<string, { brain: string; model: string; skills: PlaybookSkill[]; lessons: string[]; message: string; decidedAt: number }>;
+  bees: Record<string, { brain: string; model: string; skills: PlaybookSkill[]; lessons: string[]; message: string; decidedAt: number; watchlist?: WatchItem[] }>;
 }
 
 export interface GraphNode {

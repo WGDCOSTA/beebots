@@ -162,7 +162,8 @@ on its own API key. The brains are slow and strategic; they never place an order
 - **The lab.** `pnpm lab fetch` downloads OKX history; `pnpm lab run` simulates every skill and parameter set with fees,
   slippage, funding and stops, using walk-forward so only out-of-sample results count, and ranks them.
 - **The council.** `pnpm lab council`: each brain reads the ranking and the hive mind, picks the skills its bee should
-  lean on, writes lessons and messages the other bees.
+  lean on and the coins it should trade (its watchlist, from lab evidence, its record and liquidity, within the
+  owner's coins and its style), writes lessons and messages the other bees.
 - **The hive mind.** A knowledge graph (bees, brains, skills, coins, lessons, messages, real trade results) that every
   round starts from, exported as graphify-style `graph.json`.
 - **Live.** With `LAB_SIGNALS=true` Jev sees each bee's skill vote per coin as a tiebreaker; with `COACH_INTERVAL_MIN`

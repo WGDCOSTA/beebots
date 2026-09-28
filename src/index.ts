@@ -31,6 +31,7 @@ import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
 import { SurvivalCouncil } from "./brains/survival.js";
+import { coinInfos, watchlistSize } from "./brains/watchlist.js";
 import { Evolution, TIERS, type BeeEvolution, type EvolutionEvent } from "./evolution.js";
 import { beeNode } from "./graph/hive-mind.js";
 import type { Ranking } from "./lab/tournament.js";
@@ -163,7 +164,7 @@ async function main() {
   for (const e of registry.errors) log.warn("skill import failed", { error: e });
   const signals = cfg.lab.signals ? new LabSignals(new Map(registry.skills.map((s) => [s.id, s])), () => playbook.get()) : null;
   if (cfg.skippedBees.length) log.warn("extra bees sit out: no exchange keys for this mode", { bees: cfg.skippedBees.join(",") });
-  log.info("brains", { brains: cfg.beeIds.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, coachMin: cfg.lab.coachIntervalMin });
+  log.info("brains", { brains: cfg.beeIds.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, watchlist: cfg.lab.watchlist, coachMin: cfg.lab.coachIntervalMin });
 
   // Survival and rewards: health tiers, points, levels, prizes (evolution.ts), and the councils they wake.
   const rankingPath = join(cfg.lab.dir, "ranking.json");
@@ -220,10 +221,13 @@ async function main() {
     ranking: readRanking,
     onNewSkill: (skill) => signals?.register(skill),
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
+    watchlist: cfg.lab.watchlist,
+    universe: () => coinInfos(feed.view()),
   });
 
   engine = new Engine({
     cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
+    ...(cfg.lab.watchlist ? { watchlist: (id: BeeId) => playbook.get()?.bees[id]?.watchlist ?? null } : {}),
     ...(signals
       ? {
           labVotes: (id: BeeId, instIds: string[]) => {
@@ -236,7 +240,13 @@ async function main() {
       : {}),
   });
   await engine.start();
-  const coach = new Coach({ graph, db, clients, bees: councilBees, playbookPath: cfg.lab.playbookPath, intervalMin: cfg.lab.coachIntervalMin, maxCallsPerDay: cfg.lab.coachMaxCallsDay });
+  const coach = new Coach({
+    graph, db, clients, bees: councilBees, playbookPath: cfg.lab.playbookPath, intervalMin: cfg.lab.coachIntervalMin, maxCallsPerDay: cfg.lab.coachMaxCallsDay,
+    watchlist: cfg.lab.watchlist,
+    universe: () => coinInfos(feed.view()),
+    ranking: readRanking,
+    watchSize: (id) => watchlistSize(evolution.bees[id]?.level ?? 0, evolution.bees[id]?.tier ?? null),
+  });
   coach.start();
   let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
   const labRanking = () => {

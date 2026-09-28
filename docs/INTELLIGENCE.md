@@ -129,7 +129,32 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
 - **Trade ingest** (always on): closed trades flow into the graph every 5 minutes.
 - **`COACH_INTERVAL_MIN`** (0 = off): each brain reviews its bee's last 24 h (closed trades, P&L, fees, equity change,
   risk vetoes) and re-weights its adopted skills. It may drop a skill but never add one; new skills only come from a
-  lab run and the council. At most `COACH_MAX_CALLS_DAY` calls a day.
+  lab run and the council. It also reviews the watchlist (see below). At most `COACH_MAX_CALLS_DAY` calls a day.
+
+## Which coins each bee trades: the watchlist
+
+With `BRAIN_WATCHLIST=true` (the default) the brains choose each bee's coins, not only its skills
+(`src/brains/watchlist.ts`). Jev still decides every tick and the risk layer still has the last word; the watchlist
+only decides **which coins Jev is offered**.
+
+1. **Candidates.** The owner's coins for the bee when set (a hard limit); otherwise the coins its style can trade
+   (Breakout: BTC/ETH/SOL/HYPE, Trend: BTC/ETH); otherwise, for Momentum, the most liquid gated coins right now, the
+   lab's coins and the coins the bee has traded.
+2. **Evidence per candidate.** How the lab's skills did out of sample on that coin (the best skill and the mean over
+   the bee's adopted skills), the bee's real record there (net USD, trades, win rate) and live liquidity (volume,
+   spread, 7-day move, ATR).
+3. **The choice.** The council picks up to `3 + level` coins (at most 8; 3 in danger) with a reason each. With no
+   brain key a rules pick ranks the candidates on the same evidence. A brain may only pick candidates.
+4. **Reviews.** The coach may drop coins that keep losing (never the last one) and add **one** candidate at a time on
+   **probation**: it trades at half size until a later review keeps it. A survival council re-picks the list by vote
+   across its brains; in danger it keeps 3 coins and favours the 10 most liquid.
+5. **What the engine applies.** The watchlist, filtered again by the owner's coins and the style, and in danger or
+   critical only liquid coins with nothing on probation. If nothing usable is left, the bee falls back to its style's
+   normal coin choice. A position already held on a coin that left the list is still managed (stops, exits).
+
+The watchlist lives in the playbook, is shown on the Lab page (per bee, reasons on hover, probation marked), in Admin →
+Bees and on each bee's column, and is recorded in the hive mind as `bee -watches-> coin`. `pnpm lab council` picks it
+too (without the live market: its candidates come from the owner, the style, the lab and the record).
 
 ## More bees
 

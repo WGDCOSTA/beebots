@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
 import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type KeyName } from "./panelTypes";
+import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
 const TABS = [
@@ -300,6 +301,13 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
                 Assets it may trade
                 <CoinPicker all={s.coins} value={b.coins} onChange={(c) => set(i, { coins: c })} />
               </div>
+              {s.lab.playbook?.bees[b.slot]?.watchlist?.length ? (
+                <div className="plabel">
+                  Watchlist its AI brains chose (within the assets above)
+                  <WatchChips items={s.lab.playbook.bees[b.slot]!.watchlist!} />
+                  <span className="dim small">Set by the council, the coach and survival councils from lab evidence. Turn off with “AI-chosen coins” in Settings → Learning.</span>
+                </div>
+              ) : null}
               <label className="plabel">
                 Rules Jev reads every tick
                 <textarea className="pinput" rows={4} maxLength={500} value={b.rules} onChange={(ev) => set(i, { rules: ev.target.value })} />

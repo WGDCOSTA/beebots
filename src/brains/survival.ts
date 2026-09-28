@@ -3,7 +3,8 @@
 // level earned otherwise). Each brain sees what the previous ones advised, so they build on each other; their skill
 // picks are combined into one playbook. Brains may also write a brand-new skill in the JSON rule language: it is
 // compiled, backtested walk-forward on the lab's history, and adopted only if it holds up out of sample. Nothing here
-// trades; the playbook only feeds the lab vote (LAB_SIGNALS) and the risk layer is untouched.
+// trades; the playbook only feeds the lab vote (LAB_SIGNALS) and the watchlist (BRAIN_WATCHLIST), and the risk layer
+// is untouched. In danger the council shrinks the watchlist to 3 coins and favours the most liquid ones.
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -19,19 +20,21 @@ import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
 import { BRAIN_INFO, BRAINS, type BrainId, type LlmClient } from "./llm.js";
 import { loadPlaybook, savePlaybook, type PlaybookSkill } from "./playbook.js";
+import { LIQUID_TOP, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, watchInput, watchlistSize, type CoinInfo, type WatchItem } from "./watchlist.js";
 
 const Answer = z.object({
   skills: z.array(z.object({ id: z.string(), weight: z.number().min(0).max(1), reason: z.string().max(400) })).max(6),
   newSkillJson: z.string().max(4000),
   lesson: z.string().max(300),
   message: z.string().max(400),
+  coins: WatchPicks.default([]),
 });
 type AnswerT = z.infer<typeof Answer>;
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["skills", "newSkillJson", "lesson", "message"],
+  required: ["skills", "newSkillJson", "lesson", "message", "coins"],
   properties: {
     skills: {
       type: "array",
@@ -41,8 +44,36 @@ const SCHEMA = {
     newSkillJson: { type: "string", description: "A new skill in the JSON rule language as a JSON string, or an empty string" },
     lesson: { type: "string", description: "One lesson (max 300 chars)" },
     message: { type: "string", description: "One message to the other bees (max 400 chars)" },
+    coins: WATCHLIST_SCHEMA,
   },
 } as const;
+
+/**
+ * The council's watchlist: coins ranked by how many brains picked them (earlier picks count a little more); in danger a
+ * coin among the most liquid gets a bonus and anything else a penalty. Only candidates.
+ */
+export function combineCoins(picks: Array<Array<{ coin: string; reason: string }>>, candidates: string[], size: number, inDanger: boolean, liquid: string[], now: number): WatchItem[] {
+  const allowed = new Set(candidates);
+  const safe = new Set(liquid.slice(0, LIQUID_TOP));
+  const votes = new Map<string, { v: number; reasons: string[] }>();
+  for (const list of picks) {
+    const seen = new Set<string>();
+    list.forEach((p, i) => {
+      const coin = p.coin.trim().toUpperCase().replace(/-.*$/, "");
+      if (!allowed.has(coin) || seen.has(coin)) return;
+      seen.add(coin);
+      const e = votes.get(coin) ?? { v: 0, reasons: [] };
+      e.v += 1 + 1 / (i + 2);
+      if (p.reason) e.reasons.push(p.reason);
+      votes.set(coin, e);
+    });
+  }
+  return [...votes.entries()]
+    .map(([coin, e]) => ({ coin, e, v: e.v * (inDanger ? (safe.has(coin) ? 1.5 : 0.25) : 1) }))
+    .sort((a, b) => b.v - a.v)
+    .slice(0, size)
+    .map(({ coin, e }) => ({ coin, reason: e.reasons.join(" | ").slice(0, 300), probation: false, addedAt: now }));
+}
 
 /** The rule language, briefly, for brains that may write a skill. */
 export const DSL_GUIDE = `A skill is JSON: {"id":"lowercase_id","name":"...","family":"trend|breakout|momentum|mean_reversion|hybrid","description":"...",
@@ -67,6 +98,9 @@ export interface SurvivalOpts {
   maxCallsPerDay: number;
   /** Minimum time between two councils for one bee. */
   cooldownMs?: number;
+  /** BRAIN_WATCHLIST: the council also chooses the bee's coins. Live coins, most liquid first. */
+  watchlist?: boolean;
+  universe?: () => CoinInfo[];
   now?: () => number;
 }
 
@@ -77,6 +111,7 @@ export interface CouncilOutcome {
   skills: PlaybookSkill[];
   newSkills: Array<{ id: string; accepted: boolean; why: string }>;
   lessons: string[];
+  coins?: string[];
 }
 
 /** Lab history cached for `bar`, or two seeded synthetic markets when there is none. */
@@ -182,6 +217,12 @@ export class SurvivalCouncil {
           ? `${bee.name} reached level ${evo.level} (${evo.points} points) by making money. Its prize: this council may add skills${perks.canAuthorSkills ? " and write a new one" : ""}.`
           : `The owner called this council for ${bee.name} (health ${evo.health.toFixed(1)}%, level ${evo.level}).`;
 
+    const hive = contextFor(graph, bee.slot);
+    const universe = this.o.watchlist ? (this.o.universe?.() ?? []) : [];
+    const watchSize = watchlistSize(evo.level, evo.tier);
+    const watch = this.o.watchlist
+      ? watchInput({ style: bee.style, ownerCoins: bee.coins, universe, ranking, adoptedSkills: current.map((s) => s.id), record: hive.tradeRecord })
+      : null;
     const answers: Array<{ brain: BrainId; a: AnswerT }> = [];
     for (const b of brains) {
       const client = this.o.clients[b]!;
@@ -192,6 +233,9 @@ export class SurvivalCouncil {
         mayAuthor
           ? `You MAY write one new skill in newSkillJson. It will be backtested walk-forward and adopted only if it holds up out of sample. ${DSL_GUIDE}`
           : "Leave newSkillJson empty: this bee has not earned the right to write skills yet.",
+        watch?.candidates.length
+          ? `${WATCHLIST_PROMPT}${inDanger ? " Survival first: pick only liquid coins where the bee's skills held up, no experiments." : ""}`
+          : "Leave coins empty.",
         answers.length ? "Other brains on this council already answered (see teammates): combine the best of their advice with your own view, or say why you disagree." : "",
         "Write one lesson worth remembering and one short message to the other bees. Paper trading only; not financial advice.",
       ]
@@ -207,12 +251,13 @@ export class SurvivalCouncil {
             ? { id, family: r.family, score: +r.score.toFixed(2), oosReturnPct: +r.oos.returnPct.toFixed(1), maxDrawdownPct: +r.oos.maxDrawdownPct.toFixed(1), stabilityPct: Math.round(r.stabilityPct), overfitGap: +r.overfitGap.toFixed(2) }
             : { id };
         }),
-        teammates: answers.map((x) => ({ brain: BRAIN_INFO[x.brain].label, skills: x.a.skills, lesson: x.a.lesson })),
-        hive: contextFor(graph, bee.slot),
+        ...(watch?.candidates.length ? { currentWatchlist: pb?.bees[bee.slot]?.watchlist?.map((w) => w.coin) ?? [], watchlistSize: watchSize, coinCandidates: watch.evidence } : {}),
+        teammates: answers.map((x) => ({ brain: BRAIN_INFO[x.brain].label, skills: x.a.skills, coins: x.a.coins?.map((c) => c.coin) ?? [], lesson: x.a.lesson })),
+        hive,
       });
       try {
         const r = await client.json({ system, user, schema: SCHEMA, name: "survival_council", validate: Answer, maxTokens: 12000 });
-        answers.push({ brain: b, a: r.data });
+        answers.push({ brain: b, a: { ...r.data, coins: r.data.coins ?? [] } });
       } catch (err) {
         log.warn("survival council: brain failed", { bee: bee.slot, brain: b, err: safeError(err) });
       }
@@ -276,6 +321,15 @@ export class SurvivalCouncil {
     }
     const msg = answers.map((x) => x.a.message.trim()).find(Boolean);
     if (msg) graph.post(beeId, "hive", msg, { brains: answers.map((x) => x.brain).join("+"), source: `${reason} council` });
+    let watchlist: WatchItem[] | undefined;
+    if (watch?.candidates.length) {
+      const liquid = universe.map((c) => c.coin);
+      watchlist = combineCoins(answers.map((x) => x.a.coins), watch.candidates, watchSize, inDanger, liquid, this.now());
+      if (watchlist.length) {
+        graph.unlink(beeId, "watches");
+        for (const w of watchlist) graph.link(beeId, "watches", graph.upsert("coin", w.coin, w.coin), 1, { reason: w.reason, source: `${reason} council` });
+      } else watchlist = undefined;
+    }
     if (answers.length) {
       graph.unlink(beeId, "adopts");
       for (const s of skills) graph.link(beeId, "adopts", skillNode(s.id), s.weight, { params: s.params, reason: s.reason });
@@ -287,12 +341,13 @@ export class SurvivalCouncil {
         lessons: [...lessons, ...(latest.bees[bee.slot]?.lessons ?? [])].slice(0, 10),
         message: msg ?? latest.bees[bee.slot]?.message ?? "",
         decidedAt: this.now(),
+        ...((watchlist ?? latest.bees[bee.slot]?.watchlist) ? { watchlist: watchlist ?? latest.bees[bee.slot]!.watchlist } : {}),
       };
       latest.updatedAt = this.now();
       savePlaybook(this.o.playbookPath, latest);
     }
     log.info("survival council held", { bee: bee.slot, reason, brains: answers.map((x) => x.brain).join("+"), skills: skills.map((s) => s.id).join(","), newSkills: newSkills.map((n) => `${n.id}:${n.accepted}`).join(",") });
-    return { bee: bee.slot, reason, brains: answers.map((x) => x.brain), skills, newSkills, lessons };
+    return { bee: bee.slot, reason, brains: answers.map((x) => x.brain), skills, newSkills, lessons, ...(watchlist ? { coins: watchlist.map((w) => w.coin) } : {}) };
   }
 }
 

@@ -64,6 +64,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   { key: "JEV_DAILY_USD_CAP", group: "brains", label: "Jev daily cap (USD)", help: "Hard daily Jev spend. When hit, every bee holds until 00:00 UTC.", type: "number", min: 0, max: 100, step: 0.1 },
   // learning
   { key: "LAB_SIGNALS", group: "learning", label: "Show Jev the lab vote", help: "Adds each bee's playbook skill vote per coin to Jev's state, as a tiebreaker. The risk layer is unchanged.", type: "bool" },
+  { key: "BRAIN_WATCHLIST", group: "learning", label: "AI-chosen coins", help: "The brains pick each bee's watchlist from lab evidence, its record and liquidity. Owner coins, style and survival tier still limit it.", type: "bool" },
   num("COACH_INTERVAL_MIN", "learning", "Coach every (min)", "Each brain reviews its bee's real results and re-weights its skills. 0 = off.", 0, 10_080),
   num("COACH_MAX_CALLS_DAY", "learning", "Coach calls per day", "Hard cap on coach LLM calls per UTC day.", 0, 200),
   // survival and rewards

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { HiveGraph } from "./HiveGraph";
 import { BRAIN_LABEL, FAMILY_LABEL, getJson, when, type GraphJson, type Playbook, type RankedSkill, type Ranking } from "./panelTypes";
+import { WatchChips } from "./WatchChips";
 import { ALL_BEES, beeMeta, TIER_INFO, type EvolutionRow, type Snapshot } from "./types";
 
 type SortKey = "rank" | "return" | "sharpe" | "sqn" | "dd" | "trades" | "stability" | "overfit";
@@ -217,6 +218,12 @@ function PlaybookCards({ playbook }: { playbook: Playbook | null }) {
                     </li>
                   ))}
                 </ul>
+                {p.watchlist && p.watchlist.length > 0 && (
+                  <>
+                    <div className="eyebrow">Coins its brains chose</div>
+                    <WatchChips items={p.watchlist} />
+                  </>
+                )}
                 {p.message && (
                   <>
                     <div className="eyebrow">To the hive</div>
