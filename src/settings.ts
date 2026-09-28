@@ -60,6 +60,18 @@ export function isReservedName(name: string): boolean {
   return RESERVED.has(squash(name));
 }
 
+/** One OKX API key set, and what the last check found (sanitised). */
+const OkxKeys = z.object({
+  apiKey: z.string().trim().min(8).max(200),
+  secretKey: z.string().trim().min(8).max(200),
+  passphrase: z.string().min(1).max(200),
+  checkedAt: z.number(),
+  /** USDC on the account at the last check. */
+  balanceUsd: z.number().nullable(),
+  uidHash: z.string().max(64).nullable(),
+});
+export type OkxKeySet = z.infer<typeof OkxKeys>;
+
 const BeeSchema = z.object({
   name: z
     .string()
@@ -91,6 +103,21 @@ const BeeSchema = z.object({
   brain: z.enum(["openai", "claude", "kimi"]).optional(),
   /** true once a portrait has been generated for this bee (served from the data volume). */
   image: z.boolean().default(false),
+  /**
+   * The bee's own wallet: the money it starts with (and is revived with), in USD. Absent = BEE_START_EQUITY_USD.
+   * Set when the bee is created from the admin panel; the main three share BEE_START_EQUITY_USD (the Hive compares them).
+   */
+  walletUsd: z.number().min(10).max(1_000_000).optional(),
+  /**
+   * The bee's OKX sub-account keys, set (and checked for balance) when it is created. The environment's
+   * BEE<n>_OKX_*_API_* still wins. Never sent to the dashboard or written to a log.
+   */
+  okx: z
+    .object({
+      demo: OkxKeys.optional(),
+      live: OkxKeys.optional(),
+    })
+    .optional(),
 });
 
 export const SettingsSchema = z.object({

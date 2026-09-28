@@ -2,7 +2,7 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
 import { BREEZY_COINS } from "./bees/breezy.js";
-import { BEES, ConfigError, type BeeId, loadConfig, STYLES, withOverrides, type Config } from "./config.js";
+import { BEES, ConfigError, type BeeId, loadConfig, startEquityOf, STYLES, withOverrides, type Config } from "./config.js";
 import { Db } from "./db.js";
 import { Engine } from "./engine.js";
 import { EventBus } from "./events.js";
@@ -12,6 +12,7 @@ import { OkxExecutor, SimExecutor, type Executor } from "./exec/executor.js";
 import { checkJevKey, Jev } from "./jev.js";
 import { log, setLogLevel } from "./log.js";
 import { MarketFeed } from "./market/data.js";
+import { checkOkxAccount } from "./okx/account.js";
 import { createOkxCli } from "./okx/cli.js";
 import { createNewsSource } from "./okx/news.js";
 import { createPublicApi } from "./okx/public.js";
@@ -219,7 +220,7 @@ async function main() {
     /* start fresh */
   }
   const evolution = new Evolution(
-    { ...cfg.evolution, deathPct: cfg.risk.retireAtPct, startEquityUsd: cfg.risk.startEquityUsd },
+    { ...cfg.evolution, deathPct: cfg.risk.retireAtPct, startEquityUsd: cfg.risk.startEquityUsd, startOf: (id) => startEquityOf(cfg, id) },
     savedEvolution,
     onEvolution,
   );
@@ -357,6 +358,7 @@ async function main() {
       anthropic: (k) => checkClaudeKey(k),
       kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
     },
+    okxCheck: (creds, kind, walletUsd) => checkOkxAccount(cli, creds, kind, walletUsd),
     anthropicLogin: {
       profile: ANTHROPIC_PROFILE,
       active: () => hasAnthropicLogin(),

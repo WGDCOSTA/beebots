@@ -7,7 +7,7 @@ import { STYLES } from "./settings.js";
 import { dynamicRatchetStop } from "./bees/ratchet.js";
 import { allPositions, maxNotionalUsd, minutesSince, positionNotional, profitLockStop, uplUsd } from "./bees/common.js";
 import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Menu, type Position, type Side } from "./bees/types.js";
-import type { BeeId, Config } from "./config.js";
+import { startEquityOf, type BeeId, type Config } from "./config.js";
 import type { Alerts } from "./alerts.js";
 import type { Db } from "./db.js";
 import type { EventBus } from "./events.js";
@@ -167,7 +167,7 @@ export class Engine {
     }
 
     for (const id of this.ids) {
-      this.bees[id] = db.loadBee(id) ?? freshBee(id, cfg.risk.startEquityUsd, this.now());
+      this.bees[id] = db.loadBee(id) ?? freshBee(id, startEquityOf(cfg, id), this.now());
       await this.d.exec.init(id);
       try {
         const saved = JSON.parse(db.getMeta(`spec_${id}`) ?? "null") as ActiveSpec | null;
@@ -202,7 +202,7 @@ export class Engine {
     const b = this.bees[id];
     if (b.position) throw new Error("This bee still holds a position; it must be flat before it can be revived.");
     const now = this.now();
-    this.bees[id] = freshBee(id, this.d.cfg.risk.startEquityUsd, now);
+    this.bees[id] = freshBee(id, startEquityOf(this.d.cfg, id), now);
     this.d.db.saveBee(this.bees[id], now);
     this.d.evolution?.revive(id, this.bees[id].equityUsd, now);
     this.saveEvolution();
@@ -679,7 +679,7 @@ export class Engine {
   private liveChip(id: BeeId) {
     const b = this.bees[id];
     const p = b.position;
-    const value = p ? b.uplUsd : b.equityUsd - this.d.cfg.risk.startEquityUsd;
+    const value = p ? b.uplUsd : b.equityUsd - startEquityOf(this.d.cfg, id);
     const prev = this.lastChipUsd[id];
     this.lastChipUsd[id] = value;
     return {
@@ -1147,12 +1147,13 @@ export class Engine {
     const p = b.position;
     const inst = p ? view.instruments.get(p.instId) : undefined;
     const mid = p ? view.tickers.get(p.instId)?.mid : undefined;
-    const start = this.d.cfg.risk.startEquityUsd;
+    const start = startEquityOf(this.d.cfg, id);
     const knobs = this.knobs(id);
     const r2 = (x: number) => Number(x.toFixed(2));
     return {
       bee: id,
       equityUsd: r2(b.equityUsd),
+      startEquityUsd: r2(start),
       pnlUsd: r2(b.equityUsd - start),
       pnlPct: r2(((b.equityUsd - start) / start) * 100),
       position: p

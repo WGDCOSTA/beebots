@@ -114,6 +114,29 @@ export interface JobStatus {
 
 export type KeyName = "jev" | "openai" | "anthropic" | "kimi";
 
+export type ExchangeKind = "demo" | "live";
+/** A bee's OKX keys as the panel may see them: never the keys, only where they come from and the last check. */
+export interface ExchangeStatus {
+  set: boolean;
+  source: "env" | "settings" | null;
+  checkedAt: number | null;
+  balanceUsd: number | null;
+}
+/** What POST /admin/exchange/check found (read-only, nothing saved). */
+export interface ExchangeCheck {
+  ok: boolean;
+  ready: boolean;
+  kind: ExchangeKind;
+  perms: string[];
+  canTrade: boolean;
+  canWithdraw: boolean;
+  subAccount: boolean;
+  ipBound: boolean;
+  usdcUsd: number | null;
+  problems: string[];
+  warnings: string[];
+}
+
 export interface AdminState {
   mode: "dry" | "demo" | "live";
   version: string;
@@ -122,8 +145,29 @@ export interface AdminState {
   keys: Record<KeyName, { set: boolean; source: "env" | "settings" | "login" | null }>;
   /** Claude through an Anthropic Console sign-in instead of a key (`ant auth login` in the engine container). */
   anthropicLogin: { profile: string; active: boolean; command: string } | null;
-  bees: Array<{ slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; image: boolean; brain: string | null; market?: string; extra: boolean; running: boolean; flat: boolean }> | null;
+  bees: Array<{
+    slot: string;
+    name: string;
+    tagline: string;
+    rules: string;
+    coins: string[];
+    style: string;
+    image: boolean;
+    brain: string | null;
+    market?: string;
+    extra: boolean;
+    running: boolean;
+    flat: boolean;
+    /** The money it starts with (extra bees: set at creation; main three: the shared start equity). */
+    walletUsd: number;
+    exchange: Record<ExchangeKind, ExchangeStatus>;
+  }> | null;
   maxBees: number;
+  defaultWalletUsd: number;
+  /** Outside paper trading: the OKX environment a new bee must be connected to before it is created. */
+  exchangeRequired: ExchangeKind | null;
+  /** The server can check OKX keys. */
+  exchangeCheck: boolean;
   /** Coins with a live X-Perp right now ([] before the market loads: free text then). */
   coins: string[];
   /** Stocks and commodities with a live X-Perp (the macro squad's picker). */

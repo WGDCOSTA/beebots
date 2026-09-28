@@ -180,9 +180,23 @@ too (without the live market: its candidates come from the owner, the style, the
 The three main bees are the live dashboard's columns, Setup's bees and the Hive's slots. From **Admin → Bees** the
 owner can add up to six more (slots `bee4`..`bee9`, nine in all), each with its own name, style, assets, rules and
 brain (ChatGPT, Claude or Kimi), and edit the assets every bee may trade (chips from OKX's live coin list). New bees
-start with fresh paper money after a restart; only the last bees can be removed, and only while flat. Extra bees race
-in the leaderboard, the "Challengers" card, the lab and the councils; the Hive shows the main three. Outside paper
-trading an extra bee needs its own exchange keys in `.env` (`BEE4_OKX_DEMO_API_KEY`, …) or it sits out.
+start after a restart; only the last bees can be removed, and only while flat. Extra bees race in the leaderboard, the
+"Challengers" card, the lab and the councils; the Hive shows the main three.
+
+Creating a bee has two steps: **1. Bee & brain** (name, style, market, assets, rules, brain), then **2. Wallet &
+exchange**:
+
+- **Wallet**: the money the bee starts with (and is revived with), instead of the shared `BEE_START_EQUITY_USD`. Its
+  P&L, health, survival tiers and death line are all measured from it. It is fixed once the bee trades. The main three
+  keep sharing `BEE_START_EQUITY_USD` (Settings → Risk) so the Hive can compare them.
+- **OKX sub-account**: key, secret and passphrase for demo or live. **Test connection & balance** runs a read-only
+  check (`src/okx/account.ts`, no orders, no transfers): the keys answer, they have Trade and no Withdraw permission,
+  they belong to a sub-account not already used by another bee, and it holds at least the wallet in USDC.
+- Outside paper trading (`MODE=demo` or `live`) a new bee is **not created** until it has keys for that mode that pass
+  the check; the server repeats the check when the bee is saved. On paper the keys are optional.
+- The keys are stored in the Setup file (owner-only permissions), are write-only (the page only sees where they
+  come from and the last balance), and any `BEE<n>_OKX_*` keys in `.env` still win. Keys can be replaced while the bee
+  is flat. The trading mode and `LIVE_ACK` remain `.env` decisions.
 
 ## Autonomy: each bee chooses its own method
 

@@ -26,6 +26,8 @@ export interface LastDecision {
 export interface PublicBee {
   bee: BeeName;
   equityUsd: number;
+  /** What this bee started with (its own wallet, or the shared start equity). */
+  startEquityUsd?: number;
   pnlUsd: number;
   pnlPct: number;
   position: {

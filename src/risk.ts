@@ -2,6 +2,7 @@
 // Pure: no I/O, no clock, no randomness. Every veto, shrink and force says why.
 
 import { exposureUsd, maxNotionalUsd, minutesSince, positionNotional } from "./bees/common.js";
+import { startEquityOf } from "./config.js";
 import type { Action, BeeBrain, BeeContext, CapReason, Intent } from "./bees/types.js";
 
 export type { Action } from "./bees/types.js";
@@ -58,7 +59,7 @@ export function evaluateCaps(ctx: BeeContext): { cap: CapReason | null; tripped:
     return tripped;
   };
   if (cap === "retired") return { cap, tripped: null };
-  if (bee.equityUsd <= cfg.risk.startEquityUsd * (cfg.risk.retireAtPct / 100)) return { cap: "retired", tripped: set("retired") };
+  if (bee.equityUsd <= startEquityOf(cfg, bee.id) * (cfg.risk.retireAtPct / 100)) return { cap: "retired", tripped: set("retired") };
   if (cap === "loss_stop") return { cap, tripped: null };
   if (bee.equityUsd <= bee.dayStartEquityUsd * (1 - cfg.risk.dailyLossStopPct / 100)) return { cap: "loss_stop", tripped: set("loss_stop") };
   if (cap) return { cap, tripped: null };
