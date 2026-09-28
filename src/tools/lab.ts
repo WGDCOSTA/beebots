@@ -3,6 +3,9 @@
 //   pnpm lab fetch   [--inst BTC-USDT-SWAP,ETH-USDT-SWAP] [--bar 1H] [--days 365] [--base https://www.okx.com]
 //   pnpm lab fetch   --exchange binance --symbol BTC/USDT,ETH/USDT [--bar 1H] [--days 365]   any of CCXT's 100+ exchanges
 //   pnpm lab import  <file.csv|file.json> --inst NAME [--bar 1H] CSV, or a Freqtrade data file (BTC_USDT-1h.json)
+//   pnpm lab fetch   --bar 1m --days 14                          1-minute history for the scalper (5m: --days 60)
+//   pnpm lab scalp   [--inst BTC-USDT-SWAP,ETH-USDT-SWAP] [--synthetic 2] [--maker-fee 0.0002] [--taker-fee 0.0005]
+//                    [--slippage 1] [--half-spread 0.5] [--through 0.5] [--folds 4]   does a 1m scalp survive its costs?
 //   pnpm lab skills                                              list every skill (built-in + ./skills/*.json)
 //   pnpm lab run     [--bar 1H] [--inst ...] [--synthetic 4] [--folds 3] [--leverage 1] [--fee 0.0005] [--long-only]
 //   pnpm lab council                                             each bee's brain picks skills from the last ranking
@@ -25,6 +28,7 @@ import { BEES, labEnv, MAX_BEES, slotId, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
 import { consolidate, explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "../graph/memory.js";
+import { buildScalpReport, saveScalpReport, scalpGate, scalpReportMarkdown, type CostModel } from "../lab/scalp.js";
 import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
 import { skillRegistry, type Skill } from "../lab/skills/index.js";
 import { rankingTable, runTournament, type Ranking } from "../lab/tournament.js";
@@ -64,6 +68,8 @@ const env = labEnv(withOverrides(process.env, loadOverrides(SETTINGS_PATH)), set
 const historyDir = join(env.dir, "history");
 const rankingPath = join(env.dir, "ranking.json");
 const bar = (f: Record<string, string>) => (f.bar ?? "1H") as Bar;
+/** How far back to fetch by default: 1-minute history is 1,440 rows a day, so it starts short. */
+const defaultDays = (f: Record<string, string>) => Number(f.days ?? (bar(f) === "1m" ? 14 : bar(f) === "5m" ? 60 : 365));
 const insts = (f: Record<string, string>) => (f.inst ? f.inst.split(",").map((s) => s.trim()).filter(Boolean) : null);
 
 function councilBees(): CouncilBee[] {
@@ -90,7 +96,7 @@ function councilBees(): CouncilBee[] {
 async function cmdFetchCcxt(f: Record<string, string>) {
   const exchange = f.exchange!;
   const ex = await ccxtExchange(exchange);
-  const days = Number(f.days ?? 365);
+  const days = defaultDays(f);
   for (const symbol of (f.symbol ?? "BTC/USDT,ETH/USDT,SOL/USDT").split(",").map((x) => x.trim()).filter(Boolean)) {
     const name = `${exchange}-${symbol.replace(/[/:]/g, "-")}`;
     process.stdout.write(`fetching ${symbol} on ${exchange} ${bar(f)} (${days} days)... `);
@@ -110,7 +116,7 @@ async function cmdFetchCcxt(f: Record<string, string>) {
 async function cmdFetch(f: Record<string, string>) {
   if (f.exchange) return cmdFetchCcxt(f);
   const rest = createOkxPublicRest({ apiBase: (f.base ?? "https://www.okx.com").replace(/\/+$/, ""), timeoutMs: 15_000 });
-  const days = Number(f.days ?? 365);
+  const days = defaultDays(f);
   for (const instId of insts(f) ?? DEFAULT_INSTS) {
     process.stdout.write(`fetching ${instId} ${bar(f)} (${days} days)... `);
     try {
@@ -151,6 +157,32 @@ function loadDatasets(f: Record<string, string>): Dataset[] {
     if (c && c.length > 300) out.push({ id: `${instId} ${b}`, instId, bar: b, candles: c, source: /^[a-z0-9]+-/.test(instId) ? "ccxt" : "okx" });
   }
   return out;
+}
+
+function cmdScalp(f: Record<string, string>) {
+  const g = { ...f, bar: f.bar ?? "1m" };
+  const datasets = loadDatasets(g);
+  if (!datasets.length) throw new Error(`No 1-minute history in ${historyDir}. Run "pnpm lab fetch --bar 1m --days 14" first, or add --synthetic 2 for an offline run (synthetic data never opens the scalper's gate).`);
+  const num = (k: string, d: number) => (f[k] !== undefined ? Number(f[k]) : d);
+  const costs: CostModel = {
+    makerFee: num("maker-fee", 0.0002),
+    takerFee: num("taker-fee", env.takerFeeRate),
+    slippageBps: num("slippage", 1),
+    halfSpreadBps: num("half-spread", 0.5),
+    throughBps: num("through", 0.5),
+  };
+  console.log(`scalper lab: ${datasets.map((d) => `${d.id}:${d.candles.length}`).join(", ")}; maker ${costs.makerFee * 1e4} bp, taker ${costs.takerFee * 1e4} bp`);
+  const t0 = Date.now();
+  const report = buildScalpReport(
+    datasets.map((d) => ({ id: d.id, candles: d.candles, synthetic: d.source === "synthetic" })),
+    undefined,
+    { costs, folds: num("folds", 4) },
+  );
+  console.log(`done in ${((Date.now() - t0) / 1000).toFixed(1)} s\n`);
+  console.log(scalpReportMarkdown(report));
+  console.log(`report -> ${saveScalpReport(env.dir, report)}`);
+  const gate = scalpGate(report);
+  console.log(`gate for the live scalper: ${gate.open ? "OPEN" : "CLOSED"} (${gate.reason})`);
 }
 
 function longOnly(skills: Skill[]): Skill[] {
@@ -316,6 +348,8 @@ async function main() {
     case "csv":
     case "import":
       return cmdCsv(pos, f);
+    case "scalp":
+      return cmdScalp(f);
     case "skills":
       return cmdSkills();
     case "run":

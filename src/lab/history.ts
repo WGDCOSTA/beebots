@@ -7,8 +7,9 @@ import type { Candle } from "../market/types.js";
 import { parseCandles } from "../okx/public.js";
 import type { OkxPublicRest } from "../okx/rest.js";
 
-export type Bar = "15m" | "1H" | "4H" | "1D";
-export const BAR_MS: Record<Bar, number> = { "15m": 900_000, "1H": 3_600_000, "4H": 14_400_000, "1D": 86_400_000 };
+export type Bar = "1m" | "5m" | "15m" | "30m" | "1H" | "4H" | "1D";
+export const BAR_MS: Record<Bar, number> = { "1m": 60_000, "5m": 300_000, "15m": 900_000, "30m": 1_800_000, "1H": 3_600_000, "4H": 14_400_000, "1D": 86_400_000 };
+export const BARS = Object.keys(BAR_MS) as Bar[];
 
 export interface Dataset {
   /** e.g. "BTC-USDT-SWAP 1H" */
@@ -45,7 +46,7 @@ export interface OhlcvExchange {
   fetchOHLCV(symbol: string, timeframe?: string, since?: number, limit?: number): Promise<Array<Array<number | string | undefined>>>;
 }
 
-export const CCXT_TIMEFRAME: Record<Bar, string> = { "15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d" };
+export const CCXT_TIMEFRAME: Record<Bar, string> = { "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m", "1H": "1h", "4H": "4h", "1D": "1d" };
 
 /** CCXT / Freqtrade rows [ts, open, high, low, close, volume(base)] -> candles (volume in USD ~ base x close). */
 export function ohlcvRows(rows: Array<Array<number | string | undefined | null>>): Candle[] {
@@ -135,6 +136,45 @@ export function parseCsv(text: string): Candle[] {
     const rawT = f[iT]!.trim();
     const ts = /^\d+$/.test(rawT) ? Number(rawT) * (rawT.length <= 10 ? 1000 : 1) : Date.parse(rawT);
     const x = { ts, o: +f[iO]!, h: +f[iH]!, l: +f[iL]!, c: +f[iC]!, volUsd: iV >= 0 ? +f[iV]! : 0, confirmed: true };
+    if ([x.ts, x.o, x.h, x.l, x.c].every(Number.isFinite)) out.push(x);
+  }
+  return out.sort((a, b) => a.ts - b.ts);
+}
+
+/**
+ * MetaTrader 5 "Export bars" CSV: tab- or comma-separated with <DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL>
+ * <VOL> <SPREAD> (dates like 2024.01.02, times like 09:30:00; daily files have no <TIME>). Times are the broker
+ * server's clock: pass `utcOffsetHours` (server time minus UTC) to store UTC. `spread` is in points (kept per bar so
+ * the gold engine can replay the real spread history); `pointSize` converts it to price units (XAUUSD is usually 0.01).
+ */
+export interface Mt5Bar extends Candle {
+  /** Spread in price units, when the export carries it. */
+  spread?: number;
+}
+export function parseMt5Csv(text: string, opts: { utcOffsetHours?: number; pointSize?: number } = {}): Mt5Bar[] {
+  const lines = text.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+  const sep = lines[0]!.includes("\t") ? "\t" : lines[0]!.includes(";") ? ";" : ",";
+  const head = lines.shift()!.split(sep).map((h) => h.replace(/[<>]/g, "").trim().toLowerCase());
+  const col = (...n: string[]) => head.findIndex((h) => n.includes(h));
+  const iD = col("date");
+  const iT = col("time");
+  const iO = col("open");
+  const iH = col("high");
+  const iL = col("low");
+  const iC = col("close");
+  const iV = col("tickvol", "tick_volume", "volume");
+  const iS = col("spread");
+  if ([iD, iO, iH, iL, iC].some((i) => i < 0)) throw new Error("MT5 CSV needs <DATE>, <OPEN>, <HIGH>, <LOW> and <CLOSE> columns");
+  const off = (opts.utcOffsetHours ?? 0) * 3_600_000;
+  const point = opts.pointSize ?? 0.01;
+  const out: Mt5Bar[] = [];
+  for (const line of lines) {
+    const f = line.split(sep);
+    const d = f[iD]!.trim().replace(/\./g, "-");
+    const t = iT >= 0 ? f[iT]!.trim() : "00:00:00";
+    const ts = Date.parse(`${d}T${t.length === 5 ? `${t}:00` : t}Z`) - off;
+    const x: Mt5Bar = { ts, o: +f[iO]!, h: +f[iH]!, l: +f[iL]!, c: +f[iC]!, volUsd: iV >= 0 ? +f[iV]! : 0, confirmed: true };
+    if (iS >= 0 && Number.isFinite(+f[iS]!)) x.spread = +f[iS]! * point;
     if ([x.ts, x.o, x.h, x.l, x.c].every(Number.isFinite)) out.push(x);
   }
   return out.sort((a, b) => a.ts - b.ts);
