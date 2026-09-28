@@ -32,6 +32,7 @@ import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
 import { SurvivalCouncil } from "./brains/survival.js";
 import { coinInfos, watchlistSize } from "./brains/watchlist.js";
+import { calendarSummary, emptyCalendar, loadCalendar, saveCalendar, SessionRecorder, sessionInfo, watchedHours, type TickSample } from "./market/sessions.js";
 import { Evolution, TIERS, type BeeEvolution, type EvolutionEvent } from "./evolution.js";
 import { beeNode } from "./graph/hive-mind.js";
 import type { Ranking } from "./lab/tournament.js";
@@ -60,6 +61,8 @@ function profile(cfg: Config | null) {
             styleLabel: STYLE_INFO[s.style].label,
             rules: s.rules,
             coins: s.coins,
+            market: s.market,
+            squad: s.squad,
             // A Setup-made bee only ever shows its own portrait (null = the dashboard's placeholder mark), never the
             // original bees' art, which belongs to the three official bees.
             img: s.customImage && imagePath(cfg.settingsPath, id) ? `/bee-image/${id}` : s.fromSetup ? null : `/bees/${s.style}.jpg`,
@@ -125,9 +128,10 @@ async function main() {
     api,
     {
       min24hVolUsd: cfg.universe.min24hVolUsd,
-      allowNonCrypto: cfg.universe.allowNonCrypto,
       spreadGateBps: Math.max(...STYLES.map((s) => cfg.bees[s].spreadGateBps)),
       trendCoins: [...BREEZY_COINS],
+      // Stocks and commodities get gated (and their stats kept) only when a macro bee runs.
+      macro: cfg.beeIds.some((id) => cfg.slots[id].squad === "macro") ? { min24hVolUsd: cfg.macro.min24hVolUsd, spreadGateBps: cfg.macro.spreadGateBps } : null,
     },
     news,
     held,
@@ -156,7 +160,7 @@ async function main() {
   const councilBees: CouncilBee[] = cfg.beeIds.map((id) => {
     const s = cfg.slots[id];
     const brain = cfg.brains.slots[id];
-    return { slot: id, name: s.name, style: s.style, rules: s.rules, coins: s.coins, brain, model: clients[brain]?.model ?? "rules" };
+    return { slot: id, name: s.name, style: s.style, rules: s.rules, coins: s.coins, brain, model: clients[brain]?.model ?? "rules", market: s.market };
   });
   registerBees(graph, councilBees);
   const playbook = new PlaybookWatcher(cfg.lab.playbookPath);
@@ -225,8 +229,31 @@ async function main() {
     universe: () => coinInfos(feed.view()),
   });
 
+  // Trading hours of stocks and commodities, learned from their tickers every minute (market/sessions.ts). Always on,
+  // so the calendar is ready by the time the owner forms a macro squad.
+  const sessions = new SessionRecorder(loadCalendar(cfg.macro.sessionsPath) ?? emptyCalendar(Date.now()));
+  const sampleSessions = () => {
+    const v = feed.view();
+    const ticks: TickSample[] = [];
+    for (const i of v.instruments.values()) {
+      if (i.state !== "live" || (i.kind !== "stock" && i.kind !== "commodity")) continue;
+      const t = v.tickers.get(i.instId);
+      if (t && Number.isFinite(t.ts)) ticks.push({ coin: i.coin, kind: i.kind, ts: t.ts, last: t.last, vol24h: t.vol24hUsd, spreadBp: t.spreadBp });
+    }
+    if (ticks.length) sessions.sample(ticks, Date.now());
+  };
+  const saveSessions = () => {
+    try {
+      saveCalendar(cfg.macro.sessionsPath, sessions.calendar);
+    } catch (err) {
+      log.warn("sessions: save failed", { err: safeError(err) });
+    }
+  };
+  const sessionTimers = [setInterval(sampleSessions, 60_000), setInterval(saveSessions, 10 * 60_000)];
+
   engine = new Engine({
     cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
+    sessions: () => sessions.calendar,
     ...(cfg.lab.watchlist ? { watchlist: (id: BeeId) => playbook.get()?.bees[id]?.watchlist ?? null } : {}),
     ...(signals
       ? {
@@ -333,6 +360,22 @@ async function main() {
       for (const i of feed.view().instruments.values()) if (i.kind === "crypto" && i.state === "live") set.add(i.coin);
       return [...set].sort();
     },
+    macroCoins: () => {
+      const c = new Set<string>();
+      const s = new Set<string>();
+      for (const i of feed.view().instruments.values()) {
+        if (i.state !== "live" || !i.instId.includes("_UM_XPERP-")) continue;
+        if (i.kind === "commodity") c.add(i.coin);
+        if (i.kind === "stock") s.add(i.coin);
+      }
+      return { commodities: [...c].sort(), stocks: [...s].sort() };
+    },
+    sessions: () => ({
+      watchedHours: watchedHours(sessions.calendar, Date.now()),
+      allowNonCrypto: cfg.universe.allowNonCrypto,
+      noOpenMin: cfg.macro.noOpenMin,
+      coins: calendarSummary(sessions.calendar).map((c) => ({ ...c, now: sessionInfo(sessions.calendar, c.coin, Date.now()) })),
+    }),
     runningBees: () => cfg.beeIds,
     isFlat: (id) => !engine?.bees[id]?.position,
     forgetBee: (id) => {
@@ -371,6 +414,8 @@ async function main() {
   const shutdown = (sig: string) => {
     log.info("shutting down", { sig });
     engine?.stop();
+    for (const t of sessionTimers) clearInterval(t);
+    saveSessions();
     coach.stop();
     graph.close();
     hive.stop();

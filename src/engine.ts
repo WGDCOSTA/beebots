@@ -15,6 +15,8 @@ import type { MarketFeed } from "./market/data.js";
 import { safeError } from "./redact.js";
 import { SURVIVAL_NOTE, type Evolution } from "./evolution.js";
 import { effectiveWatchlist, watchlistLine, type WatchItem } from "./brains/watchlist.js";
+import { marketKinds, mayOpen, sessionInfo, sessionLabel, SESSION_NOTE, type SessionCalendar } from "./market/sessions.js";
+import type { MarketView } from "./market/types.js";
 import { applyRisk, type JevStatus, type Proposal } from "./risk.js";
 import { buildSnapshot } from "./snapshot.js";
 
@@ -52,6 +54,11 @@ export interface EngineDeps {
    * after the owner's coins, the style and the survival tier (brains/watchlist.ts); probation coins trade at half size.
    */
   watchlist?: (id: BeeId) => WatchItem[] | null | undefined;
+  /**
+   * The trading-hours calendar learned from the market (market/sessions.ts). Macro bees (stocks, commodities) may only
+   * open a coin whose session is verified open and stays open SESSION_NO_OPEN_MIN more; no calendar = nothing opens.
+   */
+  sessions?: () => SessionCalendar | null;
 }
 
 interface LastDecision {
@@ -253,12 +260,40 @@ export class Engine {
     const cfg = boost > 0 ? { ...this.d.cfg, risk: { ...this.d.cfg.risk, maxNotionalUsdPerBee: this.d.cfg.risk.maxNotionalUsdPerBee * (1 + boost) } } : this.d.cfg;
     return {
       bee,
-      view: this.d.feed.view(),
+      view: this.viewFor(id, now),
       cfg,
       knobs: this.knobs(id),
       now,
       uplR: p && p.riskUsd > 0 ? bee.uplUsd / p.riskUsd : null,
     };
+  }
+
+  /**
+   * What a bee may trade. Crypto bees: the crypto universe. Macro bees: the gated stocks/commodities of their market
+   * whose session is open right now (and only with ALLOW_NON_CRYPTO); the coin they hold stays in their stats.
+   */
+  private viewFor(id: BeeId, now: number): MarketView {
+    const v = this.d.feed.view();
+    const s = this.d.cfg.slots[id];
+    if (s.market === "crypto") return v;
+    const kinds = marketKinds(s.market);
+    const cal = this.d.sessions?.() ?? null;
+    const gated = this.d.cfg.universe.allowNonCrypto
+      ? v.macro.filter((instId) => {
+          const inst = v.instruments.get(instId);
+          return !!inst && kinds.includes(inst.kind) && mayOpen(sessionInfo(cal, inst.coin, now), this.d.cfg.macro.noOpenMin);
+        })
+      : [];
+    return { ...v, gated, spreadBlocked: [] };
+  }
+
+  /** Macro bees: each coin's session for Jev (the coins it sees and the one it holds). */
+  private sessionState(id: BeeId, coins: string[], now: number): Record<string, string> | null {
+    if (this.d.cfg.slots[id].market === "crypto") return null;
+    const cal = this.d.sessions?.() ?? null;
+    const held = this.bees[id].position?.instId.split("-")[0];
+    const all = [...new Set([...coins, ...(held ? [held] : [])])];
+    return all.length ? Object.fromEntries(all.map((c) => [c, sessionLabel(sessionInfo(cal, c, now))])) : null;
   }
 
   private markBee(id: BeeId, now: number) {
@@ -309,7 +344,9 @@ export class Engine {
       log.warn("lab votes failed", { bee: id, err: safeError(err) });
     }
     const survival = this.d.evolution?.state(id) ?? null;
-    const snap = buildSnapshot(brain, ctx, lab || survival ? { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}) } : null);
+    const session = this.sessionState(id, brain.snapshotCoins(ctx).map((i) => i.split("-")[0]!), now);
+    const extra = { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}), ...(session ? { session } : {}) };
+    const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null);
     if (brain.id === "boozy" && bee.top1.coin) snap.state.top1 = `${bee.top1.coin} x${bee.top1.streak}`;
 
     let jevStatus: JevStatus = "ok";
@@ -322,7 +359,7 @@ export class Engine {
     else if (labels.length === 0) jevStatus = "no_options";
     else if (required) r = requiredAnswer(labels[0]!);
     else {
-      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null].filter(Boolean).join(" ");
+      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null].filter(Boolean).join(" ");
       r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
     }
@@ -821,9 +858,10 @@ export class Engine {
         enabled: true,
         picks: this.d.watchlist(id),
         style: s.style,
+        market: s.market,
         ownerCoins: s.coins.map((c) => c.toUpperCase()),
         tier: this.d.evolution?.bees[id]?.tier ?? null,
-        liquid: this.d.feed.view().gated.map((i) => i.split("-")[0]!.toUpperCase()),
+        liquid: (s.market === "crypto" ? this.d.feed.view().gated : this.d.feed.view().macro).map((i) => i.split("-")[0]!.toUpperCase()),
       });
     } catch (err) {
       log.warn("watchlist failed", { bee: id, err: safeError(err) });

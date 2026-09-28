@@ -17,7 +17,7 @@ import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
-import { BeeSchema, isReservedName, loadOverrides, loadSettings, saveOverrides, saveSettings, STYLE_INFO, STYLES, type Settings } from "../settings.js";
+import { BeeSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
 
@@ -58,6 +58,10 @@ export interface AdminOpts {
   restart: () => void;
   /** Coins with a live X-Perp right now (for the asset picker); [] when the market is not loaded yet. */
   coins?: () => string[];
+  /** Stocks and commodities with a live X-Perp right now (the macro squad's picker). */
+  macroCoins?: () => { commodities: string[]; stocks: string[] };
+  /** The trading-hours calendar the engine is learning (market/sessions.ts), summarised. */
+  sessions?: () => unknown;
   /** Bees the running engine trades, and whether one is flat (a bee may only be removed flat). */
   runningBees?: () => BeeId[];
   isFlat?: (id: BeeId) => boolean;
@@ -89,6 +93,8 @@ const BeeEdit = z.object({
   style: z.enum(STYLES),
   /** Extra bees only: which LLM brain it thinks with. */
   brain: z.enum(["openai", "claude", "kimi"]).optional(),
+  /** Extra bees only: what it trades (the macro squad trades stocks and commodities). */
+  market: z.enum(MARKETS).optional(),
 });
 const BeesBody = z.object({ bees: z.array(BeeEdit).min(BEES.length).max(MAX_BEES) });
 const SlotBody = z.object({ bee: z.string() });
@@ -158,6 +164,7 @@ export class Admin {
             style: b.style,
             image: b.image,
             brain: b.brain ?? null,
+            market: i >= BEES.length ? (b.market ?? "crypto") : "crypto",
             extra: i >= BEES.length,
             running: this.o.runningBees?.().includes(slotId(i)) ?? true,
             flat: this.o.isFlat?.(slotId(i)) ?? true,
@@ -165,6 +172,9 @@ export class Admin {
         : null,
       maxBees: MAX_BEES,
       coins: this.o.coins?.() ?? [],
+      macroCoins: this.o.macroCoins?.() ?? { commodities: [], stocks: [] },
+      markets: MARKETS.map((m) => ({ id: m, ...MARKET_INFO[m] })),
+      sessions: this.o.sessions?.() ?? null,
       evolution: this.o.evolution?.() ?? null,
       styles: STYLES.map((s) => ({ id: s, label: STYLE_INFO[s].label, blurb: STYLE_INFO[s].blurb })),
       groups: FIELD_GROUPS.map((g) => ({ id: g, ...GROUP_INFO[g] })),
@@ -292,10 +302,16 @@ export class Admin {
         const removed = s.bees.slice(p.data.bees.length).map((_, i) => slotId(p.data.bees.length + i));
         const holding = removed.filter((id) => this.o.isFlat && !this.o.isFlat(id));
         if (holding.length) return send(res, 409, { error: `${holding.join(", ")} still holds a position; it must be flat before it is removed.` });
-        const known = this.o.coins?.() ?? [];
-        if (known.length) {
-          const bad = [...new Set(p.data.bees.flatMap((b) => b.coins))].filter((c) => !known.includes(c));
-          if (bad.length) return send(res, 400, { error: `Not tradable on OKX right now: ${bad.join(", ")}.` });
+        // Each bee's coins must be live X-Perps of its own market (the main three trade crypto only).
+        const crypto = this.o.coins?.() ?? [];
+        const macro = this.o.macroCoins?.() ?? { commodities: [], stocks: [] };
+        const listFor = (m: MarketId) => (m === "crypto" ? crypto : m === "commodities" ? macro.commodities : m === "stocks" ? macro.stocks : [...macro.commodities, ...macro.stocks]);
+        for (const [i, b] of p.data.bees.entries()) {
+          const m: MarketId = i >= BEES.length ? (b.market ?? s.bees[i]?.market ?? "crypto") : "crypto";
+          const known = listFor(m);
+          if (!known.length) continue; // market not loaded yet
+          const bad = [...new Set(b.coins)].filter((c) => !known.includes(c));
+          if (bad.length) return send(res, 400, { error: `${b.name}: not a live ${MARKET_INFO[m].label} X-Perp on OKX right now: ${bad.join(", ")}.` });
         }
         const reserved = p.data.bees.find((b) => isReservedName(b.name));
         if (reserved) return send(res, 400, { error: `"${reserved.name}" belongs to an official bee.` });
@@ -305,7 +321,11 @@ export class Admin {
           const old = s.bees[i];
           if (!old) added.push(slotId(i));
           const brain = i >= BEES.length ? (b.brain ?? old?.brain) : undefined;
-          return { ...(old ?? { image: false }), name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins), ...(brain ? { brain } : {}) };
+          const market = i >= BEES.length ? (b.market ?? old?.market) : undefined;
+          const next: Settings["bees"][number] = { ...(old ?? { image: false }), name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins), ...(brain ? { brain } : {}) };
+          if (market && market !== "crypto") next.market = market;
+          else delete next.market;
+          return next;
         });
         // A brand-new bee starts with fresh paper money, never with the books of a bee that once had its slot.
         for (const id of added) this.o.forgetBee?.(id);

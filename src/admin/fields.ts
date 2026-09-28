@@ -22,7 +22,7 @@ export interface AdminField {
   secret?: boolean;
 }
 
-export const FIELD_GROUPS = ["brains", "learning", "evolution", "risk", "breakout", "trend", "momentum", "engine"] as const;
+export const FIELD_GROUPS = ["brains", "learning", "evolution", "macro", "risk", "breakout", "trend", "momentum", "engine"] as const;
 export type FieldGroup = (typeof FIELD_GROUPS)[number];
 
 export const GROUP_INFO: Record<FieldGroup, { title: string; help: string }> = {
@@ -31,6 +31,10 @@ export const GROUP_INFO: Record<FieldGroup, { title: string; help: string }> = {
   evolution: {
     title: "Survival & rewards",
     help: "Bees know they can die at the retire line. In danger they trade smaller and their brains meet to save them; profitable bees earn points, levels and prizes.",
+  },
+  macro: {
+    title: "Macro squad (stocks, gold, oil)",
+    help: "Extra bees whose market is commodities, stocks or macro. They open only in trading hours the engine has verified from the market, and only with the master switch on.",
   },
   risk: { title: "Risk (every bee)", help: "Hard limits the risk layer enforces whatever Jev or a brain says." },
   breakout: { title: "Breakout style (Bizzy's)", help: "Knobs for every bee on the Breakout style." },
@@ -81,6 +85,10 @@ export const ADMIN_FIELDS: AdminField[] = [
   num("DAILY_LOSS_STOP_PCT", "risk", "Daily loss stop (%)", "Loss vs the day's start that benches a bee until 00:00 UTC.", 0.5, 100, 0.5),
   num("BEE_RETIRE_AT_PCT", "risk", "Retire below (%)", "A bee whose equity falls below this % of its start retires for good.", 0, 100),
   num("MAX_FLAT_MINUTES", "risk", "Max flat, global (min)", "Upper bound on every style's max flat.", 0, 1440),
+  { key: "ALLOW_NON_CRYPTO", group: "macro", label: "Macro squad may trade", help: "Master switch. Off: macro bees watch and learn only. On: they open stocks/commodities in verified open sessions. Crypto bees stay crypto either way.", type: "bool" },
+  num("MACRO_MIN_24H_VOL_USD", "macro", "Min 24h volume (USD)", "Stocks and commodities trading less are left out of the macro universe.", 0, 1e12),
+  num("MACRO_SPREAD_GATE_BPS", "macro", "Max spread (bp)", "Stocks and commodities quoting wider are left out.", 0, 500),
+  num("SESSION_NO_OPEN_MIN", "macro", "No opens before close (min)", "No new macro position this close to the end of a verified session.", 0, 600),
   num("MIN_24H_VOL_USD", "risk", "Min 24h volume (USD)", "Coins trading less are left out of the universe.", 0, 1e12),
   num("TAKER_FEE_RATE", "risk", "Taker fee rate", "Fee per side used on paper and in the lab (0.0005 = 5 bp).", 0, 0.01, 0.0001),
   num("BEE_START_EQUITY_USD", "risk", "Start equity (USD)", "Paper money per bee. Applies to fresh books only.", 10, 1_000_000),

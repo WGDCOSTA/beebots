@@ -1,7 +1,7 @@
 // #/admin: everything the owner configures, behind the owner password (the same one as joining the Hive).
 // The password lives only in this page's memory; every call sends it and the engine checks it (with a lockout).
 // The trading mode, LIVE_ACK and exchange keys are not here on purpose: real money stays an .env decision.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
 import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
@@ -177,7 +177,14 @@ function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
   );
 }
 
-type BeeDraft = { slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; brain: string; extra: boolean; running: boolean; flat: boolean; isNew?: boolean };
+type BeeDraft = { slot: string; name: string; tagline: string; rules: string; coins: string[]; style: string; brain: string; market: string; extra: boolean; running: boolean; flat: boolean; isNew?: boolean };
+
+/** The macro squad preset: a gold bee, an energy bee and a stocks bee (its brains pick the stocks). */
+const MACRO_SQUAD: Array<Pick<BeeDraft, "name" | "tagline" | "rules" | "coins" | "market">> = [
+  { name: "Goldie", tagline: "the safe haven", rules: "Trade gold and silver. Follow the trend, stay patient, avoid chasing spikes around US data releases.", coins: ["XAU", "XAG"], market: "commodities" },
+  { name: "Crude", tagline: "the oil driller", rules: "Trade WTI and Brent oil. Ride breakouts, cut fast when a move fails.", coins: ["CL", "BZ"], market: "commodities" },
+  { name: "Stonks", tagline: "the tape reader", rules: "Trade liquid stocks and ETFs during the session. Never hold a weak position into the close.", coins: [], market: "stocks" },
+];
 
 /** Asset picker: chips for the coins tradable right now, plus free text when the market is not loaded. */
 function CoinPicker({ all, value, onChange }: { all: string[]; value: string[]; onChange: (c: string[]) => void }) {
@@ -213,7 +220,7 @@ function CoinPicker({ all, value, onChange }: { all: string[]; value: string[]; 
 
 function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
   const [bees, setBees] = useState<BeeDraft[] | null>(
-    () => s.bees?.map((b) => ({ slot: b.slot, name: b.name, tagline: b.tagline, rules: b.rules, coins: b.coins, style: b.style, brain: b.brain ?? "openai", extra: b.extra, running: b.running, flat: b.flat })) ?? null,
+    () => s.bees?.map((b) => ({ slot: b.slot, name: b.name, tagline: b.tagline, rules: b.rules, coins: b.coins, style: b.style, brain: b.brain ?? "openai", market: b.market ?? "crypto", extra: b.extra, running: b.running, flat: b.flat })) ?? null,
   );
   if (!bees) return <div className="pcard">The original three bees run without a Setup file, so there is nothing to edit here. Design your own bees on Setup to customise them.</div>;
   const evo = new Map((s.evolution?.board ?? []).map((r) => [r.bee, r]));
@@ -221,12 +228,28 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
   const add = () =>
     setBees([
       ...bees,
-      { slot: `bee${bees.length + 1}`, name: "", tagline: "", rules: "", coins: [], style: "boozy", brain: ["openai", "claude", "kimi"][bees.length % 3]!, extra: true, running: false, flat: true, isNew: true },
+      { slot: `bee${bees.length + 1}`, name: "", tagline: "", rules: "", coins: [], style: "boozy", brain: ["openai", "claude", "kimi"][bees.length % 3]!, market: "crypto", extra: true, running: false, flat: true, isNew: true },
     ]);
+  const hasSquad = bees.some((b) => b.market !== "crypto");
+  const formSquad = () =>
+    setBees([
+      ...bees,
+      ...MACRO_SQUAD.slice(0, s.maxBees - bees.length).map((m, k) => ({
+        ...m,
+        slot: `bee${bees.length + k + 1}`,
+        style: "boozy",
+        brain: ["claude", "openai", "kimi"][k % 3]!,
+        extra: true,
+        running: false,
+        flat: true,
+        isNew: true,
+      })),
+    ]);
+  const coinsFor = (m: string) => (m === "crypto" ? s.coins : m === "commodities" ? s.macroCoins.commodities : m === "stocks" ? s.macroCoins.stocks : [...s.macroCoins.commodities, ...s.macroCoins.stocks]);
   const save = () =>
     call(
       "bees",
-      { bees: bees.map((b) => ({ name: b.name.trim(), tagline: b.tagline, rules: b.rules, style: b.style, coins: b.coins, ...(b.extra ? { brain: b.brain } : {}) })) },
+      { bees: bees.map((b) => ({ name: b.name.trim(), tagline: b.tagline, rules: b.rules, style: b.style, coins: b.coins, ...(b.extra ? { brain: b.brain, market: b.market } : {}) })) },
       "Bees saved. Restart the engine to apply.",
     );
   const last = bees.length - 1;
@@ -296,10 +319,24 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
                   <div className="plabel dim small">Brain: Settings → Brains and models</div>
                 )}
               </div>
+              {b.extra && (
+                <label className="plabel">
+                  Market
+                  <select className="pinput" value={b.market} onChange={(ev) => set(i, { market: ev.target.value, coins: [] })}>
+                    {s.markets.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                        {m.id !== "crypto" ? " · macro squad" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="dim small">{s.markets.find((m) => m.id === b.market)?.blurb}</span>
+                </label>
+              )}
               <span className="dim small">{s.styles.find((x) => x.id === b.style)?.blurb} Breakout needs coins within BTC/ETH/SOL/HYPE and Trend within BTC/ETH; otherwise the bee runs on Momentum.</span>
               <div className="plabel">
                 Assets it may trade
-                <CoinPicker all={s.coins} value={b.coins} onChange={(c) => set(i, { coins: c })} />
+                <CoinPicker all={coinsFor(b.market)} value={b.coins} onChange={(c) => set(i, { coins: c })} />
               </div>
               {s.lab.playbook?.bees[b.slot]?.watchlist?.length ? (
                 <div className="plabel">
@@ -326,6 +363,13 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
             </div>
           );
         })}
+        {!hasSquad && bees.length + MACRO_SQUAD.length <= s.maxBees && (
+          <button className="pcard add-bee" onClick={formSquad}>
+            <span className="add-plus">◆</span>
+            <span>Form the macro squad</span>
+            <span className="dim small">Goldie (gold, silver), Crude (oil) and Stonks (stocks). They trade only in verified open sessions and with ALLOW_NON_CRYPTO=true.</span>
+          </button>
+        )}
         {bees.length < s.maxBees && (
           <button className="pcard add-bee" onClick={add}>
             <span className="add-plus">+</span>
@@ -344,7 +388,65 @@ function BeesTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
           Extra bees race here and in the lab; the Hive leaderboard shows the main three. Outside paper trading an extra bee needs its own exchange keys in .env (BEE4_OKX_DEMO_API_KEY, …) or it sits out.
         </span>
       </div>
+      {s.sessions && <SessionsCard sessions={s.sessions} />}
     </>
+  );
+}
+
+/** The trading hours the engine is learning for stocks and commodities (market/sessions.ts). */
+function SessionsCard({ sessions }: { sessions: NonNullable<AdminState["sessions"]> }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const fmt = (m: number | null) => (m === null ? "–" : m >= 120 ? `${Math.round(m / 60)}h` : `${m}m`);
+  return (
+    <div className="pcard sessions-card">
+      <h3>Trading hours (macro squad)</h3>
+      <p className="dim small">
+        Learned from the market: every minute the engine checks which stock and commodity X-Perps are really quoting. Watched for {sessions.watchedHours} h
+        {sessions.watchedHours < 168 ? " (a full week is needed before every hour is verified)" : ""}. Macro bees only open in a verified open hour, at least {sessions.noOpenMin} min before the close
+        {sessions.allowNonCrypto ? "." : ", and only once ALLOW_NON_CRYPTO=true (now off: they watch and learn only)."}
+      </p>
+      {sessions.coins.length === 0 ? (
+        <p className="dim">Nothing recorded yet.</p>
+      ) : (
+        <table className="ptable small">
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th>Kind</th>
+              <th className="num">Verified</th>
+              <th className="num">Open h/week</th>
+              <th className="num">Spread</th>
+              <th>Now</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.coins.slice(0, 40).map((c) => (
+              <Fragment key={c.coin}>
+                <tr onClick={() => setOpen(open === c.coin ? null : c.coin)} className="clickable">
+                  <td className="mono">{c.coin}</td>
+                  <td className="dim">{c.kind}</td>
+                  <td className="num">{c.verifiedPct}%</td>
+                  <td className="num">{c.openHoursPerWeek}</td>
+                  <td className="num">{c.meanSpreadBp === null ? "–" : `${c.meanSpreadBp}bp`}</td>
+                  <td className={c.now.status === "open" ? "good" : "dim"}>
+                    {c.now.status}
+                    {c.now.status === "open" ? ` · closes in ${fmt(c.now.closesInMin)}` : c.now.opensInMin !== null ? ` · opens in ${fmt(c.now.opensInMin)}` : ""}
+                  </td>
+                </tr>
+                {open === c.coin && (
+                  <tr>
+                    <td colSpan={6}>
+                      <pre className="session-grid mono">{["    0         1         2   (UTC hour)", ...c.grid].join("\n")}</pre>
+                      <span className="dim small"># open · . closed · ? not verified yet</span>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

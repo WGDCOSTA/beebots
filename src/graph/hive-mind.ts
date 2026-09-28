@@ -11,6 +11,8 @@ export interface BeeProfile {
   coins: string[];
   brain: string;
   model: string;
+  /** What it trades (default crypto); macro bees race in the macro squad. */
+  market?: string;
 }
 
 export const beeNode = (slot: string) => nodeId("bee", slot);
@@ -27,7 +29,8 @@ export function coinOfDataset(id: string): string {
 
 export function registerBees(g: KnowledgeGraph, bees: BeeProfile[]): void {
   for (const b of bees) {
-    const bee = g.upsert("bee", b.slot, b.name, { style: b.style, rules: b.rules, coins: b.coins });
+    const market = b.market ?? "crypto";
+    const bee = g.upsert("bee", b.slot, b.name, { style: b.style, rules: b.rules, coins: b.coins, market, squad: market === "crypto" ? "crypto" : "macro" });
     const brain = g.upsert("brain", b.brain, b.brain, { model: b.model });
     g.unlink(bee, "thinks_with");
     g.link(bee, "thinks_with", brain, 1, { model: b.model });
@@ -109,6 +112,7 @@ export function contextFor(g: KnowledgeGraph, slot: string) {
     .map((n) => ({
       bee: n.label,
       style: n.props.style ?? null,
+      squad: n.props.squad ?? "crypto",
       adopts: g.out(n.id, "adopts", 4).map((e) => e.dst.slice(6)),
     }));
   return {

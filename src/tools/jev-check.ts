@@ -13,7 +13,7 @@ const N = Number(process.argv[2] ?? 100);
 const cfg = loadConfig({ ...process.env, DRY_RUN: "true" });
 const feed = new MarketFeed(
   createPublicApi(cfg.okx.apiBase),
-  { min24hVolUsd: cfg.universe.min24hVolUsd, allowNonCrypto: false, spreadGateBps: Math.max(...BEES.map((b) => cfg.bees[b].spreadGateBps)), trendCoins: [...BREEZY_COINS] },
+  { min24hVolUsd: cfg.universe.min24hVolUsd, spreadGateBps: Math.max(...BEES.map((b) => cfg.bees[b].spreadGateBps)), trendCoins: [...BREEZY_COINS] },
   null,
   () => [],
 );

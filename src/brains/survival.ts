@@ -221,7 +221,7 @@ export class SurvivalCouncil {
     const universe = this.o.watchlist ? (this.o.universe?.() ?? []) : [];
     const watchSize = watchlistSize(evo.level, evo.tier);
     const watch = this.o.watchlist
-      ? watchInput({ style: bee.style, ownerCoins: bee.coins, universe, ranking, adoptedSkills: current.map((s) => s.id), record: hive.tradeRecord })
+      ? watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe, ranking, adoptedSkills: current.map((s) => s.id), record: hive.tradeRecord })
       : null;
     const answers: Array<{ brain: BrainId; a: AnswerT }> = [];
     for (const b of brains) {

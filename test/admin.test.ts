@@ -58,6 +58,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     onPasswordChanged: (h) => (hash = h),
     restart: () => restarted++,
     coins: () => ["BTC", "ETH", "SOL", "DOGE"],
+    macroCoins: () => ({ commodities: ["XAU", "XAG", "CL"], stocks: ["NVDA", "SPY"] }),
     runningBees: () => ["bee1", "bee2", "bee3"],
     isFlat: (id) => !(opts.holding ?? []).includes(id),
     forgetBee: (id) => forgotten.push(id),
@@ -173,7 +174,7 @@ describe("admin API", () => {
     expect(s.bees[1]).toMatchObject({ name: "Calm", coins: ["DOGE"], style: "boozy", image: true });
     // Coins must be tradable right now.
     const badCoin = await h.call("/admin/bees", { bees: [bees[0], { ...bees[1], coins: ["NOPE"] }, bees[2]] });
-    expect(badCoin.body.error).toMatch(/Not tradable.*NOPE/);
+    expect(badCoin.body.error).toMatch(/not a live Crypto X-Perp.*NOPE/);
     expect((await h.call("/admin/bees", { bees: [{ ...bees[0], name: "Bizzy" }, bees[1], bees[2]] })).body.error).toMatch(/official bee/);
   });
 
@@ -279,3 +280,42 @@ describe("lab jobs", () => {
     expect(done).toBe(1);
   });
 });
+
+describe("the macro squad in the admin panel", () => {
+  const base = [
+    { name: "Zippy", tagline: "", rules: "", coins: ["BTC"], style: "bizzy" },
+    { name: "Calm", tagline: "", rules: "", coins: ["BTC", "ETH"], style: "breezy" },
+    { name: "Wild", tagline: "", rules: "", coins: [], style: "boozy" },
+  ];
+  it("adds gold, energy and stock bees whose coins are checked against their own market", async () => {
+    const h = harness();
+    const squad = [
+      { name: "Goldie", tagline: "", rules: "", coins: ["XAU", "XAG"], style: "breezy", market: "commodities" },
+      { name: "Oily", tagline: "", rules: "", coins: ["CL"], style: "boozy", market: "commodities" },
+      { name: "Stonks", tagline: "", rules: "", coins: [], style: "boozy", market: "stocks" },
+    ];
+    const r = await h.call("/admin/bees", { bees: [...base, ...squad] });
+    expect(r.status).toBe(200);
+    const s = loadSettings(h.settingsPath)!;
+    expect(s.bees.slice(3).map((b) => [b.name, b.market, b.style])).toEqual([
+      ["Goldie", "commodities", "boozy"],
+      ["Oily", "commodities", "boozy"],
+      ["Stonks", "stocks", "boozy"],
+    ]);
+    const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20) }, s);
+    expect(cfg.slots.bee4).toMatchObject({ market: "commodities", squad: "macro" });
+    expect(cfg.slots.bee1).toMatchObject({ market: "crypto", squad: "crypto" });
+    expect((r.body.bees as Array<{ market: string }>).map((b) => b.market)).toEqual(["crypto", "crypto", "crypto", "commodities", "commodities", "stocks"]);
+    expect(r.body.macroCoins).toEqual({ commodities: ["XAU", "XAG", "CL"], stocks: ["NVDA", "SPY"] });
+
+    // A stock on a commodities bee, gold on a crypto bee, or a stock on a main bee: refused.
+    const wrong = await h.call("/admin/bees", { bees: [...base, { ...squad[0]!, coins: ["NVDA"] }] });
+    expect(wrong.body.error).toMatch(/Goldie: not a live Commodities X-Perp.*NVDA/);
+    expect((await h.call("/admin/bees", { bees: [...base, { ...squad[0]!, market: "crypto" }] })).body.error).toMatch(/not a live Crypto/);
+    expect((await h.call("/admin/bees", { bees: [{ ...base[0]!, coins: ["XAU"], market: "commodities" }, base[1], base[2]] })).body.error).toMatch(/Zippy: not a live Crypto/);
+    // Back to crypto: the market field goes away.
+    await h.call("/admin/bees", { bees: [...base, { ...squad[2]!, market: "crypto" }] });
+    expect(loadSettings(h.settingsPath)!.bees[3]!.market).toBeUndefined();
+  });
+});
+

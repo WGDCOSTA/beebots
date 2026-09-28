@@ -11,7 +11,7 @@ import { buildSnapshot } from "../snapshot.js";
 const cfg = loadConfig({ ...process.env, TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY || "unused", DRY_RUN: "true" });
 const feed = new MarketFeed(
   createPublicApi(cfg.okx.apiBase),
-  { min24hVolUsd: cfg.universe.min24hVolUsd, allowNonCrypto: false, spreadGateBps: Math.max(...BEES.map((b) => cfg.bees[b].spreadGateBps)), trendCoins: [...BREEZY_COINS] },
+  { min24hVolUsd: cfg.universe.min24hVolUsd, spreadGateBps: Math.max(...BEES.map((b) => cfg.bees[b].spreadGateBps)), trendCoins: [...BREEZY_COINS] },
   null,
   () => [],
 );

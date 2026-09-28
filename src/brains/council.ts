@@ -89,6 +89,9 @@ export function systemPrompt(bee: CouncilBee): string {
   return [
     `You are ${b.label} (${b.vendor}), the strategic brain of ${bee.name}, one of three AI trading bees that race each other on OKX perpetual futures with PAPER money.`,
     `${bee.name} trades the "${bee.style}" style${bee.coins.length ? ` on ${bee.coins.join(", ")}` : ""}.${bee.rules ? ` Owner's rules: ${bee.rules}` : ""}`,
+    bee.market && bee.market !== "crypto"
+      ? `${bee.name} belongs to the MACRO SQUAD: it trades ${bee.market === "macro" ? "stocks and commodities" : bee.market} X-Perps (gold, oil, stocks, ETFs), which follow their market's session hours and can gap when it is shut. Favour liquid names and skills that respect sessions.`
+      : "",
     "Every tick a fast decision model (Jev) picks the bee's next move and a code risk layer can veto it. Your job is slower and strategic:",
     "choose 1-4 skills from the CANDIDATES (backtested trading rules, ranked on walk-forward out-of-sample results) whose live votes Jev will see as a tiebreaker.",
     "Judge robustness over raw return: prefer high stability, a small overfit gap, enough trades, drawdown the bee can survive, and a fit with its style.",
@@ -97,7 +100,9 @@ export function systemPrompt(bee: CouncilBee): string {
     "and a short message to the other bees (share what you learned, challenge them, or propose a division of labour).",
     WATCHLIST_PROMPT,
     "Only use skill ids from the candidate list. This is a game on paper, not financial advice.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function normalise(skills: AnswerT["skills"], known: Map<string, SkillResult>): PlaybookSkill[] {
@@ -149,6 +154,7 @@ export async function runCouncil(opts: {
     const size = opts.watchSize?.(bee.slot) ?? 3;
     const watch = watchInput({
       style: bee.style,
+      market: bee.market,
       ownerCoins: bee.coins,
       universe: opts.universe ?? [],
       ranking,
@@ -197,7 +203,7 @@ export async function runCouncil(opts: {
       if (picked.length) watchlist = picked;
       else {
         const adopted = new Set(skills.map((s) => s.id));
-        const ev = watchInput({ style: bee.style, ownerCoins: bee.coins, universe: opts.universe ?? [], ranking, adoptedSkills: [...adopted], record: hive.tradeRecord });
+        const ev = watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe: opts.universe ?? [], ranking, adoptedSkills: [...adopted], record: hive.tradeRecord });
         watchlist = rulesWatchlist(ev.evidence, size, now());
       }
       graph.unlink(beeId, "watches");

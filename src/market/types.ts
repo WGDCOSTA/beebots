@@ -98,5 +98,10 @@ export interface MarketView {
   gated: string[];
   /** Coins that passed volume but failed the spread gate (for "boozy wanted RAY" moments). */
   spreadBlocked: string[];
+  /**
+   * Stocks, ETFs and commodities that pass the macro gates, ranked by 24h volume ([] without macro bees). Only macro
+   * bees see them (engine.ts), and only while their session is open (market/sessions.ts).
+   */
+  macro: string[];
   newsAvailable: boolean;
 }
