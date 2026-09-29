@@ -7,6 +7,17 @@ import { beeNode } from "../src/graph/hive-mind.js";
 
 const NOW = 1_790_000_000_000;
 
+/** The parts of a profile these tests read (the function itself returns unknown: the server just serialises it). */
+interface ProfileView {
+  stats: Record<string, unknown>;
+  coins: Array<{ coin: string } & Record<string, unknown>>;
+  equity: Array<[number, number]>;
+  fills: Array<Record<string, unknown>>;
+  learning: { lessons: Array<Record<string, unknown>> };
+  messages: Array<{ mine: boolean; fromName: string } & Record<string, unknown>>;
+  daily: Array<{ trades: number }>;
+}
+
 function seed() {
   const db = new Db(":memory:");
   const graph = new KnowledgeGraph(":memory:");
@@ -37,17 +48,17 @@ function seed() {
 describe("bunnyProfile", () => {
   it("adds up one bunny's trades, coins, decisions, lessons and the Warren's messages", () => {
     const { db, graph } = seed();
-    const p = bunnyProfile({ db, graph, playbook: () => null, slots: () => ["bee1", "bee2"], now: () => NOW }, "bee1") as any;
+    const p = bunnyProfile({ db, graph, playbook: () => null, slots: () => ["bee1", "bee2"], now: () => NOW }, "bee1") as ProfileView;
     expect(p.stats).toMatchObject({ trades: 3, wins: 2, losses: 1, winRatePct: 66.67, realisedUsd: 5, feesUsd: 0.3, profitFactor: 6, bestUsd: 4, worstUsd: -1, decisions: 3 });
-    expect(p.coins.map((c: { coin: string }) => c.coin)).toEqual(["SOL", "BTC"]);
+    expect(p.coins.map((c) => c.coin)).toEqual(["SOL", "BTC"]);
     expect(p.coins[0]).toMatchObject({ trades: 2, wins: 1, realisedUsd: 3, winRatePct: 50 });
-    expect(p.equity.map((x: [number, number]) => x[1])).toEqual([334, 338]);
+    expect(p.equity.map((x) => x[1])).toEqual([334, 338]);
     expect(p.fills[0]).toMatchObject({ coin: "BTC", close: true, realisedUsd: 2, purpose: "close" });
     expect(p.learning.lessons[0]).toMatchObject({ text: "SOL fakes breakouts at night", source: "coach" });
-    const mine = p.messages.find((m: { mine: boolean }) => m.mine);
+    const mine = p.messages.find((m) => m.mine);
     expect(mine).toMatchObject({ fromName: "Honey", toName: "the Warren", source: "coach" });
-    expect(p.messages.find((m: { fromName: string }) => m.fromName === "Galactus")).toMatchObject({ mine: false, brain: "claude" });
-    expect(p.daily.reduce((a: number, d: { trades: number }) => a + d.trades, 0)).toBe(3);
+    expect(p.messages.find((m) => m.fromName === "Galactus")).toMatchObject({ mine: false, brain: "claude" });
+    expect(p.daily.reduce((a, d) => a + d.trades, 0)).toBe(3);
   });
 
   it("is null for a slot the engine does not run", () => {
