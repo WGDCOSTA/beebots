@@ -76,6 +76,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   { key: "CMC_IN_JEV", group: "learning", label: "CoinMarketCap line for Jev", help: "Crypto bunnies' decisions also see Fear & Greed, BTC dominance and the market cap's 24h move (needs the CoinMarketCap key).", type: "bool" },
   num("CMC_REFRESH_MIN", "learning", "CoinMarketCap refresh (min)", "Minutes between CoinMarketCap refreshes (3 calls each).", 5, 1440),
   num("CMC_TOP", "learning", "CoinMarketCap coins", "How many top coins to fetch (rank, market cap, all-exchange volume).", 10, 5000),
+  num("CMC_SLOW_MIN", "learning", "CoinMarketCap slow context, minutes", "How often to fetch altcoin season, the Fear & Greed week and hot sectors (3 calls each time).", 15, 1440),
   num("CMC_MAX_CALLS_DAY", "learning", "CoinMarketCap calls per day", "Hard daily cap. The free Basic plan has 10,000 credits a month (about 330 a day).", 0, 100_000),
   { key: "BRAIN_WATCHLIST", group: "learning", label: "AI-chosen coins", help: "The brains pick each bunny's watchlist from lab evidence, its record and liquidity. Owner coins, style and survival tier still limit it.", type: "bool" },
   num("COACH_INTERVAL_MIN", "learning", "Coach every (min)", "Each brain reviews its bunny's real results and re-weights its skills. 0 = off.", 0, 10_080),

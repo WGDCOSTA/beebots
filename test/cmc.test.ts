@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { coinInfos, coinEvidence } from "../src/brains/watchlist.js";
-import { checkCmcKey, CmcSource, jevMarketLine, loadMood, marketMood, saveMood } from "../src/market/cmc.js";
+import { altSeasonLabel, checkCmcKey, CmcSource, jevMarketLine, loadMood, marketMood, parseSectors, saveMood } from "../src/market/cmc.js";
 import { coin, view } from "./fixtures.js";
 
 const KEY = "0000aaaa-1111-2222-3333-444455556666";
@@ -37,7 +37,14 @@ describe("CmcSource", () => {
     const { f, calls } = fakeFetch();
     const src = new CmcSource({ apiKey: KEY, fetch: f, top: 50, now: () => 1_700_000_000_000 });
     const s = (await src.refresh())!;
-    expect(calls.map((c) => new URL(c.url).pathname)).toEqual(["/v1/cryptocurrency/listings/latest", "/v1/global-metrics/quotes/latest", "/v3/fear-and-greed/latest"]);
+    expect(calls.map((c) => new URL(c.url).pathname)).toEqual([
+      "/v1/cryptocurrency/listings/latest",
+      "/v1/global-metrics/quotes/latest",
+      "/v3/fear-and-greed/latest",
+      "/v1/altcoin-season-index/latest",
+      "/v3/fear-and-greed/historical",
+      "/v1/cryptocurrency/categories",
+    ]);
     expect(calls[0]!.url).toContain("limit=50");
     expect(calls.every((c) => c.headers["X-CMC_PRO_API_KEY"] === KEY && !c.url.includes(KEY))).toBe(true);
     expect(s.coins.get("BTC")).toMatchObject({ rank: 1, mcapUsd: 1.9e12, pct30d: 12.34 });
@@ -88,6 +95,62 @@ describe("CmcSource", () => {
     await src.refresh();
     expect(loadMood(dir, now)).toMatchObject({ fearGreed: "38 (Fear)" });
     expect(loadMood(dir, now + 3 * 3_600_000)).toBeNull();
+  });
+});
+
+const sector = (name: string, pct: number, mcap = 1e10) => ({ name, market_cap_change: pct, avg_price_change: pct, market_cap: mcap, num_tokens: 20 });
+const SLOW = {
+  "/v1/altcoin-season-index/latest": { status: { error_code: 0 }, data: { altcoin_index: 59, yearly_high: 67, yearly_low: 14 } },
+  "/v3/fear-and-greed/historical": {
+    status: { error_code: 0 },
+    data: [
+      { timestamp: "1700086400", value: 70, value_classification: "Greed" },
+      { timestamp: "1700000000", value: 78, value_classification: "Extreme Greed" },
+    ],
+  },
+  "/v1/cryptocurrency/categories": {
+    status: { error_code: 0 },
+    data: [
+      sector("AI", 6.5),
+      sector("DeFiance Capital Portfolio", 9), // a fund's portfolio, not a sector
+      sector("Memes", 5),
+      sector("Layer 1", 1),
+      sector("Gaming", 0.5),
+      sector("RWA", 0.2),
+      sector("DePIN", -0.1),
+      sector("Oracles", -1),
+      sector("Privacy", -2),
+      sector("NFTs", -3),
+      sector("Quantum-Resistant", -4.8),
+      sector("Tiny", 50, 1e8), // too small to matter
+    ],
+  },
+};
+
+describe("CoinMarketCap slow context", () => {
+  it("adds altcoin season, the mood's week and hot and cold sectors, at most once an hour", async () => {
+    let t = 1_700_100_000_000;
+    const { f, calls } = fakeFetch(SLOW);
+    const src = new CmcSource({ apiKey: KEY, fetch: f, now: () => t, slowEveryMin: 60 });
+    const s = (await src.refresh())!;
+    expect(s.altSeason).toEqual({ index: 59, yearlyHigh: 67, yearlyLow: 14 });
+    expect(s.fearTrend).toMatchObject({ days: [{ value: 78 }, { value: 70 }], change: -8 });
+    expect(s.sectors!.hot.map((x) => x.name)).toEqual(["AI", "Memes", "Layer 1", "Gaming", "RWA"]);
+    expect(s.sectors!.cold[0]!.name).toBe("Quantum-Resistant");
+    expect(jevMarketLine(s)).toMatchObject({ alt_season: 59, fg_7d: -8, hot_sectors: "AI, Memes, Layer 1" });
+    expect(marketMood(s)).toMatchObject({ altcoinSeason: "59/100 (leaning altcoins)", fearGreedWeek: "78 → 70 (-8 in 1 days)" });
+    t += 20 * 60_000;
+    await src.refresh();
+    expect(calls.filter((c) => c.url.includes("categories"))).toHaveLength(1);
+    expect(src.get()!.altSeason!.index).toBe(59); // kept between slow fetches
+    t += 60 * 60_000;
+    await src.refresh();
+    expect(calls.filter((c) => c.url.includes("categories"))).toHaveLength(2);
+  });
+
+  it("names the season and needs enough sectors to rank", () => {
+    expect([80, 60, 40, 10].map(altSeasonLabel)).toEqual(["altcoin season", "leaning altcoins", "leaning bitcoin", "bitcoin season"]);
+    expect(parseSectors({ data: [sector("AI", 1), sector("Memes", 2)] })).toBeNull();
   });
 });
 

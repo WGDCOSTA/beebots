@@ -114,6 +114,7 @@ services:
       CMC_REFRESH_MIN: ${CMC_REFRESH_MIN:-}
       CMC_TOP: ${CMC_TOP:-}
       CMC_MAX_CALLS_DAY: ${CMC_MAX_CALLS_DAY:-}
+      CMC_SLOW_MIN: ${CMC_SLOW_MIN:-}
       CMC_IN_JEV: ${CMC_IN_JEV:-}
       RATCHET: ${RATCHET:-}
       RATCHET_LOCK: ${RATCHET_LOCK:-}

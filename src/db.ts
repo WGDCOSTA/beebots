@@ -179,10 +179,12 @@ export class Db {
 
   /** Equity per bee, bucketed to at most ~`points` samples (last value in each bucket). */
   equitySeries(sinceTs: number, points: number): Record<string, Array<[number, number]>> {
-    const span = Math.max(1, Date.now() - sinceTs);
+    // Bucket over the data that exists, not the whole window: a young install still gets a fine-grained curve.
+    const first = (this.raw.prepare(`SELECT MIN(ts) AS t FROM equity_snapshots WHERE ts >= ?`).get(sinceTs) as { t: number | null }).t ?? sinceTs;
+    const span = Math.max(1, Date.now() - first);
     const bucket = Math.max(10_000, Math.ceil(span / points));
     const rows = this.raw
-      .prepare(`SELECT bee, MAX(ts) AS ts, equity_usd AS eq FROM equity_snapshots WHERE ts >= ? GROUP BY bee, ts / ? ORDER BY ts`)
+      .prepare(`SELECT bee, MAX(ts) AS ts, equity_usd AS eq FROM equity_snapshots WHERE ts >= ? GROUP BY bee, CAST(ts / ? AS INTEGER) ORDER BY ts`)
       .all(sinceTs, bucket) as Array<{ bee: string; ts: number; eq: number }>;
     const out: Record<string, Array<[number, number]>> = {};
     for (const r of rows) (out[r.bee] ??= []).push([r.ts, Number(r.eq.toFixed(2))]);

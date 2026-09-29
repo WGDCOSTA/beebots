@@ -150,11 +150,13 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
   return (
     <section className={`bee ${flashing ? `flash-${flash.kind}` : ""}`} style={{ ["--bee" as string]: meta.color, ["--bee-glow" as string]: meta.glow }}>
       <header className="bee-head">
-        <div className="portrait">
+        <a className="portrait" href={`#/bunny/${name}`} title={`Open ${meta.title}'s profile`}>
           <img src={meta.img} alt={`${meta.title} portrait`} />
-        </div>
+        </a>
         <div className="bee-id">
-          <div className="bee-name">{meta.title}</div>
+          <a className="bee-name" href={`#/bunny/${name}`}>
+            {meta.title} <span className="bee-profile-link">profile ↗</span>
+          </a>
           <div className="bee-tag">
             {meta.tagline || meta.styleLabel}
             {meta.coins.length > 0 && <span className="bee-coins"> · {meta.coins.join(" ")}</span>}

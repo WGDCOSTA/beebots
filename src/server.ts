@@ -1,5 +1,6 @@
 // Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bunny>,
-// /lab/ranking, /lab/playbook, /hive-mind (graph.json) and /hive-mind/<bunny> (what a bunny's brain knows).
+// /lab/ranking, /lab/playbook, /hive-mind (graph.json), /hive-mind/<bunny> (what a bunny's brain knows) and
+// /bunny/<bunny>?days= (its profile page: equity, trades, decisions, lessons, the Warren's messages; bunnyProfile.ts).
 // POST /admin/* is the admin panel (admin/admin.ts); every call there needs the owner password.
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
 // POST /hive/join and /hive/leave, which need the owner password (gate.ts, hive.ts). GET /hive/status is public and holds no key.
@@ -36,6 +37,8 @@ export interface ServerDeps {
       explain?: (node: string) => unknown;
       report?: () => string;
     };
+    /** One bunny's profile page data (bunnyProfile.ts), or null for an unknown slot. */
+    bunny?: (slot: string, days: number) => unknown | null;
   };
   /** Present only in setup mode. */
   setup?: Setup;
@@ -201,6 +204,12 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         res.end(e.lab.report());
         return;
       default:
+        if (e.bunny && url.pathname.startsWith("/bunny/")) {
+          const slot = url.pathname.slice("/bunny/".length);
+          const days = Math.max(1, Math.min(60, Number(url.searchParams.get("days") ?? 30) || 30));
+          const body = /^bee[1-9]$/.test(slot) ? e.bunny(slot, days) : null;
+          return body ? json(res, 200, body) : json(res, 404, { error: "no such bunny" });
+        }
         if (e.lab && url.pathname.startsWith("/hive-mind/")) {
           const bee = url.pathname.slice("/hive-mind/".length);
           if (!/^bee[1-9]$/.test(bee)) return json(res, 404, { error: "not found" });

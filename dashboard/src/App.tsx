@@ -105,7 +105,7 @@ export function App() {
                 const b = feed.bees[name];
                 const width = b ? Math.max(4, (b.equityUsd / Math.max(leaderEq, 1)) * 100) : 0;
                 return (
-                  <div className="board-row" key={name} style={{ ["--bee" as string]: beeMeta(name).color }}>
+                  <a className="board-row" href={`#/bunny/${name}`} key={name} style={{ ["--bee" as string]: beeMeta(name).color }}>
                     <span className="board-rank num">{i + 1}</span>
                     <img src={beeMeta(name).img} alt="" />
                     <span className="board-name">{beeMeta(name).short}</span>
@@ -122,7 +122,7 @@ export function App() {
                       ) : null}
                     </span>
                     <span className="board-eq num">{b ? money(b.equityUsd) : "–"}</span>
-                  </div>
+                  </a>
                 );
               })}
             </section>
@@ -167,7 +167,7 @@ function SquadCard({ title, hint, bees, feed }: { title: string; hint?: string; 
         const m = beeMeta(name);
         const t = b?.evo ? TIER_INFO[b.evo.tier] : null;
         return (
-          <div className="ch-row" key={name} style={{ ["--bee" as string]: m.color }}>
+          <a className="ch-row" href={`#/bunny/${name}`} key={name} style={{ ["--bee" as string]: m.color }}>
             <span className="ch-dot" aria-hidden />
             <span className="ch-name">{m.short}</span>
             <span className={`ch-pos num ${b?.position ? b.position.side : "dim"}`}>
@@ -179,7 +179,7 @@ function SquadCard({ title, hint, bees, feed }: { title: string; hint?: string; 
                 {t.icon} L{b!.evo!.level}
               </span>
             )}
-          </div>
+          </a>
         );
       })}
     </section>

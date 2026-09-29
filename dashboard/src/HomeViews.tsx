@@ -158,6 +158,17 @@ export function MarketView({ snap, bees }: { snap: Snapshot | null; bees: Bees }
         ) : (
           <Tile label="Fear & Greed" value="–" sub="Add a CoinMarketCap key (Admin → API keys)" />
         )}
+        {cmc?.altSeason?.index != null && (
+          <Tile label="Altcoin season" value={String(cmc.altSeason.index)} sub={`${cmc.altSeason.label} · year ${cmc.altSeason.yearlyLow ?? "?"}–${cmc.altSeason.yearlyHigh ?? "?"}`}>
+            <span className="fg-meter alt" role="img" aria-label={`Altcoin Season Index ${cmc.altSeason.index} of 100`}>
+              <i style={{ left: `${Math.min(100, Math.max(0, cmc.altSeason.index))}%` }} />
+            </span>
+            <span className="fg-scale dim small">
+              <span>bitcoin</span>
+              <span>altcoins</span>
+            </span>
+          </Tile>
+        )}
         <Tile label="BTC dominance" value={cmc?.btcDominancePct != null ? `${cmc.btcDominancePct}%` : "–"} sub="share of total crypto market cap" />
         <Tile
           label="Total market cap"
@@ -175,6 +186,23 @@ export function MarketView({ snap, bees }: { snap: Snapshot | null; bees: Bees }
         </Tile>
         <Tile label="Volume 24h" value={compact(vol)} sub={`OKX perps in the bunnies' universe${macroCount ? ` · ${macroCount} macro` : ""}`} />
       </div>
+
+      {cmc?.sectors && (
+        <div className="sector-strip">
+          <div className="sector-col">
+            <span className="eyebrow">Leading sectors · 24h</span>
+            {cmc.sectors.hot.map((x) => (
+              <SectorBar key={x.name} name={x.name} pct={x.pct} max={Math.max(...cmc.sectors!.hot.map((h) => Math.abs(h.pct)), ...cmc.sectors!.cold.map((c) => Math.abs(c.pct)), 0.1)} />
+            ))}
+          </div>
+          <div className="sector-col">
+            <span className="eyebrow">Lagging sectors · 24h</span>
+            {cmc.sectors.cold.map((x) => (
+              <SectorBar key={x.name} name={x.name} pct={x.pct} max={Math.max(...cmc.sectors!.hot.map((h) => Math.abs(h.pct)), ...cmc.sectors!.cold.map((c) => Math.abs(c.pct)), 0.1)} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="dv-filters">
         <input className="dv-search" placeholder="Search coin…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search coin" />
@@ -479,6 +507,19 @@ export function PositionsView({ bees }: { bees: Bees }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** One sector's 24h market-cap move, as a bar from a shared zero so hot and cold compare at a glance. */
+function SectorBar({ name, pct: p, max }: { name: string; pct: number; max: number }) {
+  return (
+    <div className="sector-row">
+      <span className="sector-name">{name}</span>
+      <span className="sector-bar">
+        <i className={p >= 0 ? "up" : "down"} style={{ width: `${Math.max(2, (Math.abs(p) / max) * 100)}%` }} />
+      </span>
+      <span className={`num ${p >= 0 ? "good" : "bad"}`}>{pct(p)}</span>
     </div>
   );
 }

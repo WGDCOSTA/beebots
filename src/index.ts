@@ -23,6 +23,7 @@ import { safeError } from "./redact.js";
 import { startServer } from "./server.js";
 import { loadOverrides, loadSettings, STYLE_INFO } from "./settings.js";
 import { imagePath, Setup } from "./setup.js";
+import { bunnyProfile } from "./bunnyProfile.js";
 import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
@@ -240,7 +241,7 @@ async function main() {
   );
   // CoinMarketCap (optional): market-wide context for Jev, the brains and the dashboard (market/cmc.ts).
   const cmc = cfg.cmc.apiKey
-    ? new CmcSource({ apiKey: cfg.cmc.apiKey, top: cfg.cmc.top, refreshMin: cfg.cmc.refreshMin, maxCallsDay: cfg.cmc.maxCallsDay, onUpdate: (s) => saveMood(cfg.lab.dir, s) })
+    ? new CmcSource({ apiKey: cfg.cmc.apiKey, top: cfg.cmc.top, refreshMin: cfg.cmc.refreshMin, slowEveryMin: cfg.cmc.slowMin, maxCallsDay: cfg.cmc.maxCallsDay, onUpdate: (s) => saveMood(cfg.lab.dir, s) })
     : null;
   cmc?.start();
   const cmcState = () => cmc?.get() ?? null;
@@ -484,6 +485,7 @@ async function main() {
           explain: (node) => memoryExplain(graph, node),
           report: () => hiveReport(graph),
         },
+        bunny: (slot, days) => bunnyProfile({ db, graph, playbook: () => playbook.get(), slots: () => cfg.beeIds }, slot, days),
       },
       hive,
       admin,

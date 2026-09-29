@@ -21,7 +21,7 @@ import type { MarketFeed } from "./market/data.js";
 import { safeError } from "./redact.js";
 import { SURVIVAL_NOTE, type Evolution } from "./evolution.js";
 import { effectiveWatchlist, watchlistLine, type WatchItem } from "./brains/watchlist.js";
-import { CMC_NOTE, jevMarketLine, type CmcState } from "./market/cmc.js";
+import { altSeasonLabel, CMC_NOTE, jevMarketLine, type CmcState } from "./market/cmc.js";
 import { isScalpBrain, scalpBrain, type GateRule, type ScalpDeps } from "./bees/scalp.js";
 import { DEFAULT_COSTS, type CostModel, type ScalpGate } from "./lab/scalp.js";
 import { UNFILLED } from "./exec/executor.js";
@@ -1366,6 +1366,9 @@ export class Engine {
       btcDominancePct: r(s.global?.btcDominancePct),
       mcapChange24hPct: r(s.global?.mcapChange24hPct, 2),
       totalMcapUsd: r(s.global?.totalMcapUsd, 0),
+      altSeason: s.altSeason ? { index: r(s.altSeason.index, 0), label: altSeasonLabel(s.altSeason.index), yearlyHigh: s.altSeason.yearlyHigh, yearlyLow: s.altSeason.yearlyLow } : null,
+      fearTrend: s.fearTrend ? { days: s.fearTrend.days.map((d) => d.value), change: s.fearTrend.change } : null,
+      sectors: s.sectors ? { hot: s.sectors.hot.map((x) => ({ name: x.name, pct: r(x.mcapChange24hPct, 2) })), cold: s.sectors.cold.map((x) => ({ name: x.name, pct: r(x.mcapChange24hPct, 2) })) } : null,
       coins: s.coins.size,
       updatedAt: s.updatedAt,
     };

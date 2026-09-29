@@ -168,11 +168,27 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
               F&amp;G {s.cmc.fearGreed.value} <em>{s.cmc.fearGreed.label}</em>
             </span>
           )}
+          {s.cmc.fearTrend && (
+            <span className={`sys-val ${s.cmc.fearTrend.change > 0 ? "up" : s.cmc.fearTrend.change < 0 ? "down" : ""}`} title={`Fear & Greed over the last week: ${s.cmc.fearTrend.days.join(" → ")}`}>
+              <Spark values={s.cmc.fearTrend.days} /> {s.cmc.fearTrend.change > 0 ? "▲" : s.cmc.fearTrend.change < 0 ? "▼" : "■"}
+              {Math.abs(s.cmc.fearTrend.change)} 7d
+            </span>
+          )}
+          {s.cmc.altSeason && s.cmc.altSeason.index !== null && (
+            <span className={`sys-val ${s.cmc.altSeason.index >= 75 ? "up" : s.cmc.altSeason.index <= 25 ? "down" : ""}`} title={`Altcoin Season Index (0 bitcoin season … 100 altcoin season). Year range ${s.cmc.altSeason.yearlyLow ?? "?"}–${s.cmc.altSeason.yearlyHigh ?? "?"}`}>
+              ALT {s.cmc.altSeason.index} <em>{s.cmc.altSeason.label}</em>
+            </span>
+          )}
           {s.cmc.btcDominancePct !== null && <span className="sys-val" title="Bitcoin dominance">BTC dom {s.cmc.btcDominancePct}%</span>}
           {s.cmc.mcapChange24hPct !== null && (
             <span className={`sys-val ${s.cmc.mcapChange24hPct >= 0 ? "up" : "down"}`} title="Total crypto market cap, 24h change">
               mcap {s.cmc.mcapChange24hPct >= 0 ? "+" : ""}
               {s.cmc.mcapChange24hPct}%
+            </span>
+          )}
+          {s.cmc.sectors?.hot[0] && (
+            <span className="sys-val up" title={`Leading sectors today: ${s.cmc.sectors.hot.map((x) => `${x.name} ${x.pct >= 0 ? "+" : ""}${x.pct}%`).join(", ")}`}>
+              🔥 {s.cmc.sectors.hot[0].name}
             </span>
           )}
         </span>
@@ -184,5 +200,18 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
         {flag(s.macroTrading, "macro squad", s.macroTrading ? "Stocks and commodities trade in verified sessions" : "Macro bunnies watch and learn only (ALLOW_NON_CRYPTO off)", s.macroBees ? String(s.macroBees) : undefined)}
       </span>
     </div>
+  );
+}
+
+/** A tiny inline trend line (no axes): the shape of a short series, read with the numbers beside it. */
+function Spark({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * 40},${12 - ((v - lo) / Math.max(1, hi - lo)) * 10 - 1}`).join(" ");
+  return (
+    <svg className="spark" width="40" height="12" viewBox="0 0 40 12" aria-hidden>
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }

@@ -5,6 +5,9 @@
 //   - /v1/global-metrics/quotes/latest: total market cap and its 24h change, BTC and ETH dominance;
 //   - /v3/fear-and-greed/latest: CMC's Fear & Greed index.
 // Three calls per refresh, each ~1 credit (the free Basic plan has 10,000 a month); CMC_MAX_CALLS_DAY is a hard cap.
+// Slower context, every CMC_SLOW_MIN minutes (default 120; three more credits): /v1/altcoin-season-index/latest (bitcoin or altcoin
+// season), /v3/fear-and-greed/historical (the mood's last week, so a trend and not one number) and
+// /v1/cryptocurrency/categories (which sectors lead and lag today).
 // What it feeds: a compact `mkt` line in Jev's state (CMC_IN_JEV), CMC facts on each coin the brains weigh for
 // watchlists, a market-mood line for councils and the coach, and the dashboard's system bar. It never places orders,
 // and a CMC outage only removes the extra context: trading goes on with the exchange feed alone.
@@ -41,11 +44,38 @@ export interface CmcFearGreed {
   label: string;
 }
 
+/** CMC's Altcoin Season Index: 0..100, high = altcoins beating bitcoin (75+ is "altcoin season", 25- "bitcoin season"). */
+export interface CmcAltSeason {
+  index: number;
+  yearlyHigh: number | null;
+  yearlyLow: number | null;
+}
+
+/** Fear & Greed over the last days, oldest first, and its move over that span. */
+export interface CmcFearTrend {
+  days: Array<{ ts: number; value: number }>;
+  change: number;
+}
+
+export interface CmcSector {
+  name: string;
+  mcapChange24hPct: number;
+  avgPriceChangePct: number | null;
+  mcapUsd: number;
+  tokens: number;
+}
+
 export interface CmcState {
   updatedAt: number;
   global: CmcGlobal | null;
   fearGreed: CmcFearGreed | null;
   coins: Map<string, CmcCoin>;
+  altSeason?: CmcAltSeason | null;
+  fearTrend?: CmcFearTrend | null;
+  /** Sectors leading (hot) and lagging (cold) over 24h, by market-cap change. */
+  sectors?: { hot: CmcSector[]; cold: CmcSector[] } | null;
+  /** When the slow context above was last fetched. */
+  slowAt?: number;
 }
 
 export interface CmcOpts {
@@ -57,6 +87,8 @@ export interface CmcOpts {
   fetch?: typeof fetch;
   now?: () => number;
   timeoutMs?: number;
+  /** Minutes between fetches of the slow context (altcoin season, the mood's week, sectors). Default 120. */
+  slowEveryMin?: number;
   /** Called after each refresh that got anything (index.ts saves the mood for the lab's CLI council). */
   onUpdate?: (s: CmcState) => void;
 }
@@ -132,7 +164,16 @@ export class CmcSource {
   /** One refresh. Each part fails on its own; the last good value of a failed part is kept. */
   async refresh(): Promise<CmcState | null> {
     const prev = this.state;
-    const next: CmcState = { updatedAt: this.now(), global: prev?.global ?? null, fearGreed: prev?.fearGreed ?? null, coins: prev?.coins ?? new Map() };
+    const next: CmcState = {
+      updatedAt: this.now(),
+      global: prev?.global ?? null,
+      fearGreed: prev?.fearGreed ?? null,
+      coins: prev?.coins ?? new Map(),
+      altSeason: prev?.altSeason ?? null,
+      fearTrend: prev?.fearTrend ?? null,
+      sectors: prev?.sectors ?? null,
+      slowAt: prev?.slowAt ?? 0,
+    };
     let any = false;
     const errors: string[] = [];
     try {
@@ -152,6 +193,24 @@ export class CmcSource {
       any = true;
     } catch (err) {
       errors.push(`fear&greed: ${safeError(err).message}`);
+    }
+    if (this.now() - (next.slowAt ?? 0) >= Math.max(15, this.o.slowEveryMin ?? 120) * 60_000) {
+      next.slowAt = this.now();
+      try {
+        next.altSeason = parseAltSeason(await this.get_("/v1/altcoin-season-index/latest"));
+      } catch (err) {
+        errors.push(`altcoin season: ${safeError(err).message}`);
+      }
+      try {
+        next.fearTrend = parseFearTrend(await this.get_("/v3/fear-and-greed/historical?limit=8"));
+      } catch (err) {
+        errors.push(`fear&greed history: ${safeError(err).message}`);
+      }
+      try {
+        next.sectors = parseSectors(await this.get_("/v1/cryptocurrency/categories?limit=500"));
+      } catch (err) {
+        errors.push(`sectors: ${safeError(err).message}`);
+      }
     }
     this.lastError = errors.length ? errors.join("; ").slice(0, 400) : null;
     if (errors.length) log.warn("coinmarketcap refresh incomplete", { errors: this.lastError });
@@ -206,11 +265,50 @@ export function parseFearGreed(body: Json): CmcFearGreed | null {
   return value === null ? null : { value, label: String(d.value_classification ?? "") };
 }
 
+export function parseAltSeason(body: Json): CmcAltSeason | null {
+  const d = (body.data ?? {}) as Json;
+  const index = num(d.altcoin_index);
+  return index === null ? null : { index, yearlyHigh: num(d.yearly_high), yearlyLow: num(d.yearly_low) };
+}
+
+export function parseFearTrend(body: Json): CmcFearTrend | null {
+  const days = ((Array.isArray(body.data) ? body.data : []) as Json[])
+    .map((d) => ({ ts: Number(d.timestamp) * 1000, value: num(d.value) }))
+    .filter((d): d is { ts: number; value: number } => Number.isFinite(d.ts) && d.value !== null)
+    .sort((a, b) => a.ts - b.ts);
+  if (days.length < 2) return null;
+  return { days, change: days[days.length - 1]!.value - days[0]!.value };
+}
+
+/** Investor portfolios, launchpads and chain ecosystems are CMC categories too, but not sectors a trader rotates between. */
+const NOT_A_SECTOR = /portfolio|capital|ventures|holdings|ecosystem|launchpad|\bido\b|binance alpha|alameda|a16z|coinbase|made in/i;
+
+export function parseSectors(body: Json, n = 5): { hot: CmcSector[]; cold: CmcSector[] } | null {
+  const all = ((Array.isArray(body.data) ? body.data : []) as Json[])
+    .map((c) => ({
+      name: String(c.name ?? "").trim(),
+      mcapChange24hPct: num(c.market_cap_change),
+      avgPriceChangePct: num(c.avg_price_change),
+      mcapUsd: num(c.market_cap) ?? 0,
+      tokens: num(c.num_tokens) ?? 0,
+    }))
+    .filter((c): c is CmcSector => !!c.name && c.mcapChange24hPct !== null && c.mcapUsd >= 3e9 && c.tokens >= 5 && !NOT_A_SECTOR.test(c.name))
+    .sort((a, b) => b.mcapChange24hPct - a.mcapChange24hPct);
+  if (all.length < 2 * n) return null;
+  return { hot: all.slice(0, n), cold: all.slice(-n).reverse() };
+}
+
+/** Words for the Altcoin Season Index, as CMC uses them. */
+export function altSeasonLabel(index: number): string {
+  return index >= 75 ? "altcoin season" : index <= 25 ? "bitcoin season" : index >= 50 ? "leaning altcoins" : "leaning bitcoin";
+}
+
 const r = (x: number | null, dp = 1) => (x === null ? null : Number(x.toFixed(dp)));
 
 /** One sentence telling Jev what `mkt` is (added to its instructions when the line is present). */
 export const CMC_NOTE =
   "`mkt` is the whole crypto market from CoinMarketCap: fear_greed (0 extreme fear .. 100 extreme greed), btc_dom_pct (Bitcoin's share of the market cap) and mcap_24h_pct (total market cap change over 24h). " +
+  "alt_season (when present) is CoinMarketCap's Altcoin Season Index (0..100: 75+ altcoins beat bitcoin, 25- bitcoin leads), fg_7d is Fear & Greed's move over the last week, and hot_sectors are today's leading sectors. " +
   "Use it as background: a hostile market argues for smaller or fewer new longs, a strong one for patience with winners. It never overrides the menu or the coin data.";
 
 /** The compact market line Jev sees (a few tokens): Fear & Greed, BTC dominance, total market cap 24h move. */
@@ -220,6 +318,9 @@ export function jevMarketLine(s: CmcState | null): Record<string, number | strin
     fear_greed: s.fearGreed ? r(s.fearGreed.value, 0) : null,
     btc_dom_pct: r(s.global?.btcDominancePct ?? null),
     mcap_24h_pct: r(s.global?.mcapChange24hPct ?? null, 2),
+    ...(s.altSeason ? { alt_season: r(s.altSeason.index, 0) } : {}),
+    ...(s.fearTrend ? { fg_7d: r(s.fearTrend.change, 0) } : {}),
+    ...(s.sectors ? { hot_sectors: s.sectors.hot.slice(0, 3).map((x) => x.name).join(", ") } : {}),
   };
 }
 
@@ -233,6 +334,14 @@ export function marketMood(s: CmcState | null): Record<string, unknown> | null {
     ethDominancePct: r(s.global?.ethDominancePct ?? null),
     totalMcapTusd: s.global?.totalMcapUsd ? r(s.global.totalMcapUsd / 1e12, 2) : null,
     totalMcapChange24hPct: r(s.global?.mcapChange24hPct ?? null, 2),
+    ...(s.altSeason ? { altcoinSeason: `${r(s.altSeason.index, 0)}/100 (${altSeasonLabel(s.altSeason.index)})` } : {}),
+    ...(s.fearTrend ? { fearGreedWeek: `${s.fearTrend.days.map((d) => d.value).join(" → ")} (${s.fearTrend.change >= 0 ? "+" : ""}${s.fearTrend.change} in ${s.fearTrend.days.length - 1} days)` } : {}),
+    ...(s.sectors
+      ? {
+          leadingSectors24h: s.sectors.hot.map((x) => `${x.name} ${x.mcapChange24hPct >= 0 ? "+" : ""}${r(x.mcapChange24hPct)}%`),
+          laggingSectors24h: s.sectors.cold.map((x) => `${x.name} ${r(x.mcapChange24hPct)}%`),
+        }
+      : {}),
     asOf: new Date(s.updatedAt).toISOString(),
   };
 }

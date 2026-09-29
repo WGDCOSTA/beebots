@@ -108,6 +108,12 @@ export interface SystemInfo {
     btcDominancePct: number | null;
     mcapChange24hPct: number | null;
     totalMcapUsd: number | null;
+    /** Altcoin Season Index (0 bitcoin season … 100 altcoin season). */
+    altSeason?: { index: number | null; label: string; yearlyHigh: number | null; yearlyLow: number | null } | null;
+    /** Fear & Greed over the last week, oldest first. */
+    fearTrend?: { days: number[]; change: number } | null;
+    /** Sectors leading and lagging over 24h (market-cap change). */
+    sectors?: { hot: Array<{ name: string; pct: number }>; cold: Array<{ name: string; pct: number }> } | null;
     coins: number;
     updatedAt: number;
   } | null;

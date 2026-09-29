@@ -174,7 +174,9 @@ const EnvSchema = z.object({
   // Minutes between refreshes (3 calls each), coins fetched, and a hard daily call cap (Basic plan: 10,000 a month).
   CMC_REFRESH_MIN: num(15),
   CMC_TOP: num(200),
-  CMC_MAX_CALLS_DAY: num(300),
+  CMC_MAX_CALLS_DAY: num(330),
+  // Minutes between fetches of the slow context (altcoin season, the mood's week, sectors): 3 calls each time.
+  CMC_SLOW_MIN: num(120),
   // Show Jev the market line (Fear & Greed, BTC dominance, total market cap 24h move) in every decision.
   CMC_IN_JEV: bool(true),
   MOONSHOT_API_KEY: opt,
@@ -317,7 +319,7 @@ export interface Config {
   slots: Record<BeeId, SlotProfile>;
   openai: { apiKey?: string; textModel: string; imageModel: string };
   /** CoinMarketCap context (market/cmc.ts); apiKey absent = off. */
-  cmc: { apiKey?: string; refreshMin: number; top: number; maxCallsDay: number; inJev: boolean };
+  cmc: { apiKey?: string; refreshMin: number; slowMin: number; top: number; maxCallsDay: number; inJev: boolean };
   links: { sponsor: string; code: string };
   hive: { url: string };
   update: { enabled: boolean; repo: string; version: string };
@@ -503,6 +505,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     cmc: {
       apiKey: e.COINMARKETCAP_API_KEY ?? e.CMC_API_KEY ?? settings?.cmcKey,
       refreshMin: Math.max(5, e.CMC_REFRESH_MIN),
+      slowMin: Math.max(15, e.CMC_SLOW_MIN),
       top: Math.min(5000, Math.max(10, Math.round(e.CMC_TOP))),
       maxCallsDay: Math.max(0, Math.round(e.CMC_MAX_CALLS_DAY)),
       inJev: e.CMC_IN_JEV,

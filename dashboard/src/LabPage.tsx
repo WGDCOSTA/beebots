@@ -471,13 +471,16 @@ export function LabPage() {
   );
 }
 
-export function PageNav({ current }: { current: "lab" | "admin" }) {
+export function PageNav({ current }: { current: "lab" | "admin" | "bunny" }) {
   return (
     <nav className="pnav">
       <a className="logo" href="#/">
         beebots
       </a>
       <a href="#/">Live</a>
+      <a href="#/bunny/bee1" className={current === "bunny" ? "on" : ""}>
+        Bunnies
+      </a>
       <a href="#/lab" className={current === "lab" ? "on" : ""}>
         Lab & warren memory
       </a>
