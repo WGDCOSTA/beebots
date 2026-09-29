@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ANTHROPIC_PROFILE, BRAINS, hasAnthropicLogin, type BrainCreds, type BrainId } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, BRAINS, BRAIN_ID_RE, hasAnthropicLogin, ZAI_BASE_URL, ZAI_DEFAULT_MODEL, type BrainCreds, type BrainId } from "./brains/llm.js";
 import { parseHug, parseLock, type HugRung, type LockRung } from "./bees/ratchet.js";
 import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
@@ -53,6 +53,11 @@ const str = (def: string) =>
 /** One of `values`; blank (compose passes "" for an unset variable) means the default. */
 const oneOf = <T extends readonly [string, ...string[]]>(values: T, def: T[number]) =>
   z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : typeof v === "string" ? v.trim() : v), z.enum(values).optional().default(def as never)) as unknown as z.ZodType<T[number], z.ZodTypeDef, string | undefined>;
+/** A brain id: a built-in's or a custom brain's. Blank means the default; whether it exists is checked where clients are built. */
+const brainId = (def: BrainId) =>
+  z.preprocess((v) => (typeof v === "string" ? (v.trim() === "" ? undefined : v.trim()) : v), z.string().regex(BRAIN_ID_RE, "a brain id like openai, claude, kimi, zai or a custom one").optional().default(def)) as unknown as z.ZodType<BrainId, z.ZodTypeDef, string | undefined>;
+/** The three brains extra bees take turns on when none was chosen (unchanged by adding more brains). */
+const ROTATION: BrainId[] = ["openai", "claude", "kimi"];
 const opt = z
   .string()
   .optional()
@@ -175,9 +180,13 @@ const EnvSchema = z.object({
   MOONSHOT_API_KEY: opt,
   KIMI_MODEL: str("kimi-k2.5"),
   KIMI_BASE_URL: str("https://api.moonshot.ai/v1"),
-  BEE1_BRAIN: oneOf(BRAINS, DEFAULT_BRAINS.bee1),
-  BEE2_BRAIN: oneOf(BRAINS, DEFAULT_BRAINS.bee2),
-  BEE3_BRAIN: oneOf(BRAINS, DEFAULT_BRAINS.bee3),
+  // Z.ai (GLM models): ZAI_API_KEY. International https://api.z.ai/api/paas/v4, China https://open.bigmodel.cn/api/paas/v4.
+  ZAI_API_KEY: opt,
+  ZAI_MODEL: str(ZAI_DEFAULT_MODEL),
+  ZAI_BASE_URL: str(ZAI_BASE_URL),
+  BEE1_BRAIN: brainId(DEFAULT_BRAINS.bee1),
+  BEE2_BRAIN: brainId(DEFAULT_BRAINS.bee2),
+  BEE3_BRAIN: brainId(DEFAULT_BRAINS.bee3),
   LAB_DIR: str("./data/lab"),
   GRAPH_PATH: str("./data/lab/hive-mind.sqlite"),
   // Extra folders of importable JSON skills (comma separated), on top of ./skills.
@@ -407,6 +416,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     throw new ConfigError(`MODE=live moves real money. Set LIVE_ACK=${LIVE_ACK_PHRASE} to confirm you accept the risk, or go back to DRY_RUN=true.`);
   }
 
+  const knownBrains = new Set<string>([...BRAINS, ...(settings?.customBrains ?? []).map((b) => b.id)]);
+  for (const k of ["BEE1_BRAIN", "BEE2_BRAIN", "BEE3_BRAIN"] as const) {
+    if (!knownBrains.has(e[k])) throw new ConfigError(`${k}: not a known brain (${[...knownBrains].join(", ")}). Add a custom brain in the admin panel first.`);
+  }
   if (e.MAX_LEVERAGE > 2 || e.MAX_LEVERAGE <= 0) throw new ConfigError("MAX_LEVERAGE must be in (0, 2]. Hard rule 3.");
   if (e.MAX_FLAT_MINUTES < 0) throw new ConfigError("MAX_FLAT_MINUTES must be >= 0");
   // Survival lines must sit above the death line, in order. An install with a high BEE_RETIRE_AT_PCT keeps running:
@@ -593,14 +606,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
 function brainSlots(ids: BeeId[], main: Record<(typeof BEES)[number], BrainId>, settings: Settings | null): Record<BeeId, BrainId> {
   const out = {} as Record<BeeId, BrainId>;
   ids.forEach((id, i) => {
-    out[id] = (main as Record<string, BrainId>)[id] ?? settings?.bees[i]?.brain ?? BRAINS[i % BRAINS.length]!;
+    out[id] = (main as Record<string, BrainId>)[id] ?? settings?.bees[i]?.brain ?? ROTATION[i % ROTATION.length]!;
   });
   return out;
 }
 
 /** Brain keys from the environment first, then the Setup file. A brain without a key is left out. */
 export function brainCreds(
-  e: { OPENAI_API_KEY?: string; OPENAI_BRAIN_MODEL: string; ANTHROPIC_API_KEY?: string; CLAUDE_MODEL: string; CLAUDE_EFFORT: "low" | "medium" | "high"; KIMI_API_KEY?: string; MOONSHOT_API_KEY?: string; KIMI_MODEL: string; KIMI_BASE_URL: string },
+  e: { OPENAI_API_KEY?: string; OPENAI_BRAIN_MODEL: string; ANTHROPIC_API_KEY?: string; CLAUDE_MODEL: string; CLAUDE_EFFORT: "low" | "medium" | "high"; KIMI_API_KEY?: string; MOONSHOT_API_KEY?: string; KIMI_MODEL: string; KIMI_BASE_URL: string; ZAI_API_KEY?: string; ZAI_MODEL?: string; ZAI_BASE_URL?: string },
   settings: Settings | null,
 ): BrainCreds {
   const openai = e.OPENAI_API_KEY ?? settings?.openaiKey;
@@ -608,10 +621,13 @@ export function brainCreds(
   // No key: an Anthropic Console sign-in (`ant --profile beebots auth login`) works too.
   const claude = claudeKey ? { apiKey: claudeKey } : hasAnthropicLogin() ? { profile: ANTHROPIC_PROFILE } : null;
   const kimi = e.KIMI_API_KEY ?? e.MOONSHOT_API_KEY ?? settings?.kimiKey;
+  const zai = e.ZAI_API_KEY ?? settings?.zaiKey;
   return {
     ...(openai ? { openai: { apiKey: openai, model: e.OPENAI_BRAIN_MODEL } } : {}),
     ...(claude ? { claude: { ...claude, model: e.CLAUDE_MODEL, effort: e.CLAUDE_EFFORT } } : {}),
     ...(kimi ? { kimi: { apiKey: kimi, model: e.KIMI_MODEL, baseUrl: e.KIMI_BASE_URL.replace(/\/+$/, "") } } : {}),
+    ...(zai ? { zai: { apiKey: zai, model: e.ZAI_MODEL ?? ZAI_DEFAULT_MODEL, baseUrl: (e.ZAI_BASE_URL ?? ZAI_BASE_URL).replace(/\/+$/, "") } } : {}),
+    ...(settings?.customBrains?.length ? { custom: settings.customBrains } : {}),
   };
 }
 

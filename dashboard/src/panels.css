@@ -1163,3 +1163,164 @@
 .xready.ok {
   color: var(--good-text);
 }
+
+/* real-data check */
+.checklist {
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+.checklist li > span:first-child {
+  display: inline-block;
+  width: 1.2em;
+}
+.checklist .bad {
+  color: var(--critical-text);
+}
+.verdicts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.verdict {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--card-2);
+}
+.verdict p {
+  margin: 6px 0 0;
+}
+.verdict ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.checklist.stages label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* skill workshop */
+.workshop {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+@media (max-width: 800px) {
+  .workshop {
+    grid-template-columns: 1fr;
+  }
+}
+.draft-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.draft-item {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+}
+.draft-item.on {
+  border-color: var(--text-2);
+}
+.workshop-edit {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* research notes */
+.notes {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.note {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--card-2);
+}
+.note.pending {
+  border-color: var(--warning);
+}
+.note p {
+  margin: 6px 0;
+}
+.agent-box {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  background: var(--card-2);
+  display: grid;
+  gap: 8px;
+}
+.agent-box h4 {
+  margin: 0;
+}
+.note-explain {
+  border-left: 3px solid var(--line);
+  padding-left: 10px;
+  margin: 0;
+}
+
+/* connectors */
+.mcp-server {
+  margin: 8px 0;
+}
+.mcp-tools {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.mcp-tools li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 320px);
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+@media (max-width: 800px) {
+  .mcp-tools li {
+    grid-template-columns: 1fr;
+  }
+}
+.mcp-bees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-content: flex-start;
+  font-size: 13px;
+}
+.mcp-bees label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.mcp-bees .warn {
+  color: var(--warning);
+  flex-basis: 100%;
+}

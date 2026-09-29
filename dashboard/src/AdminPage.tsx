@@ -4,7 +4,7 @@
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
-import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
+import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
@@ -23,6 +23,7 @@ const KEY_INFO: Record<KeyName, { label: string; help: string; placeholder: stri
   openai: { label: "OpenAI (ChatGPT)", help: "Bee designs and portraits on Setup, and the ChatGPT brain.", placeholder: "sk-…", removable: true },
   anthropic: { label: "Anthropic (Claude)", help: "The Claude brain. console.anthropic.com", placeholder: "sk-ant-…", removable: true },
   kimi: { label: "Moonshot (Kimi)", help: "The Kimi brain. platform.moonshot.ai", placeholder: "sk-…", removable: true },
+  zai: { label: "Z.ai (GLM)", help: "The GLM brain. z.ai. Model and API address: Settings → Brains and models.", placeholder: "Z.ai API key", removable: true },
   coinmarketcap: {
     label: "CoinMarketCap",
     help: "Market context: Fear & Greed, BTC dominance, market cap, and each coin's rank and all-exchange volume for Jev and the brains. pro.coinmarketcap.com",
@@ -163,9 +164,10 @@ function AnthropicLogin({ login, keySet, call }: { login: NonNullable<AdminState
   );
 }
 
-function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+function KeysTab({ s, call, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; password: string }) {
   const [draft, setDraft] = useState<Partial<Record<KeyName, string>>>({});
   return (
+    <>
     <div className="pcard">
       <h3>API keys</h3>
       <p className="dim">Keys are write-only: this page never shows them, only whether one is set and where from. Each new key is tested with a free call before it is saved.</p>
@@ -211,6 +213,144 @@ function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
           </div>
         );
       })}
+    </div>
+    <CustomBrains s={s} call={call} password={password} />
+    </>
+  );
+}
+
+const JSON_MODE_HELP: Record<string, string> = {
+  object: "JSON mode: the widest support (recommended).",
+  schema: "Strict JSON schema: OpenAI-style servers that support it.",
+  prompt: "No response format: for servers that reject both (the answer is still checked).",
+};
+
+/** Any OpenAI-compatible LLM as a brain: OpenRouter, DeepSeek, Together, a local Ollama... Keys are write-only. */
+function CustomBrains({ s, call, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; password: string }) {
+  const v: BrainsView = s.brains;
+  const blank = { id: "", label: "", vendor: "", baseUrl: "https://", model: "", apiKey: "", jsonMode: "object" };
+  const [f, setF] = useState(blank);
+  const [editing, setEditing] = useState(false);
+  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
+  const set = (k: keyof typeof blank, val: string) => {
+    setTest(null);
+    setF((p) => ({ ...p, [k]: val, ...(k === "label" && !editing ? { id: slug(val) } : {}) }));
+  };
+  const runTest = async () => {
+    setBusy(true);
+    try {
+      const r = await adminCall<{ ok: boolean; error?: string }>("brains/test", password, { baseUrl: f.baseUrl, model: f.model, apiKey: f.apiKey || undefined, id: editing ? f.id : undefined, vendor: f.label });
+      setTest({ ok: r.ok, text: r.ok ? "Connected: the address, key and model work together." : (r.error ?? "It did not answer.") });
+    } catch (e) {
+      setTest({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = (force: boolean) =>
+    void call("brains/save", { ...f, apiKey: f.apiKey || undefined, vendor: f.vendor || undefined, force }, `${f.label} saved. Restart the engine to bring it online.`).then(() => {
+      setF(blank);
+      setEditing(false);
+      setTest(null);
+    });
+  const ready = f.id.length >= 2 && f.label.trim() && /^https?:\/\//.test(f.baseUrl) && f.model.trim();
+  return (
+    <div className="pcard">
+      <h3>Custom brains</h3>
+      <p className="dim">
+        Add any LLM with an OpenAI-compatible API (OpenRouter, DeepSeek, Together, Groq, a local Ollama or LM Studio, ...) and use it anywhere a brain is chosen: a bee's brain, the skill agent, research. There is no limit
+        beyond 50. The key is stored like the others, is never shown again, and is only ever sent to the address you give. Built in: ChatGPT, Claude, Kimi and GLM (Z.ai).
+      </p>
+      <ul className="checklist">
+        {v.builtin.map((b) => (
+          <li key={b.id}>
+            <span className={b.ready ? "good" : "dim"}>{b.ready ? "✓" : "○"}</span> <strong>{b.label}</strong> <span className="dim small">{b.vendor} · built in{b.ready ? "" : " · no key yet"}</span>
+          </li>
+        ))}
+        {v.custom.map((b) => (
+          <li key={b.id}>
+            <span className="good">✓</span> <strong>{b.label}</strong>{" "}
+            <span className="dim small">
+              {b.vendor} · {b.model} · {b.baseUrl.replace(/^https?:\/\//, "")} · {b.keySet ? "key saved" : "no key"} · {b.jsonMode}
+              {b.usedBy.length ? ` · used by ${b.usedBy.join(", ")}` : ""}
+            </span>{" "}
+            <button
+              className="pbtn ghost small"
+              onClick={() => {
+                setF({ id: b.id, label: b.label, vendor: b.vendor, baseUrl: b.baseUrl, model: b.model, apiKey: "", jsonMode: b.jsonMode });
+                setEditing(true);
+                setTest(null);
+              }}
+            >
+              Edit
+            </button>{" "}
+            <button className="pbtn ghost small" disabled={b.usedBy.length > 0} title={b.usedBy.length ? "Give its bees another brain first" : ""} onClick={() => confirm(`Remove ${b.label}?`) && void call("brains/delete", { id: b.id }, `${b.label} removed.`)}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      {!v.canEdit ? (
+        <p className="dim small">No Setup file on this server, so custom brains cannot be saved here.</p>
+      ) : (
+        <>
+          <h4>{editing ? `Edit ${f.label}` : "Add a brain"}</h4>
+          <div className="form-grid">
+            <label className="plabel">
+              Name
+              <input className="pinput" maxLength={30} value={f.label} onChange={(e) => set("label", e.target.value)} placeholder="DeepSeek" />
+            </label>
+            <label className="plabel">
+              Id (short, fixed once saved)
+              <input className="pinput mono" maxLength={30} disabled={editing} value={f.id} onChange={(e) => set("id", slug(e.target.value))} placeholder="deepseek" />
+            </label>
+            <label className="plabel wide">
+              API address (base URL)
+              <input className="pinput mono" value={f.baseUrl} onChange={(e) => set("baseUrl", e.target.value)} placeholder="https://api.deepseek.com/v1" />
+            </label>
+            <label className="plabel">
+              Model
+              <input className="pinput mono" value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="deepseek-chat" />
+            </label>
+            <label className="plabel">
+              API key {editing ? "(leave empty to keep the saved one)" : "(empty for a local server)"}
+              <input className="pinput mono" type="password" autoComplete="off" value={f.apiKey} onChange={(e) => set("apiKey", e.target.value)} />
+            </label>
+            <label className="plabel wide">
+              How it is asked for JSON
+              <select className="pinput" value={f.jsonMode} onChange={(e) => set("jsonMode", e.target.value)}>
+                {Object.entries(JSON_MODE_HELP).map(([k, t]) => (
+                  <option key={k} value={k}>
+                    {k}: {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="row-actions">
+            <button className="pbtn ghost" disabled={!ready || busy} onClick={() => void runTest()}>
+              {busy ? "Testing…" : "Test connection"}
+            </button>
+            <button className="pbtn" disabled={!ready} onClick={() => save(false)}>
+              {editing ? "Test & save changes" : "Test & add brain"}
+            </button>
+            {test && !test.ok && (
+              <button className="pbtn ghost" disabled={!ready} onClick={() => save(true)}>
+                Save without testing
+              </button>
+            )}
+            {editing && (
+              <button className="pbtn ghost" onClick={() => (setF(blank), setEditing(false), setTest(null))}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {test && <p className={test.ok ? "good small" : "bad small"}>{test.text}</p>}
+          <p className="dim small">A new or changed brain comes online after Restart engine.</p>
+        </>
+      )}
     </div>
   );
 }
@@ -573,9 +713,9 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
                   <label className="plabel">
                     Thinks with
                     <select className="pinput" value={b.brain} onChange={(ev) => set(i, { brain: ev.target.value })}>
-                      {["openai", "claude", "kimi"].map((x) => (
-                        <option key={x} value={x}>
-                          {BRAIN_LABEL[x]}
+                      {[...s.brains.builtin, ...s.brains.custom].map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.label}
                         </option>
                       ))}
                     </select>
@@ -861,6 +1001,597 @@ function ImportSkill({ password }: { password: string }) {
   );
 }
 
+const DRAFT_BADGE: Record<DraftFull["status"], { text: string; cls: string }> = {
+  draft: { text: "draft", cls: "" },
+  proposed: { text: "proposed by a bee", cls: "" },
+  published: { text: "✓ live", cls: "ok" },
+  discarded: { text: "discarded", cls: "err" },
+};
+
+/** Write, test and publish skills. A version is only ever live after a backtest; a bee's own drafts land here too. */
+function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: string; refresh: () => Promise<void> }) {
+  const w = s.lab.workshop;
+  const [draft, setDraft] = useState<DraftFull | null>(null);
+  const [text, setText] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [force, setForce] = useState(false);
+  const latest = draft?.versions[draft.versions.length - 1] ?? null;
+  const dirty = latest ? text !== latest.json : text.trim().length > 0;
+  const bt = !dirty ? (latest?.backtest ?? null) : null;
+
+  const run = async <T,>(what: string, f: () => Promise<T>): Promise<T | null> => {
+    setBusy(what);
+    setMsg(null);
+    try {
+      return await f();
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+      return null;
+    } finally {
+      setBusy("");
+    }
+  };
+  const open = (key: string) =>
+    void run("open", async () => {
+      const r = await adminCall<{ draft: DraftFull }>("workspace/get", password, { key });
+      setDraft(r.draft);
+      setText(r.draft.versions[r.draft.versions.length - 1]?.json ?? "");
+      setErrors([]);
+      setForce(false);
+    });
+  const fresh = (json: string) => {
+    setDraft(null);
+    setText(json);
+    setNote("");
+    setErrors([]);
+    setForce(false);
+    setMsg(null);
+  };
+  const save = async (): Promise<DraftFull | null> => {
+    const r = await run("save", () => adminCall<{ draft: DraftFull }>("workspace/save", password, { ...(draft ? { key: draft.key } : {}), json: text, ...(note ? { note } : {}) }));
+    if (!r) return null;
+    setDraft(r.draft);
+    setNote("");
+    void refresh();
+    const v = r.draft.versions[r.draft.versions.length - 1]!;
+    setErrors(v.errors);
+    setMsg({ ok: v.valid, text: v.valid ? `Saved as version ${v.n}.` : "Saved as work in progress. It does not compile yet, so it cannot be tested or published." });
+    return r.draft;
+  };
+  const check = () =>
+    void run("check", async () => {
+      const r = await adminCall<{ ok: boolean; errors?: string[]; id?: string }>("workspace/check", password, { json: text });
+      setErrors(r.errors ?? []);
+      setMsg({ ok: r.ok, text: r.ok ? `It compiles (${r.id}).` : "It does not compile yet." });
+    });
+  const backtest = async () => {
+    const d = dirty ? await save() : draft;
+    if (!d || !d.versions[d.versions.length - 1]?.valid) return;
+    const r = await run("backtest", () => adminCall<{ draft: DraftFull }>("workspace/backtest", password, { key: d.key }));
+    if (r) {
+      setDraft(r.draft);
+      void refresh();
+    }
+  };
+  const publish = async () => {
+    if (!draft) return;
+    const r = await run("publish", () => adminCall<{ draft: DraftFull; note: string }>("workspace/publish", password, { key: draft.key, force }));
+    if (r) {
+      setDraft(r.draft);
+      setMsg({ ok: true, text: r.note });
+      void refresh();
+    }
+  };
+  const discard = async () => {
+    if (!draft) return;
+    if (!window.confirm(`Discard the draft ${draft.key}? A published skill stays live.`)) return;
+    const r = await run("discard", () => adminCall("workspace/discard", password, { key: draft.key }));
+    if (r) {
+      fresh("");
+      void refresh();
+    }
+  };
+
+  const [ask, setAsk] = useState("");
+  const [agentBrain, setAgentBrain] = useState("");
+  const [explained, setExplained] = useState("");
+  const agents = w.agent;
+  const askAgent = async () => {
+    const revise = !!draft && !dirty;
+    const r = await run("ai", () => adminCall<{ ok: boolean; json: string; explanation: string; errors: string[]; brainLabel: string; attempts: number; draft?: DraftFull }>("workspace/ai", password, { prompt: ask, ...(agentBrain ? { brain: agentBrain } : {}), ...(revise ? { key: draft!.key } : {}) }));
+    if (!r) return;
+    setText(r.json);
+    setExplained(r.explanation);
+    setErrors(r.errors);
+    if (r.ok && r.draft) {
+      setDraft(r.draft);
+      setAsk("");
+      void refresh();
+      setMsg({ ok: true, text: `${r.brainLabel} drafted it${r.attempts > 1 ? " (after fixing its first attempt)" : ""} and saved it as version ${r.draft.versions.length}. It is only a draft: backtest it before anything else.` });
+    } else {
+      setDraft(null);
+      setMsg({ ok: false, text: `${r.brainLabel} could not produce a skill that compiles. Its last attempt is in the editor with the errors below; fix it by hand or ask again.` });
+    }
+  };
+  const canPublish = !!bt && !dirty && (force || (bt.pass && bt.data === "real"));
+  return (
+    <div className="pcard">
+      <h3>Skill workshop</h3>
+      <p className="dim">
+        Write a skill in the JSON rule language, test it walk-forward on real history, keep every version, and publish it. Nothing reaches a bee until it is published, and even then it is one vote Jev may weigh. Skills the bees
+        write themselves appear here too, so you can read, improve and re-test them.
+      </p>
+      <div className="agent-box">
+        <h4>Ask the skill agent</h4>
+        {agents.length === 0 ? (
+          <p className="dim small">No brain can answer yet. Add a key (or a custom brain) under API keys, then restart the engine.</p>
+        ) : (
+          <>
+            <textarea
+              className="pinput"
+              rows={3}
+              maxLength={2000}
+              value={ask}
+              onChange={(e) => setAsk(e.target.value)}
+              placeholder={draft && !dirty ? `Change ${draft.key}, e.g. “make the entry stricter and add a trailing stop”` : "Describe a strategy, e.g. “Buy a pullback to the 50 EMA when ADX shows a trend, exit on a close below the 20 EMA”"}
+              aria-label="Describe the skill"
+            />
+            <div className="row-actions">
+              <select className="pinput" style={{ maxWidth: 220 }} value={agentBrain} onChange={(e) => setAgentBrain(e.target.value)} aria-label="Brain">
+                <option value="">Brain: {agents[0]!.label} (default)</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+              <button className="pbtn" disabled={ask.trim().length < 8 || !!busy || (dirty && !!draft)} onClick={() => void askAgent()}>
+                {busy === "ai" ? "Thinking…" : draft && !dirty ? `Revise ${draft.key}` : "Draft a skill"}
+              </button>
+            </div>
+            <p className="dim small">
+              The brain writes the JSON, the app compiles it (one automatic fix if it does not), and the result lands here as a <strong>draft</strong>: nothing is published, and the brain has no market data, so it cannot know how the idea performs.
+              {dirty && draft ? " Save or revert your edits first to revise this draft." : ""}
+            </p>
+            {explained && <p className="small note-explain">{explained}</p>}
+          </>
+        )}
+      </div>
+      <div className="workshop">
+        <div className="workshop-list">
+          <div className="row-actions">
+            <select className="pinput" value="" onChange={(e) => e.target.value && fresh(w.templates.find((t) => t.id === e.target.value)?.json ?? "")} aria-label="New draft from a template">
+              <option value="">＋ New draft…</option>
+              <option value="__blank">Blank</option>
+              {w.templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {w.drafts.length === 0 && <p className="dim small">No drafts yet.</p>}
+          <ul className="draft-list">
+            {w.drafts.map((d: DraftSummary) => (
+              <li key={d.key}>
+                <button className={`draft-item ${draft?.key === d.key ? "on" : ""}`} onClick={() => open(d.key)}>
+                  <strong>{d.name}</strong>
+                  <span className="dim small">
+                    {d.author === "owner" ? "you" : d.author.startsWith("ai:") ? `AI · ${BRAIN_LABEL[d.author.slice(3)] ?? d.author.slice(3)}` : d.author} · v{d.versions} · <span className={`badge ${DRAFT_BADGE[d.status].cls}`}>{DRAFT_BADGE[d.status].text}</span>
+                    {d.backtest ? ` · ${d.backtest.pass ? "✓" : "✗"} ${d.backtest.data === "real" ? "real" : "synthetic"} data` : d.valid ? "" : " · does not compile"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="workshop-edit">
+          <textarea className="pinput mono" rows={18} spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} placeholder="Pick a template, or paste a skill…" aria-label="Skill JSON" />
+          {errors.length > 0 && (
+            <ul className="bad small">
+              {errors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+          <div className="row-actions">
+            <input className="pinput" style={{ maxWidth: 260 }} placeholder="What changed? (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} />
+            <button className="pbtn ghost" disabled={!text.trim() || !!busy} onClick={check}>
+              Check
+            </button>
+            <button className="pbtn ghost" disabled={!text.trim() || !dirty || !!busy} onClick={() => void save()}>
+              {busy === "save" ? "Saving…" : "Save version"}
+            </button>
+            <button className="pbtn" disabled={!text.trim() || !!busy} onClick={() => void backtest()}>
+              {busy === "backtest" ? "Backtesting…" : dirty ? "Save & backtest" : "Backtest"}
+            </button>
+          </div>
+          {msg && <p className={msg.ok ? "good small" : "bad small"}>{msg.text}</p>}
+
+          {bt && (
+            <div className="verdict">
+              <div className="verdict-head">
+                <strong>Walk-forward backtest</strong> <span className={`badge ${bt.pass ? "ok" : "err"}`}>{bt.pass ? "✓ clears the bar" : "✗ does not clear the bar"}</span>{" "}
+                <span className={`badge ${bt.data === "real" ? "" : "err"}`}>{bt.data === "real" ? "real history" : "synthetic data"}</span>
+              </div>
+              <p className="small">
+                Out of sample {bt.returnPct.toFixed(1)}% vs buy-and-hold {bt.benchmarkPct.toFixed(1)}% · score {bt.score.toFixed(2)} · positive in {bt.stabilityPct}% of folds · {bt.trades} trades · max drawdown {bt.maxDrawdownPct.toFixed(1)}% · Sharpe{" "}
+                {bt.sharpe.toFixed(2)} · overfit gap {bt.overfitGap.toFixed(2)}
+              </p>
+              <p className="dim small">
+                {bt.datasets.join(", ")}.{" "}
+                {bt.data === "synthetic" ? "No real history is cached, so this only exercises the skill. Run the Real-data check first, then backtest again." : "The bar: a positive out-of-sample score with at least 50% of folds positive."}
+              </p>
+            </div>
+          )}
+
+          {draft && (
+            <>
+              <div className="row-actions">
+                <button className="pbtn" disabled={!canPublish || !!busy} onClick={() => void publish()}>
+                  {busy === "publish" ? "Publishing…" : draft.status === "published" && draft.publishedVersion === latest?.n ? "Published" : "Publish"}
+                </button>
+                {bt && (!bt.pass || bt.data === "synthetic") ? (
+                  <label className="switch">
+                    <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+                    <span>Publish anyway (I accept it has no passing real-data backtest)</span>
+                  </label>
+                ) : null}
+                <button className="pbtn ghost" disabled={!!busy} onClick={() => void discard()}>
+                  Discard draft
+                </button>
+              </div>
+              <details>
+                <summary>Versions ({draft.versions.length})</summary>
+                <ul className="checklist">
+                  {[...draft.versions].reverse().map((v) => (
+                    <li key={v.n}>
+                      <button className="hg-jump" onClick={() => setText(v.json)}>
+                        v{v.n}
+                      </button>{" "}
+                      <span className="dim small">
+                        {v.author === "owner" ? "you" : v.author.startsWith("ai:") ? `AI · ${BRAIN_LABEL[v.author.slice(3)] ?? v.author.slice(3)}` : v.author} · {new Date(v.at).toISOString().slice(0, 16).replace("T", " ")}
+                        {v.note ? ` · ${v.note}` : ""}
+                        {v.n === draft.publishedVersion ? " · live" : ""}
+                        {v.backtest ? ` · ${v.backtest.pass ? "✓" : "✗"} ${v.backtest.returnPct.toFixed(1)}% (${v.backtest.data})` : ""}
+                        {!v.valid ? " · does not compile" : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="dim small">Click a version to load it into the editor; Save version makes it the newest.</p>
+              </details>
+            </>
+          )}
+        </div>
+      </div>
+      <details>
+        <summary>Rule language, in short</summary>
+        <p className="dim small">
+          A skill is JSON: <span className="mono">id</span>, <span className="mono">name</span>, <span className="mono">family</span> (trend, breakout, momentum, mean_reversion, hybrid), optional{" "}
+          <span className="mono">params</span> with a grid to scan, exits (<span className="mono">stopAtr</span>, <span className="mono">stoploss</span>, <span className="mono">roi</span>, <span className="mono">trailing</span>), and a{" "}
+          <span className="mono">long</span> and/or <span className="mono">short</span> side with <span className="mono">entry</span> and <span className="mono">exit</span> conditions. A condition is{" "}
+          <span className="mono">{`{"left":…,"op":…,"right":…}`}</span> (ops: &lt; &lt;= &gt; &gt;= crosses_above crosses_below) or <span className="mono">{`{"any":[…]}`}</span>. Values: close open high low volume, sma(n) ema(n) rsi(n) atr(n) roc(n) zscore(n)
+          highest(n) lowest(n) bb_*(n,k) macd_hist adx supertrend cci mfi willr…, numbers, or $param. Signals are read at a bar's close and filled at the next open. The id may not be a built-in's.
+        </p>
+      </details>
+    </div>
+  );
+}
+
+/** What each bee has been studying: the owner's background, and notes its brain drafted that wait for a yes. */
+function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void> }) {
+  const n = s.lab.notes;
+  const bees = (s.bees ?? []).filter((b) => b.running);
+  const [bee, setBee] = useState("");
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [coins, setCoins] = useState("");
+  const target = bee || bees[0]?.slot || "hive";
+  const label = (slot: string) => (slot === "hive" ? "Every bee" : (bees.find((b) => b.slot === slot)?.name ?? slot));
+  const shown = n.notes.filter((x) => x.bee === target || (target !== "hive" && x.bee === "hive"));
+  const pending = n.notes.filter((x) => x.status === "pending");
+  const why = n.blocked[target];
+  const busy = n.busy.includes(target);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => void refresh(), 3000);
+    return () => clearInterval(t);
+  }, [busy, refresh]);
+  if (!n.available) return null;
+  return (
+    <div className="pcard">
+      <h3>
+        Research &amp; background {pending.length > 0 && <span className="badge">{pending.length} to review</span>}
+      </h3>
+      <p className="dim">
+        What a bee has been studying. Write its <strong>background</strong> yourself (it applies at once), or ask its brain to <strong>research</strong>: it reads only what the app already holds (the lab ranking, the bee's trades,
+        its peers, the market mood), cites that evidence, and its notes wait here until you approve them. Approved notes reach the brains as context and hypotheses, never as orders or facts, and show in the hive-mind graph.
+      </p>
+      <div className="row-actions">
+        <select className="pinput" value={target} onChange={(e) => setBee(e.target.value)} aria-label="Bee">
+          {bees.map((b) => (
+            <option key={b.slot} value={b.slot}>
+              {b.name} ({b.slot}){n.notes.some((x) => x.bee === b.slot && x.status === "pending") ? " · to review" : ""}
+            </option>
+          ))}
+          <option value="hive">Every bee</option>
+        </select>
+        {target !== "hive" && (
+          <button className="pbtn" disabled={!!why || busy} title={why ?? ""} onClick={() => void call("research", { bee: target }, "Research started: its notes appear here for your review in a minute or two.").then(() => setTimeout(() => void refresh(), 4000))}>
+            {busy ? "Researching…" : `Ask ${label(target)}'s brain to research`}
+          </button>
+        )}
+      </div>
+      {target !== "hive" && why && !busy && <p className="dim small">Not now: {why}.</p>}
+      <ul className="notes">
+        {shown.length === 0 && <li className="dim small">No notes yet for {label(target)}.</li>}
+        {shown.map((x) => (
+          <li key={x.id} className={`note ${x.status}`}>
+            <div className="note-head">
+              <strong>{x.title}</strong>{" "}
+              <span className={`badge ${x.status === "approved" ? "ok" : ""}`}>{x.status === "pending" ? "● waiting for you" : x.kind === "background" ? "✓ background" : "✓ approved"}</span>{" "}
+              <span className="dim small">
+                {x.author === "owner" ? "you" : `${x.brain ?? "brain"} (${x.author})`}
+                {x.bee === "hive" ? " · every bee" : ""} · {x.kind === "research" ? `confidence ${x.confidence}` : "your words"}
+                {x.coins.length ? ` · ${x.coins.join(", ")}` : ""}
+              </span>
+            </div>
+            <p className="small">{x.text}</p>
+            {x.evidence.length > 0 && (
+              <ul className="dim small">
+                {x.evidence.map((e, i) => (
+                  <li key={i}>
+                    {e.startsWith("external:") && <span className="badge">outside source, unverified</span>} {e}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="row-actions">
+              {x.status === "pending" && (
+                <>
+                  <button className="pbtn small" onClick={() => void call("notes/decide", { id: x.id, decision: "approve" }, "Note approved: the brains will read it.")}>
+                    Approve
+                  </button>
+                  <button className="pbtn ghost small" onClick={() => void call("notes/decide", { id: x.id, decision: "reject" }, "Note rejected.")}>
+                    Reject
+                  </button>
+                </>
+              )}
+              {x.status === "approved" && (
+                <button className="pbtn ghost small" onClick={() => void call("notes/decide", { id: x.id, decision: "reject" }, "Note archived: the brains no longer read it.")}>
+                  Archive
+                </button>
+              )}
+              <button className="pbtn ghost small" onClick={() => window.confirm("Delete this note for good?") && void call("notes/delete", { id: x.id }, "Note deleted.")}>
+                Delete
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <h4>Write a background note for {label(target)}</h4>
+      <div className="form-grid">
+        <label className="plabel">
+          Title
+          <input className="pinput" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Study gold vs real yields" />
+        </label>
+        <label className="plabel">
+          Coins (optional, comma separated)
+          <input className="pinput mono" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="BTC, XAU" />
+        </label>
+        <label className="plabel wide">
+          What it should know or keep in mind
+          <textarea className="pinput" rows={3} maxLength={700} value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+      </div>
+      <button
+        className="pbtn"
+        disabled={!title.trim() || text.trim().length < 10}
+        onClick={() => {
+          void call("notes/add", { bee: target, title, text, coins: coins.split(",").map((c) => c.trim()).filter(Boolean) }, "Background note saved.");
+          setTitle("");
+          setText("");
+          setCoins("");
+        }}
+      >
+        Save background note
+      </button>
+    </div>
+  );
+}
+
+/** Outside MCP servers for research. Read-only by rule: the owner grants named tools to named bees, nothing else is callable. */
+function Connectors({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  const v = s.lab.mcp;
+  const blank = { id: "", label: "", url: "https://", transport: "http", authHeader: "Authorization", token: "", maxCallsDay: 50 };
+  const [f, setF] = useState(blank);
+  const [editing, setEditing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
+  const set = (k: keyof typeof blank, val: string | number) => setF((p) => ({ ...p, [k]: val, ...(k === "label" && !editing ? { id: slug(String(val)) } : {}) }));
+  const bees = (s.bees ?? []).filter((b) => b.running);
+  if (!v.available) return null;
+  const ready = f.id.length >= 2 && f.label.trim() && /^https?:\/\//.test(f.url);
+  const save = (force: boolean) =>
+    void call("mcp/save", { ...f, token: f.token || undefined, maxCallsDay: Number(f.maxCallsDay) || 50, force }, `${f.label} saved.`).then(
+      () => {
+        setF(blank);
+        setEditing(false);
+        setFailed(false);
+      },
+      () => setFailed(true),
+    );
+  return (
+    <div className="pcard">
+      <h3>Connectors (MCP)</h3>
+      <p className="dim">
+        Let the bees look things up on outside MCP servers while they research (news, data, documentation). Read-only by rule: a bee can call only the tools you grant it by name; a tool that the server does not declare read-only, or whose name reads
+        like an action, needs your explicit confirmation before it can be granted; every call is capped per day, times out, is logged below, and its answer reaches the brain as untrusted data. Nothing here can place an order or change a
+        setting. The token is stored like the other keys, never shown again and only sent to the server's address. Servers run elsewhere: beebots does not run plugins or local commands.
+      </p>
+      {v.servers.length === 0 && <p className="dim small">No connectors yet.</p>}
+      {v.servers.map((m) => (
+        <McpServerCard key={m.id} m={m} bees={bees} call={call} onEdit={() => (setF({ id: m.id, label: m.label, url: m.url, transport: m.transport, authHeader: m.authHeader, token: "", maxCallsDay: m.maxCallsDay }), setEditing(true), setFailed(false))} />
+      ))}
+      {!v.canEdit ? (
+        <p className="dim small">No Setup file on this server, so connectors cannot be saved here.</p>
+      ) : (
+        <>
+          <h4>{editing ? `Edit ${f.label}` : "Connect a server"}</h4>
+          <div className="form-grid">
+            <label className="plabel">
+              Name
+              <input className="pinput" maxLength={30} value={f.label} onChange={(e) => set("label", e.target.value)} placeholder="News feed" />
+            </label>
+            <label className="plabel">
+              Id (fixed once saved)
+              <input className="pinput mono" maxLength={30} disabled={editing} value={f.id} onChange={(e) => set("id", slug(e.target.value))} placeholder="news_feed" />
+            </label>
+            <label className="plabel wide">
+              Server address (MCP URL)
+              <input className="pinput mono" value={f.url} onChange={(e) => (setFailed(false), set("url", e.target.value))} placeholder="https://mcp.example.com/mcp" />
+            </label>
+            <label className="plabel">
+              Transport
+              <select className="pinput" value={f.transport} onChange={(e) => set("transport", e.target.value)}>
+                <option value="http">Streamable HTTP (current)</option>
+                <option value="sse">SSE (older servers)</option>
+              </select>
+            </label>
+            <label className="plabel">
+              Token header
+              <input className="pinput mono" value={f.authHeader} onChange={(e) => set("authHeader", e.target.value)} placeholder="Authorization" />
+            </label>
+            <label className="plabel">
+              Token {editing ? "(empty keeps the saved one)" : "(if it needs one)"}
+              <input className="pinput mono" type="password" autoComplete="off" value={f.token} onChange={(e) => set("token", e.target.value)} />
+            </label>
+            <label className="plabel">
+              Calls per day (all bees)
+              <input className="pinput num" type="number" min={1} max={500} value={f.maxCallsDay} onChange={(e) => set("maxCallsDay", Number(e.target.value))} />
+            </label>
+          </div>
+          <div className="row-actions">
+            <button className="pbtn" disabled={!ready} onClick={() => save(false)}>
+              {editing ? "Test & save changes" : "Test & connect"}
+            </button>
+            {failed && (
+              <button className="pbtn ghost" disabled={!ready} onClick={() => save(true)}>
+                Save without testing
+              </button>
+            )}
+            {editing && (
+              <button className="pbtn ghost" onClick={() => (setF(blank), setEditing(false), setFailed(false))}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {v.log.length > 0 && (
+        <details>
+          <summary>Recent calls ({v.log.length})</summary>
+          <ul className="checklist">
+            {v.log.map((l, i) => (
+              <li key={i} className={l.ok ? "" : "bad"}>
+                <span>{l.ok ? "✓" : "✗"}</span> <span className="num dim small">{new Date(l.at).toISOString().slice(0, 16).replace("T", " ")}</span> {l.bee} → <strong>{l.server}/{l.tool}</strong>{" "}
+                <span className="dim small mono">{l.args}</span> <span className="dim small">· {l.bytes} bytes · {l.ms} ms{l.note ? ` · ${l.note}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function McpServerCard({ m, bees, call, onEdit }: { m: McpServerView; bees: Array<{ slot: string; name: string }>; call: (path: string, body: unknown, ok: string) => Promise<void>; onEdit: () => void }) {
+  const init = () => Object.fromEntries(m.grants.map((g) => [g.tool, { bees: g.bees, confirmed: !!g.confirmed }]));
+  const [g, setG] = useState<Record<string, { bees: string[]; confirmed: boolean }>>(init);
+  const [open, setOpen] = useState(false);
+  const key = JSON.stringify(m.grants);
+  useEffect(() => setG(init()), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleBee = (tool: string, bee: string) =>
+    setG((p) => {
+      const cur = p[tool]?.bees ?? [];
+      const next = bee === "all" ? (cur.includes("all") ? [] : ["all"]) : cur.includes(bee) ? cur.filter((x) => x !== bee) : [...cur.filter((x) => x !== "all"), bee];
+      const out = { ...p };
+      if (next.length) out[tool] = { bees: next, confirmed: p[tool]?.confirmed ?? false };
+      else delete out[tool];
+      return out;
+    });
+  const body: McpGrant[] = Object.entries(g).map(([tool, x]) => ({ tool, bees: x.bees, ...(x.confirmed ? { confirmed: true } : {}) }));
+  const blocked = m.tools.filter((t) => t.needsConfirm && g[t.name] && !g[t.name]!.confirmed);
+  return (
+    <div className="verdict mcp-server">
+      <div className="verdict-head">
+        <strong>{m.label}</strong> <span className="dim small mono">{m.url.replace(/^https?:\/\//, "")}</span> <span className="badge">{m.tokenSet ? "token saved" : "no token"}</span>{" "}
+        <span className="dim small num">
+          {m.usedToday}/{m.maxCallsDay} calls today · {m.tools.length} tools · {m.grants.length} granted
+        </span>
+      </div>
+      <div className="row-actions">
+        <button className="pbtn ghost small" onClick={() => setOpen((x) => !x)}>
+          {open ? "Hide tools" : "Tools & grants"}
+        </button>
+        <button className="pbtn ghost small" onClick={() => void call("mcp/discover", { id: m.id }, "Tools refreshed.")}>
+          Refresh tools
+        </button>
+        <button className="pbtn ghost small" onClick={onEdit}>
+          Edit
+        </button>
+        <button className="pbtn ghost small" onClick={() => confirm(`Remove ${m.label}?`) && void call("mcp/delete", { id: m.id }, `${m.label} removed.`)}>
+          Remove
+        </button>
+      </div>
+      {open && (
+        <>
+          {m.tools.length === 0 && <p className="dim small">The server offers no tools (or its tools were never read: Refresh tools).</p>}
+          <ul className="mcp-tools">
+            {m.tools.map((t) => {
+              const on = g[t.name];
+              return (
+                <li key={t.name}>
+                  <div>
+                    <strong className="mono">{t.name}</strong>{" "}
+                    <span className={`badge ${t.readOnly === true && !t.looksLikeAction ? "ok" : ""}`}>{t.looksLikeAction ? "reads like an action" : t.readOnly === true ? "declared read-only" : t.readOnly === false ? "declared NOT read-only" : "read-only not declared"}</span>
+                    <div className="dim small">{t.description || "No description."}</div>
+                  </div>
+                  <div className="mcp-bees">
+                    <label>
+                      <input type="checkbox" checked={!!on?.bees.includes("all")} onChange={() => toggleBee(t.name, "all")} /> all bees
+                    </label>
+                    {bees.map((b) => (
+                      <label key={b.slot}>
+                        <input type="checkbox" checked={!!on?.bees.includes(b.slot) || !!on?.bees.includes("all")} disabled={!!on?.bees.includes("all")} onChange={() => toggleBee(t.name, b.slot)} /> {b.name}
+                      </label>
+                    ))}
+                    {on && t.needsConfirm && (
+                      <label className="warn">
+                        <input type="checkbox" checked={on.confirmed} onChange={(e) => setG((p) => ({ ...p, [t.name]: { ...p[t.name]!, confirmed: e.target.checked } }))} /> I checked that this tool only reads
+                      </label>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="row-actions">
+            <button className="pbtn" disabled={blocked.length > 0} title={blocked.length ? `Confirm: ${blocked.map((t) => t.name).join(", ")}` : ""} onClick={() => void call("mcp/grant", { id: m.id, grants: body }, "Grants saved.")}>
+              Save grants
+            </button>
+            {blocked.length > 0 && <span className="dim small">Confirm or untick: {blocked.map((t) => t.name).join(", ")}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void>; password: string }) {
   const [cmd, setCmd] = useState<"cycle" | "fetch" | "run" | "council">("cycle");
   const [source, setSource] = useState<"okx" | "ccxt" | "synthetic">("okx");
@@ -900,6 +1631,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
 
   return (
     <>
+      <RealCheck s={s} call={call} />
+
       <div className="pcard">
         <h3>Run the lab</h3>
         <p className="dim">
@@ -1009,10 +1742,108 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
         {!s.coachAvailable && <p className="dim small">Needs at least one brain key (API keys tab).</p>}
       </div>
 
+      <SkillWorkshop s={s} password={password} refresh={refresh} />
+
+      <ResearchNotes s={s} call={call} refresh={refresh} />
+
+      <Connectors s={s} call={call} />
+
       <ImportSkill password={password} />
 
       <SettingsTab s={s} call={call} only={["learning", "evolution"]} />
     </>
+  );
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  skills: "Skills: hourly history, walk-forward ranking",
+  scalper: "Scalper: 1-minute history, does it survive costs?",
+  gold: "Gold breakout: walk-forward, Monte Carlo, stability (needs an MT5 export)",
+  council: "Council: each bee's brain picks skills",
+  report: "Hive mind report",
+};
+const VERDICT: Record<string, { text: string; cls: string }> = {
+  pass: { text: "✓ passed", cls: "ok" },
+  fail: { text: "✗ no edge", cls: "err" },
+  stale: { text: "● out of date", cls: "" },
+  incomplete: { text: "● incomplete", cls: "" },
+  none: { text: "○ not run", cls: "" },
+};
+const STEP_MARK: Record<string, string> = { pending: "○", running: "●", done: "✓", failed: "✗", skipped: "–" };
+
+/** The roteiro as one button: public data, no orders, a verdict per stage. */
+function RealCheck({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  const c = s.lab.check;
+  const [picked, setPicked] = useState<string[]>(() => c.stages.filter((x) => x !== "gold" || c.goldFiles.length > 0));
+  const job = s.lab.job?.command === "check" ? s.lab.job : null;
+  const running = s.lab.job?.state === "running";
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  return (
+    <div className="pcard">
+      <h3>Real-data check</h3>
+      <p className="dim">
+        Downloads real public candles from OKX and runs the whole roteiro in the background: skill ranking, scalper cost test, gold validation, council and hive report. It places no orders and needs no exchange account; the engine keeps
+        running. Each stage ends with a verdict. Nothing here turns a feature on.
+      </p>
+      <ul className="checklist">
+        {c.preflight.map((i) => (
+          <li key={i.id}>
+            <span className={i.ok ? "good" : "dim"}>{i.ok ? "✓" : "○"}</span> <strong>{i.label}</strong> <span className="dim small">{i.note}</span>
+          </li>
+        ))}
+      </ul>
+      <ul className="checklist stages">
+        {c.stages.map((id) => (
+          <li key={id}>
+            <label>
+              <input type="checkbox" checked={picked.includes(id)} disabled={running} onChange={() => toggle(id)} /> {STAGE_LABEL[id] ?? id}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="row-actions">
+        <button className="pbtn" disabled={running || !picked.length} onClick={() => void call("check", { stages: picked }, "Real-data check started.")}>
+          {running ? "Running…" : "Run the real-data check"}
+        </button>
+        {running && job && (
+          <button className="pbtn ghost" onClick={() => void call("lab/stop", {}, "Stopping the check.")}>
+            Stop
+          </button>
+        )}
+      </div>
+      {job?.steps && (
+        <ul className="checklist">
+          {job.steps.map((st) => (
+            <li key={st.id} className={st.state === "failed" ? "bad" : ""}>
+              <span>{STEP_MARK[st.state]}</span> {st.label} {st.note && <span className="dim small">· {st.note}</span>}
+              {st.startedAt && st.endedAt ? <span className="dim small num"> · {Math.max(1, Math.round((st.endedAt - st.startedAt) / 1000))}s</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <h4>Verdicts</h4>
+      <div className="verdicts">
+        {c.verdicts.map((v) => (
+          <div className="verdict" key={v.stage}>
+            <div className="verdict-head">
+              <strong>{v.title}</strong> <span className={`badge ${VERDICT[v.status]!.cls}`}>{VERDICT[v.status]!.text}</span>
+              {v.at ? <span className="dim small num"> {new Date(v.at).toISOString().slice(0, 16).replace("T", " ")}</span> : null}
+            </div>
+            <p className="small">{v.headline}</p>
+            {v.details.length > 0 && (
+              <ul className="dim small">
+                {v.details.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="dim small">
+        Gold needs your own XAUUSD bar export from MT5: put the CSV in <code>{c.goldDir}</code> {c.goldFiles.length ? `(found: ${c.goldFiles.join(", ")})` : "(none there yet)"}. A test that did not run counts as not passed.
+      </p>
+    </div>
   );
 }
 
@@ -1042,6 +1873,8 @@ function SecurityTab({ call }: { call: (path: string, body: unknown, ok: string)
 export function AdminPage() {
   const [pw, setPw] = useState<string | null>(null);
   const [s, setS] = useState<AdminState | null>(null);
+  // Custom brains carry their own labels; this keeps every BRAIN_LABEL lookup on the page in step.
+  for (const c of s?.brains?.custom ?? []) BRAIN_LABEL[c.id] = c.label;
   const [tab, setTab] = useState<Tab>("overview");
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1136,7 +1969,7 @@ export function AdminPage() {
             </div>
             <div className={busy ? "busy" : ""}>
               {tab === "overview" && <Overview s={s} setTab={setTab} />}
-              {tab === "keys" && <KeysTab s={s} call={safeCall} />}
+              {tab === "keys" && <KeysTab s={s} call={safeCall} password={pw} />}
               {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} password={pw} />}
               {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
               {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}

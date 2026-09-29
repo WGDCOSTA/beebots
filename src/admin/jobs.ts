@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { redactString } from "../redact.js";
+import { checkPlan, type CheckOpts, type CheckStage, type CheckStep } from "./check.js";
 
 export const LAB_COMMANDS = ["fetch", "run", "council", "cycle"] as const;
 export type LabCommand = (typeof LAB_COMMANDS)[number];
@@ -23,9 +24,21 @@ export interface LabArgs {
   longOnly?: boolean;
 }
 
+export interface StepStatus {
+  id: string;
+  stage: string;
+  label: string;
+  state: "pending" | "running" | "done" | "failed" | "skipped";
+  note: string;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+
 export interface JobStatus {
   id: number;
-  command: LabCommand;
+  command: LabCommand | "check";
+  /** Set on a real-data check: one entry per step, in order. */
+  steps?: StepStatus[];
   args: string[];
   state: "running" | "done" | "failed";
   startedAt: number;
@@ -111,37 +124,106 @@ export class LabJobs {
     const argv = labArgv(command, args);
     const job: JobStatus = { id: ++this.seq, command, args: argv.slice(1), state: "running", startedAt: Date.now(), endedAt: null, exitCode: null, log: [] };
     this.current = job;
-    // Same Node and loader flags as the engine (tsx in dev), so the .ts script runs there too.
-    const child = this.spawnFn(process.execPath, [...process.execArgv, "--disable-warning=ExperimentalWarning", this.script, ...argv], {
-      env: this.env(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    this.child = child;
-    const push = (buf: Buffer) => {
-      for (const raw of buf.toString("utf8").split(/\r|\n/)) {
-        const line = redactString(raw.trimEnd());
-        if (line) job.log.push(line);
-      }
-      if (job.log.length > MAX_LINES) job.log.splice(0, job.log.length - MAX_LINES);
-    };
-    child.stdout?.on("data", push);
-    child.stderr?.on("data", push);
-    child.on("error", (err) => {
-      job.log.push(`could not start: ${err.message}`);
-      job.state = "failed";
-      job.endedAt = Date.now();
-    });
-    child.on("close", (code) => {
+    void this.spawnOne(job, this.script, argv).then((code) => {
       job.exitCode = code;
       job.state = code === 0 ? "done" : "failed";
       job.endedAt = Date.now();
-      this.child = null;
       this.onDone?.(job);
     });
     return job;
   }
 
+  /** The real-data check: the plan's steps one after another as a single job. A failed step skips the rest of its stage. */
+  startCheck(stages: readonly CheckStage[], o: CheckOpts): JobStatus {
+    if (this.busy) throw new Error("A lab job is already running. Wait for it to finish.");
+    if (!existsSync(this.script)) throw new Error("The lab tool is not in this build.");
+    const plan = checkPlan(stages, o);
+    if (!plan.length) throw new Error("Pick at least one stage.");
+    const steps: StepStatus[] = plan.map((p) => ({ id: p.id, stage: p.stage, label: p.label, state: "pending", note: "", startedAt: null, endedAt: null }));
+    const job: JobStatus = { id: ++this.seq, command: "check", args: [], steps, state: "running", startedAt: Date.now(), endedAt: null, exitCode: null, log: [] };
+    this.current = job;
+    this.aborted = false;
+    void this.runPlan(job, plan).finally(() => {
+      job.endedAt = Date.now();
+      job.state = steps.some((s) => s.state === "failed") || this.aborted ? "failed" : "done";
+      job.exitCode = job.state === "done" ? 0 : 1;
+      this.onDone?.(job);
+    });
+    return job;
+  }
+
+  private aborted = false;
+
+  private async runPlan(job: JobStatus, plan: CheckStep[]): Promise<void> {
+    const steps = job.steps!;
+    const failedStages = new Set<string>();
+    for (const [i, p] of plan.entries()) {
+      const st = steps[i]!;
+      if (this.aborted) {
+        st.state = "skipped";
+        st.note = "stopped";
+        continue;
+      }
+      if (p.skip || failedStages.has(p.stage)) {
+        st.state = "skipped";
+        st.note = p.skip ?? "an earlier step of this stage failed";
+        job.log.push(`- skipped: ${p.label} (${st.note})`);
+        continue;
+      }
+      st.state = "running";
+      st.startedAt = Date.now();
+      job.log.push(`> ${p.label}`);
+      let soft = 0;
+      const script = p.tool === "gold" ? this.script.replace(/lab(\.[cm]?[jt]s)$/, "gold$1") : this.script;
+      const code = existsSync(script) ? await this.spawnOne(job, script, p.argv, (l) => {
+            if (/\bfailed: |no data$/.test(l)) soft++;
+          }) : -1;
+      st.endedAt = Date.now();
+      // A download that fails prints "failed:" and still exits 0: say so instead of a green tick.
+      if (code !== 0) {
+        st.state = "failed";
+        st.note = existsSync(script) ? `exit code ${code}` : "the tool is not in this build";
+        failedStages.add(p.stage);
+      } else {
+        st.state = "done";
+        if (soft) st.note = `${soft} download${soft > 1 ? "s" : ""} failed: see the log`;
+      }
+    }
+  }
+
+  private spawnOne(job: JobStatus, script: string, argv: string[], onLine?: (line: string) => void): Promise<number> {
+    return new Promise((resolve) => {
+      // Same Node and loader flags as the engine (tsx in dev), so the .ts script runs there too.
+      const child = this.spawnFn(process.execPath, [...process.execArgv, "--disable-warning=ExperimentalWarning", script, ...argv], {
+        env: this.env(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      this.child = child;
+      const push = (buf: Buffer) => {
+        for (const raw of buf.toString("utf8").split(/\r|\n/)) {
+          const line = redactString(raw.trimEnd());
+          if (!line) continue;
+        job.log.push(line);
+        onLine?.(line);
+        }
+        if (job.log.length > MAX_LINES) job.log.splice(0, job.log.length - MAX_LINES);
+      };
+      child.stdout?.on("data", push);
+      child.stderr?.on("data", push);
+      child.on("error", (err) => {
+        job.log.push(`could not start: ${err.message}`);
+        this.child = null;
+        resolve(-1);
+      });
+      child.on("close", (code) => {
+        this.child = null;
+        resolve(code ?? -1);
+      });
+    });
+  }
+
   stop(): void {
+    this.aborted = true;
     this.child?.kill("SIGTERM");
   }
 }

@@ -3,7 +3,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import { writePrivateJson } from "../settings.js";
-import { BRAINS } from "./llm.js";
 
 export const NATURAL_FAMILY: Record<string, string> = { bizzy: "breakout", breezy: "trend", boozy: "momentum" };
 
@@ -18,7 +17,7 @@ export type PlaybookSkill = z.infer<typeof PlaybookSkill>;
 
 const BeePlan = z.object({
   // "ensemble": several brains combined in a survival or reward council (brains/survival.ts).
-  brain: z.union([z.enum(BRAINS), z.literal("rules"), z.literal("ensemble")]),
+  brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/),
   model: z.string(),
   skills: z.array(PlaybookSkill).max(6),
   lessons: z.array(z.string()).max(10).default([]),

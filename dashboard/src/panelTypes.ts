@@ -70,7 +70,8 @@ export interface GraphJson {
   links: GraphLink[];
 }
 
-export const BRAIN_LABEL: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi", rules: "Rules" };
+/** Labels for every brain id; custom brains are added when the admin state loads (see AdminPage). */
+export const BRAIN_LABEL: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi", zai: "GLM", rules: "Rules" };
 
 export const FAMILY_LABEL: Record<string, string> = {
   trend: "Trend",
@@ -101,9 +102,161 @@ export interface AdminField {
   set?: boolean;
 }
 
+export interface StepStatus {
+  id: string;
+  stage: string;
+  label: string;
+  state: "pending" | "running" | "done" | "failed" | "skipped";
+  note: string;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+export interface PreflightItem {
+  id: string;
+  label: string;
+  ok: boolean;
+  required: boolean;
+  note: string;
+}
+export interface StageVerdict {
+  stage: "skills" | "scalper" | "gold" | "hive";
+  title: string;
+  status: "pass" | "fail" | "none" | "stale" | "incomplete";
+  headline: string;
+  details: string[];
+  at: number | null;
+}
+export interface CheckState {
+  stages: string[];
+  preflight: PreflightItem[];
+  verdicts: StageVerdict[];
+  goldDir: string;
+  goldFiles: string[];
+}
+
+export interface BacktestSummary {
+  at: number;
+  data: "real" | "synthetic";
+  datasets: string[];
+  score: number;
+  returnPct: number;
+  benchmarkPct: number;
+  sharpe: number;
+  stabilityPct: number;
+  trades: number;
+  maxDrawdownPct: number;
+  overfitGap: number;
+  pass: boolean;
+  why: string;
+}
+export interface DraftVersion {
+  n: number;
+  at: number;
+  author: string;
+  note: string;
+  json: string;
+  valid: boolean;
+  errors: string[];
+  backtest: BacktestSummary | null;
+}
+export interface DraftFull {
+  key: string;
+  author: string;
+  status: "draft" | "proposed" | "published" | "discarded";
+  createdAt: number;
+  updatedAt: number;
+  publishedVersion: number | null;
+  versions: DraftVersion[];
+}
+export interface DraftSummary {
+  key: string;
+  name: string;
+  family: string;
+  author: string;
+  status: DraftFull["status"];
+  updatedAt: number;
+  versions: number;
+  publishedVersion: number | null;
+  valid: boolean;
+  errors: string[];
+  backtest: BacktestSummary | null;
+}
+export interface WorkshopState {
+  /** Brains that can draft a skill from a description. */
+  agent: Array<{ id: string; label: string }>;
+  drafts: DraftSummary[];
+  templates: Array<{ id: string; label: string; json: string }>;
+}
+
+export interface ResearchNote {
+  id: string;
+  bee: string;
+  kind: "background" | "research";
+  author: string;
+  brain: string | null;
+  title: string;
+  text: string;
+  evidence: string[];
+  coins: string[];
+  confidence: "low" | "medium" | "high";
+  status: "pending" | "approved" | "rejected";
+  createdAt: number;
+  decidedAt: number | null;
+}
+export interface McpTool {
+  name: string;
+  description: string;
+  readOnly: boolean | null;
+  needsConfirm: boolean;
+  looksLikeAction: boolean;
+}
+export interface McpGrant {
+  tool: string;
+  bees: string[];
+  confirmed?: boolean;
+}
+export interface McpServerView {
+  id: string;
+  label: string;
+  url: string;
+  transport: "http" | "sse";
+  authHeader: string;
+  tokenSet: boolean;
+  maxCallsDay: number;
+  usedToday: number;
+  tools: McpTool[];
+  grants: McpGrant[];
+}
+export interface McpCallLog {
+  at: number;
+  bee: string;
+  server: string;
+  tool: string;
+  args: string;
+  ok: boolean;
+  bytes: number;
+  ms: number;
+  note: string;
+}
+export interface McpView {
+  available: boolean;
+  canEdit: boolean;
+  servers: McpServerView[];
+  log: McpCallLog[];
+}
+
+export interface NotesState {
+  available: boolean;
+  notes: ResearchNote[];
+  busy: string[];
+  /** Per running bee: why its brain cannot research right now, or null. */
+  blocked: Record<string, string | null>;
+}
+
 export interface JobStatus {
   id: number;
   command: string;
+  steps?: StepStatus[];
   args: string[];
   state: "running" | "done" | "failed";
   startedAt: number;
@@ -112,7 +265,7 @@ export interface JobStatus {
   log: string[];
 }
 
-export type KeyName = "jev" | "openai" | "anthropic" | "kimi" | "coinmarketcap";
+export type KeyName = "jev" | "openai" | "anthropic" | "kimi" | "zai" | "coinmarketcap";
 
 export type ExchangeKind = "demo" | "live";
 /** A bee's OKX keys as the panel may see them: never the keys, only where they come from and the last check. */
@@ -137,7 +290,15 @@ export interface ExchangeCheck {
   warnings: string[];
 }
 
+export interface BrainsView {
+  builtin: Array<{ id: string; label: string; vendor: string; ready: boolean }>;
+  custom: Array<{ id: string; label: string; vendor: string; baseUrl: string; model: string; jsonMode: "schema" | "object" | "prompt"; keySet: boolean; usedBy: string[] }>;
+  zaiDefaults: { model: string; baseUrl: string };
+  canEdit: boolean;
+}
+
 export interface AdminState {
+  brains: BrainsView;
   mode: "dry" | "demo" | "live";
   version: string;
   hasSettingsFile: boolean;
@@ -192,7 +353,7 @@ export interface AdminState {
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];
-  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null };
+  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState; notes: NotesState; mcp: McpView };
   coachAvailable: boolean;
 }
 

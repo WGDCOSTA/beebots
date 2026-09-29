@@ -18,7 +18,7 @@ import { evaluateSkill, DEFAULT_TOURNAMENT, type Ranking, type SkillResult } fro
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
-import { BRAIN_INFO, BRAINS, type BrainId, type LlmClient } from "./llm.js";
+import { brainInfo, BRAINS, type BrainId, type LlmClient } from "./llm.js";
 import { loadPlaybook, savePlaybook, type PlaybookSkill } from "./playbook.js";
 import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
 import { LIQUID_TOP, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, watchInput, watchlistSize, type CoinInfo, type WatchItem } from "./watchlist.js";
@@ -98,6 +98,8 @@ export interface SurvivalOpts {
   ranking: () => Ranking | null;
   /** A new skill passed its backtest: make it live (lab votes) without a restart. */
   onNewSkill?: (skill: Skill) => void;
+  /** Every skill a brain wrote, accepted or not, so the owner can read and improve it (the skill workshop). */
+  onDraft?: (d: { slot: BeeId; brain: string; id: string; raw: string; result: Omit<SkillResult, "rank"> | null; real: boolean; datasets: string[]; accepted: boolean }) => void;
   maxCallsPerDay: number;
   /** Minimum time between two councils for one bee. */
   cooldownMs?: number;
@@ -134,6 +136,16 @@ export function backtestData(historyDir: string, bar: Bar = "1H"): Dataset[] {
   }
   if (!out.length) for (let i = 0; i < 2; i++) out.push({ id: `SYN${i + 1} ${bar}`, instId: `SYN${i + 1}`, bar, candles: syntheticCandles(4242 + i, 2500), source: "synthetic" });
   return out;
+}
+
+/** The id trySkill gives a bee's skill: its slot plus the id the brain chose. */
+export function namespaced(raw: string, slot: BeeId): string {
+  try {
+    const spec = JSON.parse(raw) as { id?: unknown };
+    return `${slot}_${String(spec.id ?? "skill").toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 30)}`.slice(0, 40);
+  } catch {
+    return `${slot}_skill`;
+  }
 }
 
 /** Compile, backtest and judge a skill a brain wrote. Accepted only with a positive out-of-sample score and 50%+ stability. */
@@ -186,7 +198,7 @@ export class SurvivalCouncil {
   /** The brains that sit on this bee's council, its own first. */
   brainsFor(bee: CouncilBee, tier: Tier): BrainId[] {
     const own = this.o.clients[bee.brain] ? [bee.brain] : [];
-    const others = BRAINS.filter((b) => b !== bee.brain && this.o.clients[b]);
+    const others = [...BRAINS, ...Object.keys(this.o.clients).filter((b) => !(BRAINS as readonly string[]).includes(b))].filter((b) => b !== bee.brain && this.o.clients[b]);
     const extra = tier === "danger" || tier === "critical" ? others.length : this.o.evolution.perks(bee.slot).extraBrains;
     return [...own, ...others.slice(0, extra)];
   }
@@ -242,7 +254,7 @@ export class SurvivalCouncil {
     for (const b of brains) {
       const client = this.o.clients[b]!;
       const system = [
-        `You are ${BRAIN_INFO[b].label} (${BRAIN_INFO[b].vendor}), sitting on the council of ${bee.name}, an AI trading bee on OKX perpetual futures with PAPER money. It knows it can die: at ${evolution.opts.deathPct}% of its start equity it stops for good.`,
+        `You are ${brainInfo(b).label} (${brainInfo(b).vendor}), sitting on the council of ${bee.name}, an AI trading bee on OKX perpetual futures with PAPER money. It knows it can die: at ${evolution.opts.deathPct}% of its start equity it stops for good.`,
         situation,
         `Pick up to ${perks.skillSlots} skills from CANDIDATES (walk-forward, out-of-sample ranked) with weights. ${inDanger ? "Survival first: prefer robust, low-drawdown, stable skills; avoid anything that can blow up." : "Prefer robust skills that fit its style."}`,
         mayAuthor
@@ -270,7 +282,7 @@ export class SurvivalCouncil {
         ...(watch?.candidates.length ? { currentWatchlist: pb?.bees[bee.slot]?.watchlist?.map((w) => w.coin) ?? [], watchlistSize: watchSize, coinCandidates: watch.evidence } : {}),
         methodOptions: methods,
         ...(this.o.market?.() ? { market: this.o.market() } : {}),
-        teammates: answers.map((x) => ({ brain: BRAIN_INFO[x.brain].label, skills: x.a.skills, coins: x.a.coins?.map((c) => c.coin) ?? [], method: x.a.specialization ?? null, lesson: x.a.lesson })),
+        teammates: answers.map((x) => ({ brain: brainInfo(x.brain).label, skills: x.a.skills, coins: x.a.coins?.map((c) => c.coin) ?? [], method: x.a.specialization ?? null, lesson: x.a.lesson })),
         hive,
       });
       try {
@@ -289,7 +301,7 @@ export class SurvivalCouncil {
         if (!known.has(s.id) || s.weight <= 0) continue;
         const e = sum.get(s.id) ?? { w: 0, reasons: [] };
         e.w += s.weight / answers.length;
-        e.reasons.push(`${BRAIN_INFO[brain].label}: ${s.reason}`);
+        e.reasons.push(`${brainInfo(brain).label}: ${s.reason}`);
         sum.set(s.id, e);
       }
     }
@@ -314,7 +326,8 @@ export class SurvivalCouncil {
       for (const d of drafts.slice(0, 2)) {
         const t = trySkill(d.raw, bee.slot, data);
         const id = t.skill?.id ?? (JSON.parse(safeJson(d.raw)) as { id?: string }).id ?? "?";
-        newSkills.push({ id, accepted: !!t.skill, why: `${BRAIN_INFO[d.brain].label}: ${t.why}` });
+        newSkills.push({ id, accepted: !!t.skill, why: `${brainInfo(d.brain).label}: ${t.why}` });
+        if (t.result) this.o.onDraft?.({ slot: bee.slot, brain: brainInfo(d.brain).label, id: t.skill?.id ?? namespaced(d.raw, bee.slot), raw: d.raw, result: t.result, real: data.every((x) => x.source !== "synthetic"), datasets: data.map((x) => x.id), accepted: !!t.skill });
         if (!t.skill || !t.result) continue;
         mkdirSync(this.o.learnedDir, { recursive: true });
         const spec = JSON.parse(d.raw) as Record<string, unknown>;
@@ -324,7 +337,7 @@ export class SurvivalCouncil {
         evo.skillsAuthored++;
         const node = graph.upsert("skill", t.skill.id, t.skill.name, { family: t.skill.family, description: t.skill.description, source: t.skill.source, score: +t.result.score.toFixed(3), stabilityPct: Math.round(t.result.stabilityPct) });
         graph.link(beeNode(bee.slot), "authored", node, t.result.score, { brain: d.brain });
-        if (skills.length < perks.skillSlots) skills.push({ id: t.skill.id, params: t.result.params, weight: 0.25, reason: `written by ${BRAIN_INFO[d.brain].label}; ${t.why}`, score: +t.result.score.toFixed(3) });
+        if (skills.length < perks.skillSlots) skills.push({ id: t.skill.id, params: t.result.params, weight: 0.25, reason: `written by ${brainInfo(d.brain).label}; ${t.why}`, score: +t.result.score.toFixed(3) });
       }
     }
     const total = skills.reduce((a, s) => a + s.weight, 0) || 1;

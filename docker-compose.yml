@@ -75,6 +75,9 @@ services:
       CLAUDE_EFFORT: ${CLAUDE_EFFORT:-}
       KIMI_MODEL: ${KIMI_MODEL:-}
       KIMI_BASE_URL: ${KIMI_BASE_URL:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ZAI_MODEL: ${ZAI_MODEL:-}
+      ZAI_BASE_URL: ${ZAI_BASE_URL:-}
       BEE1_BRAIN: ${BEE1_BRAIN:-}
       BEE2_BRAIN: ${BEE2_BRAIN:-}
       BEE3_BRAIN: ${BEE3_BRAIN:-}

@@ -27,9 +27,14 @@ import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
 import type { CouncilBee } from "./brains/council.js";
-import { ANTHROPIC_PROFILE, checkClaudeKey, checkKimiKey, hasAnthropicLogin, makeClients } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
+import { Workspace } from "./lab/workspace.js";
+import { SkillAgent } from "./lab/skillAgent.js";
+import { NoteBook } from "./brains/notes.js";
+import { Researcher } from "./brains/research.js";
+import { McpGateway } from "./mcp/gateway.js";
 import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
@@ -246,6 +251,13 @@ async function main() {
     historyDir: join(cfg.lab.dir, "history"),
     ranking: readRanking,
     onNewSkill: addSkill,
+    onDraft: (d) => {
+      try {
+        new Workspace(cfg.lab.dir).recordBee(d);
+      } catch (err) {
+        log.warn("skill workshop: could not record a bee's draft", { err: safeError(err) });
+      }
+    },
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
     watchlist: cfg.lab.watchlist,
     universe: () => coinInfos(feed.view(), 40, cmcState()),
@@ -305,6 +317,13 @@ async function main() {
     specialization: cfg.lab.specialization,
   });
   coach.start();
+  const notes = new NoteBook(join(cfg.lab.dir, "notes.json"), graph);
+  // Outside MCP servers the owner connected: read from the Setup file on every call, so changes apply at once.
+  const mcp = new McpGateway({ servers: () => loadSettings(SETTINGS_PATH)?.mcpServers ?? [], path: join(cfg.lab.dir, "mcp.json") });
+  const research = new Researcher({
+    mcp, graph, notes, clients, bees: () => councilBees, playbookPath: cfg.lab.playbookPath, ranking: readRanking, market: mood,
+    universe: () => coinInfos(feed.view(), 40, cmcState()), maxCallsPerDay: cfg.lab.coachMaxCallsDay,
+  });
   let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
   const labRanking = () => {
     if (Date.now() - rankingCache.at > 30_000) {
@@ -377,6 +396,8 @@ async function main() {
       anthropic: (k) => checkClaudeKey(k),
       coinmarketcap: (k) => checkCmcKey(k),
       kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
+      zai: (k) => checkCompatKey(cfg.brains.creds.zai?.baseUrl ?? process.env.ZAI_BASE_URL?.trim() ?? ZAI_BASE_URL, k, cfg.brains.creds.zai?.model ?? process.env.ZAI_MODEL?.trim() ?? ZAI_DEFAULT_MODEL, "Z.ai"),
+      compat: (url, key, model, vendor) => checkCompatKey(url, key, model, vendor),
     },
     okxCheck: (creds, kind, walletUsd) => checkOkxAccount(cli, creds, kind, walletUsd),
     anthropicLogin: {
@@ -431,6 +452,10 @@ async function main() {
     evolution: () => engine?.snapshot().evolution ?? null,
     registerSkill: addSkill,
     labDir: cfg.lab.dir,
+    notes,
+    research,
+    mcp,
+    skillAgent: new SkillAgent({ clients: () => clients, maxCallsPerDay: Math.max(cfg.lab.coachMaxCallsDay, 20) }),
   });
 
   const server = startServer(

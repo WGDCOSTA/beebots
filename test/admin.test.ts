@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { Admin, type AdminOpts, type KeyChecks } from "../src/admin/admin.js";
 import { ADMIN_FIELDS, checkField } from "../src/admin/fields.js";
+import { NoteBook } from "../src/brains/notes.js";
 import { labArgv, LabJobs } from "../src/admin/jobs.js";
 import { loadConfig, parseEnv, withOverrides, type BeeId } from "../src/config.js";
 import { hashPassword, PasswordGate, verifyPassword } from "../src/gate.js";
@@ -32,18 +33,19 @@ function settingsFile(): string {
   return path;
 }
 
-const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, coinmarketcap: async () => null };
+const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, compat: async () => null, coinmarketcap: async () => null };
 
-function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[] } = {}) {
+function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"] } = {}) {
   const settingsPath = settingsFile();
   const forgotten: string[] = [];
   const revived: string[] = [];
   const imported: string[] = [];
+  const researched: string[] = [];
   const labDir = join(settingsPath, "..", "lab");
   let hash = HASH;
   let restarted = 0;
   const started: Array<[string, unknown]> = [];
-  const jobs = { start: (c: string, a: unknown) => started.push([c, a]), stop: () => {}, status: () => null } as unknown as LabJobs;
+  const jobs = { start: (c: string, a: unknown) => started.push([c, a]), startCheck: (st: unknown) => started.push(["check", st]), stop: () => {}, status: () => null } as unknown as LabJobs;
   const admin = new Admin({
     settingsPath,
     env: opts.env ?? {},
@@ -70,6 +72,10 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     evolution: () => ({ board: [] }),
     registerSkill: (sk) => imported.push(sk.id),
     labDir,
+    notes: new NoteBook(join(labDir, "notes.json")),
+    ...(opts.skillAgent ? { skillAgent: opts.skillAgent } : {}),
+    ...(opts.mcp ? { mcp: opts.mcp } : {}),
+    research: { busy: () => [], blocked: (id: string) => (id === "bee2" ? "Claude has no key (Admin → API keys)" : null), research: async (id: string) => void researched.push(id) } as never,
     okxCheck: opts.okxCheck,
   });
   async function call(path: string, body: unknown = {}, password = PW) {
@@ -85,7 +91,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     await admin.handle(req as never, res as never, path);
     return out as { status: number; body: Record<string, unknown> & { error?: string } };
   }
-  return { admin, call, settingsPath, started, restarted: () => restarted, hash: () => hash, forgotten, revived, imported, labDir };
+  return { admin, call, settingsPath, started, restarted: () => restarted, hash: () => hash, forgotten, revived, imported, labDir, researched };
 }
 
 describe("admin fields", () => {
@@ -192,7 +198,16 @@ describe("admin API", () => {
     const h = harness();
     expect((await h.call("/admin/lab", { command: "rm -rf" })).status).toBe(400);
     expect((await h.call("/admin/lab", { command: "run", args: { synthetic: 2 } })).status).toBe(200);
-    expect(h.started).toEqual([["run", { synthetic: 2 }]]);
+    expect((await h.call("/admin/check", { stages: ["rm -rf"] })).status).toBe(400);
+    expect((await h.call("/admin/check", { stages: [] })).status).toBe(400);
+    const ck = await h.call("/admin/check", { stages: ["skills", "report"] });
+    expect(ck.status).toBe(200);
+    expect(h.started.at(-1)).toEqual(["check", ["skills", "report"]]);
+    const lab = (ck.body as { lab: { check: { stages: string[]; preflight: Array<{ id: string }>; verdicts: Array<{ stage: string }> } } }).lab.check;
+    expect(lab.stages).toContain("gold");
+    expect(lab.preflight.map((i) => i.id)).toContain("brains");
+    expect(lab.verdicts.map((v) => v.stage)).toEqual(["skills", "scalper", "gold", "hive"]);
+    expect(h.started).toEqual([["run", { synthetic: 2 }], ["check", ["skills", "report"]]]);
     expect((await h.call("/admin/coach")).status).toBe(409);
     await h.call("/admin/restart");
     await new Promise((r) => setTimeout(r, 600));
@@ -240,6 +255,177 @@ describe("adding and removing bees", () => {
     expect((await h.call("/admin/revive", { bee: "../etc" })).status).toBe(400);
   });
 
+  it("custom brains: test, save, use, and no removal while a bee uses one; Z.ai has its own key", async () => {
+    const h = harness({ checks: { compat: async (url: string) => (url.includes("down") ? "Could not reach My LLM." : null) } });
+    const brain = { id: "my_llm", label: "My LLM", vendor: "Acme", baseUrl: "https://api.acme.example/v1", model: "acme-1", apiKey: "acme-secret-key-1234", jsonMode: "object" };
+    expect((await h.call("/admin/brains/test", { baseUrl: "http://public.example/v1", model: "m" })).status).toBe(400);
+    expect((await h.call("/admin/brains/test", { baseUrl: brain.baseUrl, model: brain.model, apiKey: brain.apiKey })).body).toMatchObject({ ok: true });
+    expect((await h.call("/admin/brains/test", { baseUrl: "https://down.example/v1", model: "m" })).body).toMatchObject({ ok: false, error: expect.stringMatching(/reach/) });
+    expect((await h.call("/admin/brains/save", { ...brain, id: "openai" })).status).toBe(400);
+    expect((await h.call("/admin/brains/save", { ...brain, baseUrl: "http://public.example/v1" })).status).toBe(400);
+    const down = await h.call("/admin/brains/save", { ...brain, baseUrl: "https://down.example/v1" });
+    expect(down.status).toBe(400);
+    expect(down.body.error).toMatch(/Not saved/);
+    const saved = await h.call("/admin/brains/save", brain);
+    expect(saved.status).toBe(200);
+    const view = (saved.body as { brains: { custom: Array<Record<string, unknown>>; builtin: Array<{ id: string }> }; fields: Array<{ key: string; options?: string[] }> }).brains;
+    expect(view.builtin.map((b) => b.id)).toEqual(["openai", "claude", "kimi", "zai"]);
+    expect(view.custom[0]).toMatchObject({ id: "my_llm", label: "My LLM", model: "acme-1", keySet: true, usedBy: [] });
+    expect(JSON.stringify(saved.body)).not.toContain("acme-secret-key-1234");
+    expect((saved.body as { fields: Array<{ key: string; options?: string[] }> }).fields.find((f) => f.key === "BEE1_BRAIN")!.options).toContain("my_llm");
+    // Editing without retyping the key keeps the saved one.
+    expect((await h.call("/admin/brains/save", { ...brain, apiKey: undefined, model: "acme-2" })).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.customBrains![0]).toMatchObject({ model: "acme-2", apiKey: "acme-secret-key-1234" });
+    // It can be a bee's brain; a brain that does not exist cannot.
+    expect((await h.call("/admin/settings", { values: { BEE1_BRAIN: "nope_llm" } })).status).toBe(400);
+    expect((await h.call("/admin/settings", { values: { BEE1_BRAIN: "my_llm" } })).status).toBe(200);
+    expect((await h.call("/admin/brains/delete", { id: "my_llm" })).body.error).toMatch(/in use by BEE1_BRAIN/);
+    expect((await h.call("/admin/settings", { values: { BEE1_BRAIN: null } })).status).toBe(200);
+    expect((await h.call("/admin/brains/delete", { id: "my_llm" })).status).toBe(200);
+    expect((await h.call("/admin/brains/delete", { id: "my_llm" })).status).toBe(404);
+    // Saving while the server is down, on purpose.
+    expect((await h.call("/admin/brains/save", { ...brain, baseUrl: "https://down.example/v1", force: true })).status).toBe(200);
+    // Z.ai is a built-in with its own key.
+    const k = await h.call("/admin/keys", { keys: { zai: "zai-key-12345678" } });
+    expect(k.status).toBe(200);
+    expect((k.body as { keys: Record<string, { set: boolean }> }).keys.zai!.set).toBe(true);
+    expect(loadSettings(h.settingsPath)!.zaiKey).toBe("zai-key-12345678");
+  });
+
+  it("connectors: save, discover, grant only what is confirmed read-only, and never show a token", async () => {
+    let offered = [
+      { name: "get_price", description: "Latest price", readOnly: true, inputSchema: { type: "object" } },
+      { name: "send_alert", description: "Send a message", readOnly: false, inputSchema: {} },
+      { name: "search_news", description: "Headlines", readOnly: null, inputSchema: {} },
+      { name: "delete_thing", description: "Claims read-only, reads like an action", readOnly: true, inputSchema: {} },
+    ];
+    let fail = false;
+    const mcp = { discover: async () => (fail ? Promise.reject(new Error("connection refused")) : offered), usedToday: () => ({ data: 3 }), recent: () => [] };
+    const h = harness({ mcp: mcp as never });
+    const server = { id: "data", label: "Data feed", url: "https://mcp.example.com/mcp", token: "tok-secret-987654321", authHeader: "X-Api-Key" };
+    expect((await h.call("/admin/mcp/save", { ...server, url: "http://public.example/mcp" })).status).toBe(400);
+    expect((await h.call("/admin/mcp/save", { ...server, id: "Bad Id" })).status).toBe(400);
+    fail = true;
+    const down = await h.call("/admin/mcp/save", server);
+    expect(down.status).toBe(400);
+    expect(down.body.error).toMatch(/Not saved/);
+    fail = false;
+    const saved = await h.call("/admin/mcp/save", server);
+    expect(saved.status).toBe(200);
+    expect(JSON.stringify(saved.body)).not.toContain("tok-secret-987654321");
+    const view = (saved.body as { lab: { mcp: { available: boolean; canEdit: boolean; servers: Array<{ id: string; tokenSet: boolean; usedToday: number; authHeader: string; tools: Array<{ name: string; needsConfirm: boolean; looksLikeAction: boolean }>; grants: unknown[] }> } } }).lab.mcp;
+    expect(view).toMatchObject({ available: true, canEdit: true });
+    expect(view.servers[0]).toMatchObject({ id: "data", tokenSet: true, usedToday: 3, authHeader: "X-Api-Key", grants: [] });
+    expect(view.servers[0]!.tools.map((t) => [t.name, t.needsConfirm, t.looksLikeAction])).toEqual([["get_price", false, false], ["send_alert", true, true], ["search_news", true, false], ["delete_thing", true, true]]);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.token).toBe("tok-secret-987654321");
+    // Grants: a proven read-only tool goes through; the rest need the owner's confirmation; unknown and repeated tools are refused.
+    const grant = (grants: unknown[]) => h.call("/admin/mcp/grant", { id: "data", grants });
+    expect((await grant([{ tool: "get_price", bees: ["bee1"] }])).status).toBe(200);
+    expect((await grant([{ tool: "send_alert", bees: ["all"] }])).body.error).toMatch(/does not say it is read-only/);
+    expect((await grant([{ tool: "delete_thing", bees: ["all"] }])).body.error).toMatch(/reads like an action/);
+    expect((await grant([{ tool: "nope", bees: ["all"] }])).status).toBe(400);
+    expect((await grant([{ tool: "get_price", bees: ["bee1"] }, { tool: "get_price", bees: ["bee2"] }])).body.error).toMatch(/listed twice/);
+    expect((await grant([{ tool: "get_price", bees: ["bee99"] }])).status).toBe(400);
+    expect((await grant([{ tool: "get_price", bees: ["bee1", "bee1"] }, { tool: "search_news", bees: ["all"], confirmed: true }])).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.grants).toEqual([{ tool: "get_price", bees: ["bee1"] }, { tool: "search_news", bees: ["all"], confirmed: true }]);
+    // Editing without retyping the token keeps it and the grants; refreshing drops grants for tools that vanished.
+    expect((await h.call("/admin/mcp/save", { id: "data", label: "Data feed 2", url: server.url, maxCallsDay: 10 })).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]).toMatchObject({ label: "Data feed 2", token: "tok-secret-987654321", maxCallsDay: 10, transport: "http", authHeader: "X-Api-Key" });
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.grants).toHaveLength(2);
+    offered = offered.filter((t) => t.name !== "search_news");
+    expect((await h.call("/admin/mcp/discover", { id: "data" })).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.grants).toEqual([{ tool: "get_price", bees: ["bee1"] }]);
+    fail = true;
+    expect((await h.call("/admin/mcp/discover", { id: "data" })).status).toBe(502);
+    expect((await h.call("/admin/mcp/discover", { id: "nope_x" })).status).toBe(404);
+    // Saving while it is down, on purpose, keeps what was known.
+    expect((await h.call("/admin/mcp/save", { ...server, force: true })).status).toBe(200);
+    expect((await h.call("/admin/mcp/delete", { id: "data" })).status).toBe(200);
+    expect((await h.call("/admin/mcp/delete", { id: "data" })).status).toBe(404);
+    expect(loadSettings(h.settingsPath)!.mcpServers).toEqual([]);
+  });
+
+  it("skill agent: drafts a skill from a prompt into the workshop, never publishing it", async () => {
+    const good = JSON.stringify({ id: "ai_dip", name: "AI dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } });
+    let reply = good;
+    const asked: unknown[] = [];
+    const agent = {
+      available: () => [{ id: "claude", label: "Claude" }],
+      draft: async (a: unknown) => (asked.push(a), { brain: "claude", brainLabel: "Claude", model: "m", json: reply, explanation: "An idea.", valid: JSON.parse(reply).id !== "broken", errors: JSON.parse(reply).id === "broken" ? ["boom"] : [], attempts: 1 }),
+    };
+    const h = harness({ skillAgent: agent as never });
+    expect((await h.call("/admin/workspace/ai", { prompt: "x" })).status).toBe(400);
+    expect((await h.call("/admin/workspace/ai", { prompt: "Buy oversold dips with RSI", key: "nope_x" })).status).toBe(404);
+    const r = await h.call("/admin/workspace/ai", { prompt: "Buy oversold dips with RSI", brain: "claude" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, brain: "claude", explanation: "An idea." });
+    const st = (r.body as { state: { lab: { workshop: { drafts: Array<{ key: string; author: string; status: string }>; agent: Array<{ id: string }> } } } }).state.lab.workshop;
+    expect(st.agent).toEqual([{ id: "claude", label: "Claude" }]);
+    expect(st.drafts[0]).toMatchObject({ key: "ai_dip", author: "ai:claude", status: "draft" });
+    expect(h.imported).toEqual([]);
+    // Revising keeps the same draft even if the brain renames it.
+    reply = good.replace('"ai_dip"', '"renamed"');
+    const rev = await h.call("/admin/workspace/ai", { prompt: "Make the entry stricter", key: "ai_dip" });
+    expect(JSON.parse(rev.body.json as string).id).toBe("ai_dip");
+    expect((rev.body.draft as { key: string; versions: unknown[] }).versions).toHaveLength(2);
+    expect((asked[1] as { current?: string }).current).toContain('"ai_dip"');
+    // A draft that does not compile is returned for editing, not saved.
+    reply = JSON.stringify({ id: "broken" });
+    const bad = await h.call("/admin/workspace/ai", { prompt: "Something that will not compile" });
+    expect(bad.body).toMatchObject({ ok: false, valid: false, errors: ["boom"] });
+    expect(((await h.call("/admin/workspace/get", { key: "broken" })).status)).toBe(404);
+  });
+
+  it("skill workshop: save, read, backtest, publish, discard", async () => {
+    const h = harness();
+    const json = JSON.stringify({ id: "wk_dip", name: "Workshop dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } });
+    expect((await h.call("/admin/workspace/check", { json: "{nope" })).body).toMatchObject({ ok: false });
+    expect((await h.call("/admin/workspace/check", { json })).body).toMatchObject({ ok: true, id: "wk_dip" });
+    expect((await h.call("/admin/workspace/save", { json: "{nope" })).status).toBe(400);
+    expect((await h.call("/admin/workspace/save", { key: "../x", json })).status).toBe(400);
+    const saved = await h.call("/admin/workspace/save", { json, note: "first" });
+    expect(saved.status).toBe(200);
+    const lab = (saved.body as { state: { lab: { workshop: { drafts: Array<{ key: string }>; templates: unknown[] } } } }).state.lab.workshop;
+    expect(lab.drafts.map((d) => d.key)).toEqual(["wk_dip"]);
+    expect(lab.templates.length).toBeGreaterThan(0);
+    expect(((await h.call("/admin/workspace/get", { key: "wk_dip" })).body.draft as { versions: unknown[] }).versions).toHaveLength(1);
+    expect((await h.call("/admin/workspace/get", { key: "nope_x" })).status).toBe(404);
+    // No real history in the harness: the backtest is synthetic, so publishing is refused until forced.
+    const bt = await h.call("/admin/workspace/backtest", { key: "wk_dip" });
+    expect(bt.status).toBe(200);
+    expect((bt.body.draft as { versions: Array<{ backtest: { data: string } }> }).versions[0]!.backtest.data).toBe("synthetic");
+    expect((await h.call("/admin/workspace/publish", { key: "wk_dip" })).body.error).toMatch(/synthetic/);
+    expect(h.imported).toEqual([]);
+    expect((await h.call("/admin/workspace/publish", { key: "wk_dip", force: true })).status).toBe(200);
+    expect(h.imported).toEqual(["wk_dip"]);
+    expect(existsSync(join(h.labDir, "learned", "owner_wk_dip.json"))).toBe(true);
+    expect((await h.call("/admin/workspace/discard", { key: "wk_dip" })).status).toBe(200);
+    expect((await h.call("/admin/workspace/discard", { key: "wk_dip_none" })).status).toBe(404);
+  });
+
+  it("research notes: owner background, review, delete, and asking a brain to research", async () => {
+    const h = harness();
+    expect((await h.call("/admin/notes/add", { bee: "nope", title: "x", text: "some text here" })).status).toBe(400);
+    expect((await h.call("/admin/notes/add", { bee: "bee1", title: "", text: "some text here" })).status).toBe(400);
+    const added = await h.call("/admin/notes/add", { bee: "bee1", title: "Study gold", text: "Watch how gold reacts to real yields.", coins: ["xau"] });
+    expect(added.status).toBe(200);
+    const st = (added.body as { lab: { notes: { available: boolean; notes: Array<{ id: string; status: string; kind: string; coins: string[] }>; blocked: Record<string, string | null> } } }).lab.notes;
+    expect(st.available).toBe(true);
+    expect(st.notes[0]).toMatchObject({ status: "approved", kind: "background", coins: ["XAU"] });
+    expect(st.blocked).toMatchObject({ bee1: null, bee2: expect.stringMatching(/no key/) });
+    const id = st.notes[0]!.id;
+    expect((await h.call("/admin/notes/decide", { id, decision: "maybe" })).status).toBe(400);
+    expect((await h.call("/admin/notes/decide", { id: "0123456789", decision: "approve" })).status).toBe(409);
+    const rej = await h.call("/admin/notes/decide", { id, decision: "reject" });
+    expect((rej.body as { lab: { notes: { notes: unknown[] } } }).lab.notes.notes).toHaveLength(0);
+    expect((await h.call("/admin/notes/delete", { id })).status).toBe(200);
+    expect((await h.call("/admin/notes/delete", { id })).status).toBe(404);
+    expect((await h.call("/admin/research", { bee: "bee2" })).body.error).toMatch(/no key/);
+    expect((await h.call("/admin/research", { bee: "../x" })).status).toBe(400);
+    expect(((await h.call("/admin/research", { bee: "bee1" })).body as { lab?: unknown }).lab).toBeDefined();
+    expect(h.researched).toEqual(["bee1"]);
+  });
+
   it("imports a skill: compiled, backtested, saved and made live", async () => {
     const h = harness();
     const skill = { id: "owner_dip", name: "Owner dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } };
@@ -276,6 +462,7 @@ describe("lab jobs", () => {
     expect(() => jobs.start("council", {})).toThrow(/already running/);
     (children[0] as unknown as { stdout: EventEmitter }).stdout.emit("data", Buffer.from("line one\nkey sk-abcdefghijklmnopqrstu\n"));
     children[0]!.emit("close", 0);
+    await new Promise((r) => setImmediate(r));
     expect(j).toMatchObject({ state: "done", exitCode: 0 });
     expect(j.log).toEqual(["line one", "key [redacted]"]);
     expect(done).toBe(1);

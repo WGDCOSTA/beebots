@@ -125,6 +125,7 @@ describe("survival council", () => {
     const claude = new FakeBrain("claude", pick("sma_cross", 0.5, "{not json"));
     const kimi = new FakeBrain("kimi", pick("made_up", 1));
     const registered: string[] = [];
+    const drafts: Array<{ id: string; accepted: boolean; real: boolean }> = [];
     const council = new SurvivalCouncil({
       graph,
       evolution: evo,
@@ -134,11 +135,12 @@ describe("survival council", () => {
       historyDir: join(dir, "history"),
       ranking: () => null,
       onNewSkill: (s) => registered.push(s.id),
+      onDraft: (d) => drafts.push({ id: d.id, accepted: d.accepted, real: d.real }),
       maxCallsPerDay: 10,
       now: () => T0,
     });
     const b: CouncilBee = { slot: "bee1", name: "Zippy", style: "bizzy", rules: "", coins: ["BTC"], brain: "openai", model: "x" };
-    return { council, b, openai, claude, kimi, graph, evo, dir, playbookPath, registered };
+    return { council, b, openai, claude, kimi, graph, evo, dir, playbookPath, registered, drafts };
   }
 
   it("in danger, every brain sits in, each sees the others, and they write skills that are backtested first", async () => {
@@ -161,6 +163,8 @@ describe("survival council", () => {
       expect(h.registered).toContain(good!.id);
       expect(h.graph.out(nodeId("bee", "bee1"), "authored")).toHaveLength(1);
     }
+    // Every skill that compiled is handed to the workshop, accepted or not; broken JSON never is. No cached history: synthetic.
+    expect(h.drafts).toEqual([{ id: good!.id, accepted: good!.accepted, real: false }]);
     const pb = loadPlaybook(h.playbookPath)!;
     expect(pb.bees.bee1!.brain).toBe("ensemble");
     expect(pb.bees.bee1!.model).toBe("openai-test + claude-test + kimi-test");

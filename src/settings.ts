@@ -4,6 +4,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
+import { BRAIN_ID_RE, checkBaseUrl, RESERVED_BRAIN_IDS } from "./brains/llm.js";
 
 export const STYLES = ["bizzy", "breezy", "boozy"] as const;
 /** A trading style is one of the three built-in strategies, named after the bee that first traded it. */
@@ -100,7 +101,7 @@ const BeeSchema = z.object({
   /** What it trades (extra bees only; absent = crypto, and the main three are always crypto). */
   market: z.enum(MARKETS).optional(),
   /** Extra bees: the LLM brain chosen when the bee was added (main bees use BEE1_BRAIN..BEE3_BRAIN). */
-  brain: z.enum(["openai", "claude", "kimi"]).optional(),
+  brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/).optional(),
   /** true once a portrait has been generated for this bee (served from the data volume). */
   image: z.boolean().default(false),
   /**
@@ -120,6 +121,48 @@ const BeeSchema = z.object({
     .optional(),
 });
 
+export const CustomBrainSchema = z.object({
+  id: z
+    .string()
+    .regex(BRAIN_ID_RE, "id: lowercase letters, digits, - and _ (2 to 30)")
+    .refine((v) => !RESERVED_BRAIN_IDS.includes(v), "that id is taken by a built-in brain"),
+  label: z.string().trim().min(1).max(30),
+  vendor: z.string().trim().max(30).default("Custom"),
+  baseUrl: z.string().trim().max(200).refine((v) => checkBaseUrl(v) === null, "use https://… (http only for localhost)"),
+  model: z.string().trim().min(1).max(80).regex(/^[A-Za-z0-9._:/@-]+$/, "model: letters, digits and . _ : / @ -"),
+  apiKey: z.string().trim().min(4).max(400).optional(),
+  jsonMode: z.enum(["schema", "object", "prompt"]).default("object"),
+});
+
+/** A tool an outside MCP server offers, as last discovered. `readOnly` is the server's own claim (annotations.readOnlyHint), which is never trusted on its own. */
+export const McpToolSchema = z.object({
+  name: z.string().min(1).max(80),
+  description: z.string().max(600).default(""),
+  readOnly: z.boolean().nullable().default(null),
+  inputSchema: z.record(z.unknown()).default({}),
+});
+
+/** Which bees may call which tool of a server. A tool that is not proven read-only needs the owner's explicit confirmation. */
+export const McpGrantSchema = z.object({
+  tool: z.string().min(1).max(80),
+  /** Bee slots ("bee1"..), or "all". */
+  bees: z.array(z.string().regex(/^(bee[1-9]|all)$/)).min(1).max(10),
+  confirmed: z.boolean().optional(),
+});
+
+export const McpServerSchema = z.object({
+  id: z.string().regex(BRAIN_ID_RE, "id: lowercase letters, digits, - and _ (2 to 30)"),
+  label: z.string().trim().min(1).max(30),
+  url: z.string().trim().max(300).refine((v) => checkBaseUrl(v) === null, "use https://… (http only for localhost)"),
+  /** "http" = MCP streamable HTTP (current), "sse" = the older server-sent-events transport. */
+  transport: z.enum(["http", "sse"]).default("http"),
+  authHeader: z.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,39}$/, "a header name like Authorization or X-API-Key").default("Authorization"),
+  token: z.string().trim().min(1).max(600).optional(),
+  maxCallsDay: z.number().int().min(1).max(500).default(50),
+  tools: z.array(McpToolSchema).max(100).default([]),
+  grants: z.array(McpGrantSchema).max(100).default([]),
+});
+
 export const SettingsSchema = z.object({
   version: z.literal(1),
   jevKey: z.string().trim().min(8),
@@ -128,6 +171,12 @@ export const SettingsSchema = z.object({
   anthropicKey: z.string().trim().min(8).optional(),
   /** Kimi's brain (Moonshot AI API key). Optional, as above for bee3. */
   kimiKey: z.string().trim().min(8).optional(),
+  /** Z.ai's GLM brain (API key). Optional. */
+  zaiKey: z.string().trim().min(8).optional(),
+  /** Brains the owner added from the admin panel: any OpenAI-compatible chat API. Keys are stored here, like the others. */
+  customBrains: z.array(CustomBrainSchema).max(50).optional(),
+  /** Outside MCP servers the owner connected for research (mcp/gateway.ts). Tokens are stored here like the other keys. */
+  mcpServers: z.array(McpServerSchema).max(20).optional(),
   /** CoinMarketCap Pro API key: market-wide context (market/cmc.ts). Optional. */
   cmcKey: z.string().trim().min(8).optional(),
   /** The owner password, as a salted scrypt hash (gate.ts). Absent in files saved before it existed. */

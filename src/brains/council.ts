@@ -7,7 +7,7 @@ import { nodeId, type KnowledgeGraph } from "../graph/graph.js";
 import type { Ranking, SkillResult } from "../lab/tournament.js";
 import { log } from "../log.js";
 import type { BeeId } from "../config.js";
-import { BRAIN_INFO, type BrainId, type LlmClient } from "./llm.js";
+import { brainInfo, type BrainId, type LlmClient } from "./llm.js";
 import { NATURAL_FAMILY, type BeePlan, type Playbook, type PlaybookSkill } from "./playbook.js";
 import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
 import { normaliseWatchlist, rulesWatchlist, watchInput, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, type CoinInfo } from "./watchlist.js";
@@ -88,7 +88,7 @@ export function rulesPick(cands: SkillResult[], style: string): AnswerT {
 }
 
 export function systemPrompt(bee: CouncilBee): string {
-  const b = BRAIN_INFO[bee.brain];
+  const b = brainInfo(bee.brain);
   return [
     `You are ${b.label} (${b.vendor}), the strategic brain of ${bee.name}, one of three AI trading bees that race each other on OKX perpetual futures with PAPER money.`,
     `${bee.name} trades the "${bee.style}" style${bee.coins.length ? ` on ${bee.coins.join(", ")}` : ""}.${bee.rules ? ` Owner's rules: ${bee.rules}` : ""}`,
