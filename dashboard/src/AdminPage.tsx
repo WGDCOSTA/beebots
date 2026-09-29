@@ -4,7 +4,7 @@
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
-import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
+import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
@@ -23,6 +23,7 @@ const KEY_INFO: Record<KeyName, { label: string; help: string; placeholder: stri
   openai: { label: "OpenAI (ChatGPT)", help: "Bee designs and portraits on Setup, and the ChatGPT brain.", placeholder: "sk-…", removable: true },
   anthropic: { label: "Anthropic (Claude)", help: "The Claude brain. console.anthropic.com", placeholder: "sk-ant-…", removable: true },
   kimi: { label: "Moonshot (Kimi)", help: "The Kimi brain. platform.moonshot.ai", placeholder: "sk-…", removable: true },
+  zai: { label: "Z.ai (GLM)", help: "The GLM brain. z.ai. Model and API address: Settings → Brains and models.", placeholder: "Z.ai API key", removable: true },
   coinmarketcap: {
     label: "CoinMarketCap",
     help: "Market context: Fear & Greed, BTC dominance, market cap, and each coin's rank and all-exchange volume for Jev and the brains. pro.coinmarketcap.com",
@@ -163,9 +164,10 @@ function AnthropicLogin({ login, keySet, call }: { login: NonNullable<AdminState
   );
 }
 
-function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+function KeysTab({ s, call, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; password: string }) {
   const [draft, setDraft] = useState<Partial<Record<KeyName, string>>>({});
   return (
+    <>
     <div className="pcard">
       <h3>API keys</h3>
       <p className="dim">Keys are write-only: this page never shows them, only whether one is set and where from. Each new key is tested with a free call before it is saved.</p>
@@ -211,6 +213,144 @@ function KeysTab({ s, call }: { s: AdminState; call: (path: string, body: unknow
           </div>
         );
       })}
+    </div>
+    <CustomBrains s={s} call={call} password={password} />
+    </>
+  );
+}
+
+const JSON_MODE_HELP: Record<string, string> = {
+  object: "JSON mode: the widest support (recommended).",
+  schema: "Strict JSON schema: OpenAI-style servers that support it.",
+  prompt: "No response format: for servers that reject both (the answer is still checked).",
+};
+
+/** Any OpenAI-compatible LLM as a brain: OpenRouter, DeepSeek, Together, a local Ollama... Keys are write-only. */
+function CustomBrains({ s, call, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; password: string }) {
+  const v: BrainsView = s.brains;
+  const blank = { id: "", label: "", vendor: "", baseUrl: "https://", model: "", apiKey: "", jsonMode: "object" };
+  const [f, setF] = useState(blank);
+  const [editing, setEditing] = useState(false);
+  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
+  const set = (k: keyof typeof blank, val: string) => {
+    setTest(null);
+    setF((p) => ({ ...p, [k]: val, ...(k === "label" && !editing ? { id: slug(val) } : {}) }));
+  };
+  const runTest = async () => {
+    setBusy(true);
+    try {
+      const r = await adminCall<{ ok: boolean; error?: string }>("brains/test", password, { baseUrl: f.baseUrl, model: f.model, apiKey: f.apiKey || undefined, id: editing ? f.id : undefined, vendor: f.label });
+      setTest({ ok: r.ok, text: r.ok ? "Connected: the address, key and model work together." : (r.error ?? "It did not answer.") });
+    } catch (e) {
+      setTest({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = (force: boolean) =>
+    void call("brains/save", { ...f, apiKey: f.apiKey || undefined, vendor: f.vendor || undefined, force }, `${f.label} saved. Restart the engine to bring it online.`).then(() => {
+      setF(blank);
+      setEditing(false);
+      setTest(null);
+    });
+  const ready = f.id.length >= 2 && f.label.trim() && /^https?:\/\//.test(f.baseUrl) && f.model.trim();
+  return (
+    <div className="pcard">
+      <h3>Custom brains</h3>
+      <p className="dim">
+        Add any LLM with an OpenAI-compatible API (OpenRouter, DeepSeek, Together, Groq, a local Ollama or LM Studio, ...) and use it anywhere a brain is chosen: a bee's brain, the skill agent, research. There is no limit
+        beyond 50. The key is stored like the others, is never shown again, and is only ever sent to the address you give. Built in: ChatGPT, Claude, Kimi and GLM (Z.ai).
+      </p>
+      <ul className="checklist">
+        {v.builtin.map((b) => (
+          <li key={b.id}>
+            <span className={b.ready ? "good" : "dim"}>{b.ready ? "✓" : "○"}</span> <strong>{b.label}</strong> <span className="dim small">{b.vendor} · built in{b.ready ? "" : " · no key yet"}</span>
+          </li>
+        ))}
+        {v.custom.map((b) => (
+          <li key={b.id}>
+            <span className="good">✓</span> <strong>{b.label}</strong>{" "}
+            <span className="dim small">
+              {b.vendor} · {b.model} · {b.baseUrl.replace(/^https?:\/\//, "")} · {b.keySet ? "key saved" : "no key"} · {b.jsonMode}
+              {b.usedBy.length ? ` · used by ${b.usedBy.join(", ")}` : ""}
+            </span>{" "}
+            <button
+              className="pbtn ghost small"
+              onClick={() => {
+                setF({ id: b.id, label: b.label, vendor: b.vendor, baseUrl: b.baseUrl, model: b.model, apiKey: "", jsonMode: b.jsonMode });
+                setEditing(true);
+                setTest(null);
+              }}
+            >
+              Edit
+            </button>{" "}
+            <button className="pbtn ghost small" disabled={b.usedBy.length > 0} title={b.usedBy.length ? "Give its bees another brain first" : ""} onClick={() => confirm(`Remove ${b.label}?`) && void call("brains/delete", { id: b.id }, `${b.label} removed.`)}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      {!v.canEdit ? (
+        <p className="dim small">No Setup file on this server, so custom brains cannot be saved here.</p>
+      ) : (
+        <>
+          <h4>{editing ? `Edit ${f.label}` : "Add a brain"}</h4>
+          <div className="form-grid">
+            <label className="plabel">
+              Name
+              <input className="pinput" maxLength={30} value={f.label} onChange={(e) => set("label", e.target.value)} placeholder="DeepSeek" />
+            </label>
+            <label className="plabel">
+              Id (short, fixed once saved)
+              <input className="pinput mono" maxLength={30} disabled={editing} value={f.id} onChange={(e) => set("id", slug(e.target.value))} placeholder="deepseek" />
+            </label>
+            <label className="plabel wide">
+              API address (base URL)
+              <input className="pinput mono" value={f.baseUrl} onChange={(e) => set("baseUrl", e.target.value)} placeholder="https://api.deepseek.com/v1" />
+            </label>
+            <label className="plabel">
+              Model
+              <input className="pinput mono" value={f.model} onChange={(e) => set("model", e.target.value)} placeholder="deepseek-chat" />
+            </label>
+            <label className="plabel">
+              API key {editing ? "(leave empty to keep the saved one)" : "(empty for a local server)"}
+              <input className="pinput mono" type="password" autoComplete="off" value={f.apiKey} onChange={(e) => set("apiKey", e.target.value)} />
+            </label>
+            <label className="plabel wide">
+              How it is asked for JSON
+              <select className="pinput" value={f.jsonMode} onChange={(e) => set("jsonMode", e.target.value)}>
+                {Object.entries(JSON_MODE_HELP).map(([k, t]) => (
+                  <option key={k} value={k}>
+                    {k}: {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="row-actions">
+            <button className="pbtn ghost" disabled={!ready || busy} onClick={() => void runTest()}>
+              {busy ? "Testing…" : "Test connection"}
+            </button>
+            <button className="pbtn" disabled={!ready} onClick={() => save(false)}>
+              {editing ? "Test & save changes" : "Test & add brain"}
+            </button>
+            {test && !test.ok && (
+              <button className="pbtn ghost" disabled={!ready} onClick={() => save(true)}>
+                Save without testing
+              </button>
+            )}
+            {editing && (
+              <button className="pbtn ghost" onClick={() => (setF(blank), setEditing(false), setTest(null))}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {test && <p className={test.ok ? "good small" : "bad small"}>{test.text}</p>}
+          <p className="dim small">A new or changed brain comes online after Restart engine.</p>
+        </>
+      )}
     </div>
   );
 }
@@ -573,9 +713,9 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
                   <label className="plabel">
                     Thinks with
                     <select className="pinput" value={b.brain} onChange={(ev) => set(i, { brain: ev.target.value })}>
-                      {["openai", "claude", "kimi"].map((x) => (
-                        <option key={x} value={x}>
-                          {BRAIN_LABEL[x]}
+                      {[...s.brains.builtin, ...s.brains.custom].map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.label}
                         </option>
                       ))}
                     </select>
@@ -955,6 +1095,27 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
     }
   };
 
+  const [ask, setAsk] = useState("");
+  const [agentBrain, setAgentBrain] = useState("");
+  const [explained, setExplained] = useState("");
+  const agents = w.agent;
+  const askAgent = async () => {
+    const revise = !!draft && !dirty;
+    const r = await run("ai", () => adminCall<{ ok: boolean; json: string; explanation: string; errors: string[]; brainLabel: string; attempts: number; draft?: DraftFull }>("workspace/ai", password, { prompt: ask, ...(agentBrain ? { brain: agentBrain } : {}), ...(revise ? { key: draft!.key } : {}) }));
+    if (!r) return;
+    setText(r.json);
+    setExplained(r.explanation);
+    setErrors(r.errors);
+    if (r.ok && r.draft) {
+      setDraft(r.draft);
+      setAsk("");
+      void refresh();
+      setMsg({ ok: true, text: `${r.brainLabel} drafted it${r.attempts > 1 ? " (after fixing its first attempt)" : ""} and saved it as version ${r.draft.versions.length}. It is only a draft: backtest it before anything else.` });
+    } else {
+      setDraft(null);
+      setMsg({ ok: false, text: `${r.brainLabel} could not produce a skill that compiles. Its last attempt is in the editor with the errors below; fix it by hand or ask again.` });
+    }
+  };
   const canPublish = !!bt && !dirty && (force || (bt.pass && bt.data === "real"));
   return (
     <div className="pcard">
@@ -963,6 +1124,42 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
         Write a skill in the JSON rule language, test it walk-forward on real history, keep every version, and publish it. Nothing reaches a bee until it is published, and even then it is one vote Jev may weigh. Skills the bees
         write themselves appear here too, so you can read, improve and re-test them.
       </p>
+      <div className="agent-box">
+        <h4>Ask the skill agent</h4>
+        {agents.length === 0 ? (
+          <p className="dim small">No brain can answer yet. Add a key (or a custom brain) under API keys, then restart the engine.</p>
+        ) : (
+          <>
+            <textarea
+              className="pinput"
+              rows={3}
+              maxLength={2000}
+              value={ask}
+              onChange={(e) => setAsk(e.target.value)}
+              placeholder={draft && !dirty ? `Change ${draft.key}, e.g. “make the entry stricter and add a trailing stop”` : "Describe a strategy, e.g. “Buy a pullback to the 50 EMA when ADX shows a trend, exit on a close below the 20 EMA”"}
+              aria-label="Describe the skill"
+            />
+            <div className="row-actions">
+              <select className="pinput" style={{ maxWidth: 220 }} value={agentBrain} onChange={(e) => setAgentBrain(e.target.value)} aria-label="Brain">
+                <option value="">Brain: {agents[0]!.label} (default)</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+              <button className="pbtn" disabled={ask.trim().length < 8 || !!busy || (dirty && !!draft)} onClick={() => void askAgent()}>
+                {busy === "ai" ? "Thinking…" : draft && !dirty ? `Revise ${draft.key}` : "Draft a skill"}
+              </button>
+            </div>
+            <p className="dim small">
+              The brain writes the JSON, the app compiles it (one automatic fix if it does not), and the result lands here as a <strong>draft</strong>: nothing is published, and the brain has no market data, so it cannot know how the idea performs.
+              {dirty && draft ? " Save or revert your edits first to revise this draft." : ""}
+            </p>
+            {explained && <p className="small note-explain">{explained}</p>}
+          </>
+        )}
+      </div>
       <div className="workshop">
         <div className="workshop-list">
           <div className="row-actions">
@@ -983,7 +1180,7 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
                 <button className={`draft-item ${draft?.key === d.key ? "on" : ""}`} onClick={() => open(d.key)}>
                   <strong>{d.name}</strong>
                   <span className="dim small">
-                    {d.author === "owner" ? "you" : d.author} · v{d.versions} · <span className={`badge ${DRAFT_BADGE[d.status].cls}`}>{DRAFT_BADGE[d.status].text}</span>
+                    {d.author === "owner" ? "you" : d.author.startsWith("ai:") ? `AI · ${BRAIN_LABEL[d.author.slice(3)] ?? d.author.slice(3)}` : d.author} · v{d.versions} · <span className={`badge ${DRAFT_BADGE[d.status].cls}`}>{DRAFT_BADGE[d.status].text}</span>
                     {d.backtest ? ` · ${d.backtest.pass ? "✓" : "✗"} ${d.backtest.data === "real" ? "real" : "synthetic"} data` : d.valid ? "" : " · does not compile"}
                   </span>
                 </button>
@@ -1056,7 +1253,7 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
                         v{v.n}
                       </button>{" "}
                       <span className="dim small">
-                        {v.author === "owner" ? "you" : v.author} · {new Date(v.at).toISOString().slice(0, 16).replace("T", " ")}
+                        {v.author === "owner" ? "you" : v.author.startsWith("ai:") ? `AI · ${BRAIN_LABEL[v.author.slice(3)] ?? v.author.slice(3)}` : v.author} · {new Date(v.at).toISOString().slice(0, 16).replace("T", " ")}
                         {v.note ? ` · ${v.note}` : ""}
                         {v.n === draft.publishedVersion ? " · live" : ""}
                         {v.backtest ? ` · ${v.backtest.pass ? "✓" : "✗"} ${v.backtest.returnPct.toFixed(1)}% (${v.backtest.data})` : ""}
@@ -1484,6 +1681,8 @@ function SecurityTab({ call }: { call: (path: string, body: unknown, ok: string)
 export function AdminPage() {
   const [pw, setPw] = useState<string | null>(null);
   const [s, setS] = useState<AdminState | null>(null);
+  // Custom brains carry their own labels; this keeps every BRAIN_LABEL lookup on the page in step.
+  for (const c of s?.brains?.custom ?? []) BRAIN_LABEL[c.id] = c.label;
   const [tab, setTab] = useState<Tab>("overview");
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1578,7 +1777,7 @@ export function AdminPage() {
             </div>
             <div className={busy ? "busy" : ""}>
               {tab === "overview" && <Overview s={s} setTab={setTab} />}
-              {tab === "keys" && <KeysTab s={s} call={safeCall} />}
+              {tab === "keys" && <KeysTab s={s} call={safeCall} password={pw} />}
               {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} password={pw} />}
               {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
               {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}

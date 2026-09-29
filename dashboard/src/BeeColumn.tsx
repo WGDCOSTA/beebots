@@ -59,9 +59,9 @@ function TechStrip({ bee }: { bee: PublicBee }) {
   return (
     <div className="tech-strip num">
       {b && (
-        <span className={`chip-t ${b.online ? "" : "off"}`} title={b.online ? `${BRAIN_LABEL[b.id] ?? b.id} plans for this bee (${b.model})` : "No key or sign-in: a rules pick plans for this bee"}>
+        <span className={`chip-t ${b.online ? "" : "off"}`} title={b.online ? `${b.label ?? BRAIN_LABEL[b.id] ?? b.id} plans for this bee (${b.model})` : "No key or sign-in: a rules pick plans for this bee"}>
           <i className={`dot ${b.online ? "on" : ""}`} />
-          {BRAIN_LABEL[b.id] ?? b.id}
+          {b.label ?? BRAIN_LABEL[b.id] ?? b.id}
           {b.online && b.model ? <em> {b.model}</em> : <em> rules</em>}
         </span>
       )}

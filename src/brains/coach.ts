@@ -15,7 +15,7 @@ import type { KnowledgeGraph } from "../graph/graph.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
-import { BRAIN_INFO, type BrainId, type LlmClient } from "./llm.js";
+import { brainInfo, type BrainId, type LlmClient } from "./llm.js";
 import { loadPlaybook, savePlaybook, type BeePlan } from "./playbook.js";
 import type { Ranking } from "../lab/tournament.js";
 import type { BeeId } from "../config.js";
@@ -226,7 +226,7 @@ export class Coach {
     const plan = pb?.bees[bee.slot];
     if (!client || !pb || !plan?.skills.length) return false;
     if (!this.budget()) return false;
-    const b = BRAIN_INFO[bee.brain];
+    const b = brainInfo(bee.brain);
     const hive = contextFor(this.o.graph, bee.slot);
     const size = this.o.watchSize?.(bee.slot) ?? 3;
     const watch = this.o.watchlist && plan.watchlist?.length

@@ -1267,3 +1267,20 @@
 .note p {
   margin: 6px 0;
 }
+.agent-box {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  background: var(--card-2);
+  display: grid;
+  gap: 8px;
+}
+.agent-box h4 {
+  margin: 0;
+}
+.note-explain {
+  border-left: 3px solid var(--line);
+  padding-left: 10px;
+  margin: 0;
+}

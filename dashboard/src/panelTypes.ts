@@ -70,7 +70,8 @@ export interface GraphJson {
   links: GraphLink[];
 }
 
-export const BRAIN_LABEL: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi", rules: "Rules" };
+/** Labels for every brain id; custom brains are added when the admin state loads (see AdminPage). */
+export const BRAIN_LABEL: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi", zai: "GLM", rules: "Rules" };
 
 export const FAMILY_LABEL: Record<string, string> = {
   trend: "Trend",
@@ -181,6 +182,8 @@ export interface DraftSummary {
   backtest: BacktestSummary | null;
 }
 export interface WorkshopState {
+  /** Brains that can draft a skill from a description. */
+  agent: Array<{ id: string; label: string }>;
   drafts: DraftSummary[];
   templates: Array<{ id: string; label: string; json: string }>;
 }
@@ -220,7 +223,7 @@ export interface JobStatus {
   log: string[];
 }
 
-export type KeyName = "jev" | "openai" | "anthropic" | "kimi" | "coinmarketcap";
+export type KeyName = "jev" | "openai" | "anthropic" | "kimi" | "zai" | "coinmarketcap";
 
 export type ExchangeKind = "demo" | "live";
 /** A bee's OKX keys as the panel may see them: never the keys, only where they come from and the last check. */
@@ -245,7 +248,15 @@ export interface ExchangeCheck {
   warnings: string[];
 }
 
+export interface BrainsView {
+  builtin: Array<{ id: string; label: string; vendor: string; ready: boolean }>;
+  custom: Array<{ id: string; label: string; vendor: string; baseUrl: string; model: string; jsonMode: "schema" | "object" | "prompt"; keySet: boolean; usedBy: string[] }>;
+  zaiDefaults: { model: string; baseUrl: string };
+  canEdit: boolean;
+}
+
 export interface AdminState {
+  brains: BrainsView;
   mode: "dry" | "demo" | "live";
   version: string;
   hasSettingsFile: boolean;

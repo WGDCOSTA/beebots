@@ -56,12 +56,14 @@ const styleKnobs = (prefix: string, group: FieldGroup): AdminField[] => [
 
 export const ADMIN_FIELDS: AdminField[] = [
   // brains
-  { key: "BEE1_BRAIN", group: "brains", label: "Bee 1 thinks with", help: "LLM brain of the first bee.", type: "enum", options: BRAINS },
+  { key: "BEE1_BRAIN", group: "brains", label: "Bee 1 thinks with", help: "LLM brain of the first bee (a built-in one, or a custom brain you added).", type: "enum", options: BRAINS },
   { key: "BEE2_BRAIN", group: "brains", label: "Bee 2 thinks with", help: "LLM brain of the second bee.", type: "enum", options: BRAINS },
   { key: "BEE3_BRAIN", group: "brains", label: "Bee 3 thinks with", help: "LLM brain of the third bee.", type: "enum", options: BRAINS },
   { key: "OPENAI_BRAIN_MODEL", group: "brains", label: "ChatGPT model", help: "OpenAI model for the ChatGPT brain.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "CLAUDE_MODEL", group: "brains", label: "Claude model", help: "Anthropic model id for the Claude brain.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "CLAUDE_EFFORT", group: "brains", label: "Claude effort", help: "How hard Claude thinks (more effort costs more tokens).", type: "enum", options: ["low", "medium", "high"] },
+  { key: "ZAI_MODEL", group: "brains", label: "GLM model (Z.ai)", help: "Z.ai model id for the GLM brain, for example glm-4.6. Use the id shown in your Z.ai console.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
+  { key: "ZAI_BASE_URL", group: "brains", label: "Z.ai API base", help: "Z.ai's OpenAI-compatible API: https://api.z.ai/api/paas/v4 (international) or https://open.bigmodel.cn/api/paas/v4 (China).", type: "text", maxLen: 120, pattern: /^https:\/\/[A-Za-z0-9.-]+(\/[A-Za-z0-9._/-]*)?$/ },
   { key: "KIMI_MODEL", group: "brains", label: "Kimi model", help: "Moonshot model id for the Kimi brain.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "KIMI_BASE_URL", group: "brains", label: "Kimi API base", help: "Moonshot's API (api.moonshot.ai for international, api.moonshot.cn for China).", type: "text", maxLen: 120, pattern: /^https:\/\/[A-Za-z0-9.-]+(\/[A-Za-z0-9._/-]*)?$/ },
   { key: "JEV_MODEL", group: "brains", label: "Jev model", help: "TypeSafe AI decision model.", type: "text", maxLen: 40, pattern: /^[A-Za-z0-9._-]+$/ },

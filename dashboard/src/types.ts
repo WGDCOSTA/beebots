@@ -56,7 +56,7 @@ export interface PublicBee {
   /** The scalper's mandate, circuit breaker and last look (null unless this bee scalps). */
   scalp?: { gateOpen: boolean; note: string; last: string | null; mandate: { coin: string; bias: string; used: number; maxTrades: number; expiresAt: number } | null; pausedUntil: number | null; lossStreak: number } | null;
   /** The LLM brain that plans for it, and whether that brain has a key or sign-in. */
-  brain?: { id: string; model: string | null; online: boolean };
+  brain?: { id: string; label?: string; model: string | null; online: boolean };
   market?: string;
   squad?: "crypto" | "macro";
   /** The method it trades: the specialisation its brains chose, or its own style ("own"). */
@@ -91,7 +91,7 @@ export interface BoardCoin {
 /** Engine telemetry for the system bar. */
 export interface SystemInfo {
   jevModel: string;
-  brains: Array<{ id: string; model: string | null; online: boolean }>;
+  brains: Array<{ id: string; label?: string; model: string | null; online: boolean }>;
   labSignals: boolean;
   watchlist: boolean;
   survival: boolean;

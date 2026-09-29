@@ -1,5 +1,6 @@
 import { customBrain } from "./bees/custom.js";
 import { BRAINS } from "./bees/index.js";
+import { brainInfo } from "./brains/llm.js";
 import { macro } from "./bees/macro.js";
 import { skillBrain } from "./bees/skill.js";
 import type { Skill } from "./lab/skills/types.js";
@@ -1400,8 +1401,8 @@ export class Engine {
       /** Which LLM brain plans for this bee (and whether it has a key or sign-in), what it trades, its exposure. */
       brain: (() => {
         const bid = this.d.cfg.brains.slots[id];
-        const c = this.d.cfg.brains.creds[bid];
-        return { id: bid, model: c?.model ?? null, online: !!c };
+        const c = (this.d.cfg.brains.creds as Record<string, { model: string } | undefined>)[bid] ?? this.d.cfg.brains.creds.custom?.find((x) => x.id === bid);
+        return { id: bid, label: brainInfo(bid).label, model: c?.model ?? null, online: !!c };
       })(),
       market: this.d.cfg.slots[id].market,
       squad: this.d.cfg.slots[id].squad,
@@ -1480,7 +1481,16 @@ export class Engine {
       /** Engine telemetry for the dashboard's system bar: which intelligence features are on. No secrets. */
       system: {
         jevModel: this.d.cfg.jev.model,
-        brains: (["openai", "claude", "kimi"] as const).map((bid) => ({ id: bid, model: this.d.cfg.brains.creds[bid]?.model ?? null, online: !!this.d.cfg.brains.creds[bid] })),
+        // The original three always; GLM and the owner's custom brains only once they are set up.
+        brains: (() => {
+          const cr = this.d.cfg.brains.creds;
+          const list = [
+            ...(["openai", "claude", "kimi"] as const).map((bid) => ({ id: bid as string, model: cr[bid]?.model ?? null, online: !!cr[bid] })),
+            ...(cr.zai ? [{ id: "zai", model: cr.zai.model, online: true }] : []),
+            ...(cr.custom ?? []).map((b) => ({ id: b.id, model: b.model, online: true })),
+          ];
+          return list.map((b) => ({ ...b, label: brainInfo(b.id).label }));
+        })(),
         labSignals: !!this.d.labVotes,
         cmc: this.cmcView(),
         scalp: { enabled: this.d.cfg.scalp.enabled, gateOpen: this.scalpAvailable(), reason: this.d.cfg.scalp.enabled ? (this.d.cfg.scalp.requireLab ? (this.d.scalpGate?.().reason ?? "no lab report") : "lab gate off (paper only)") : "SCALP is off", bees: this.ids.filter((id) => isScalpBrain(this.brain(id))).length },

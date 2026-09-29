@@ -85,8 +85,8 @@ export interface PreflightItem {
   note: string;
 }
 
-export function preflight(a: { mode: string; keys: Record<string, { set: boolean }>; hasBees: boolean; labDir: string }): PreflightItem[] {
-  const brains = ["jev", "openai", "anthropic", "kimi"].filter((k) => a.keys[k]?.set);
+export function preflight(a: { mode: string; keys: Record<string, { set: boolean }>; hasBees: boolean; labDir: string; customBrains?: string[] }): PreflightItem[] {
+  const brains = [...["jev", "openai", "anthropic", "kimi", "zai"].filter((k) => a.keys[k]?.set), ...(a.customBrains ?? [])];
   const csv = goldCsvs(a.labDir);
   return [
     { id: "paper", label: "Paper mode", ok: a.mode === "dry", required: false, note: a.mode === "dry" ? "No real orders anywhere. The check places none in any mode." : `The engine runs in ${a.mode} mode. The check itself still places no orders.` },

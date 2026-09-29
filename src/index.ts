@@ -27,10 +27,11 @@ import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
 import type { CouncilBee } from "./brains/council.js";
-import { ANTHROPIC_PROFILE, checkClaudeKey, checkKimiKey, hasAnthropicLogin, makeClients } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
 import { Workspace } from "./lab/workspace.js";
+import { SkillAgent } from "./lab/skillAgent.js";
 import { NoteBook } from "./brains/notes.js";
 import { Researcher } from "./brains/research.js";
 import { checkOpenAiKey } from "./openai.js";
@@ -392,6 +393,8 @@ async function main() {
       anthropic: (k) => checkClaudeKey(k),
       coinmarketcap: (k) => checkCmcKey(k),
       kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
+      zai: (k) => checkCompatKey(cfg.brains.creds.zai?.baseUrl ?? process.env.ZAI_BASE_URL?.trim() ?? ZAI_BASE_URL, k, cfg.brains.creds.zai?.model ?? process.env.ZAI_MODEL?.trim() ?? ZAI_DEFAULT_MODEL, "Z.ai"),
+      compat: (url, key, model, vendor) => checkCompatKey(url, key, model, vendor),
     },
     okxCheck: (creds, kind, walletUsd) => checkOkxAccount(cli, creds, kind, walletUsd),
     anthropicLogin: {
@@ -448,6 +451,7 @@ async function main() {
     labDir: cfg.lab.dir,
     notes,
     research,
+    skillAgent: new SkillAgent({ clients: () => clients, maxCallsPerDay: Math.max(cfg.lab.coachMaxCallsDay, 20) }),
   });
 
   const server = startServer(

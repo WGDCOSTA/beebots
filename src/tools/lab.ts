@@ -22,7 +22,7 @@ import { loadMood } from "../market/cmc.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCouncil, type CouncilBee } from "../brains/council.js";
-import { BRAIN_INFO, BRAINS, checkClaudeKey, checkKimiKey, makeClients } from "../brains/llm.js";
+import { brainInfo, BRAINS, checkClaudeKey, checkKimiKey, makeClients } from "../brains/llm.js";
 import { loadPlaybook, savePlaybook } from "../brains/playbook.js";
 import { BEES, labEnv, MAX_BEES, slotId, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
@@ -272,7 +272,7 @@ async function cmdCouncil(ranking?: Ranking) {
   graph.close();
   for (const l of res.log) {
     const p = res.playbook.bees[l.bee]!;
-    console.log(`\n${l.bee} thinks with ${l.brain === "rules" ? "rules" : BRAIN_INFO[l.brain as keyof typeof BRAIN_INFO].label} (${p.model})${l.error ? `  [brain failed: ${l.error}]` : ""}`);
+    console.log(`\n${l.bee} thinks with ${l.brain === "rules" ? "rules" : brainInfo(l.brain).label} (${p.model})${l.error ? `  [brain failed: ${l.error}]` : ""}`);
     for (const s of p.skills) console.log(`  ${s.weight.toFixed(2)}  ${s.id.padEnd(24)} ${s.reason}`);
     if (p.specialization) console.log(`  specialises in ${p.specialization.kind} ${p.specialization.id}: ${p.specialization.reason}`);
     for (const w of p.watchlist ?? []) console.log(`  watch ${w.coin.padEnd(8)} ${w.reason}`);
@@ -292,7 +292,7 @@ async function cmdKeys() {
   await check("ChatGPT", !!c.openai, async () => (await checkOpenAiKey(c.openai!.apiKey), null));
   await check("Claude", !!c.claude, () => checkClaudeKey(c.claude!));
   await check("Kimi", !!c.kimi, () => checkKimiKey(c.kimi!.apiKey, c.kimi!.baseUrl));
-  for (const slot of BEES) console.log(`${slot} -> ${BRAIN_INFO[env.slots[slot]].label}`);
+  for (const slot of BEES) console.log(`${slot} -> ${brainInfo(env.slots[slot]!).label}`);
 }
 
 function cmdSkills() {
@@ -375,7 +375,7 @@ async function main() {
       return cmdMemory(cmd, pos);
     default:
       console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").filter((l) => l.startsWith("//")).join("\n").replace(/^\/\/ ?/gm, ""));
-      console.log(`\nbrains: ${BRAINS.map((b) => `${BRAIN_INFO[b].label} (${BRAIN_INFO[b].keyEnv})`).join(", ")}`);
+      console.log(`\nbrains: ${BRAINS.map((b) => `${brainInfo(b).label} (${brainInfo(b).keyEnv})`).join(", ")}`);
   }
 }
 

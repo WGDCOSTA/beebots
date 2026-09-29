@@ -35,9 +35,27 @@ Nothing here trades by itself, and nothing here can bypass a cap, a stop or the 
 | bee2 | Claude (Anthropic) | `ANTHROPIC_API_KEY`, or an Anthropic Console sign-in (below) | `CLAUDE_MODEL=claude-opus-5` |
 | bee3 | Kimi (Moonshot AI) | `KIMI_API_KEY` or `MOONSHOT_API_KEY` | `KIMI_MODEL=kimi-k2.5` |
 
-Change who thinks with what via `BEE1_BRAIN` / `BEE2_BRAIN` / `BEE3_BRAIN` (`openai`, `claude`, `kimi`). Keys can also be
-entered on the Setup page (Claude and Kimi are optional there and checked with a free call). `pnpm lab keys` checks
-all three.
+A fourth built-in brain, **GLM (Z.ai)**, uses `ZAI_API_KEY`, `ZAI_MODEL` (default `glm-4.6`; use the model id shown in
+your Z.ai console) and `ZAI_BASE_URL` (international `https://api.z.ai/api/paas/v4`, China
+`https://open.bigmodel.cn/api/paas/v4`).
+
+Change who thinks with what via `BEE1_BRAIN` / `BEE2_BRAIN` / `BEE3_BRAIN` (`openai`, `claude`, `kimi`, `zai`, or the id
+of a custom brain). Keys can also be entered on the Setup page (Claude and Kimi are optional there and checked with a
+free call). `pnpm lab keys` checks all three.
+
+### Custom brains: any number of them
+
+Admin → API keys → **Custom brains** adds any LLM that speaks the OpenAI-compatible chat API (OpenRouter, DeepSeek,
+Together, Groq, a local Ollama or LM Studio, ...): a name, an id, the API address, the model, an optional key and how it
+is asked for JSON (`object` = JSON mode with the schema in the prompt, the widest support and the default; `schema` =
+OpenAI's strict json_schema; `prompt` = no response format, for servers that reject both; the answer is validated
+whatever the mode). Up to 50. A new brain is tested with one tiny chat call before it is saved (or saved anyway, on
+purpose, if its server is down right now). Rules: the address must be `https://` (plain `http://` only for `localhost` or
+`host.docker.internal`, for a local model), the key is stored in the Setup file like the others, never shown again and
+only ever sent to that address, the id may not be a built-in's (`openai`, `claude`, `kimi`, `zai`, `rules`, `ensemble`,
+`jev`, `hive`), and a brain a bee uses cannot be removed. Once registered a brain can be a bee's brain (extra bees pick
+it when created; the main three via Settings → Brains), sit in councils, do research and draft skills. A new or changed
+brain comes online after **Restart engine**. Built on `CompatBrain` in `src/brains/llm.ts`, which Kimi and GLM use too.
 
 ### Signing Claude in instead of pasting a key
 
@@ -425,6 +443,12 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
     Jev may weigh. Skills the bees write themselves land here too: the ones that passed as live, the ones that
     compiled but failed their backtest as "proposed by a bee", so you can read, improve and re-test them. Drafts live in
     `<LAB_DIR>/workspace/`.
+  - The Skill workshop also has an **Ask the skill agent** box: describe a strategy in words (or, on an open draft, the
+    change you want) and pick any brain that can answer (default Claude, then ChatGPT, GLM, Kimi, then custom ones). The
+    brain writes the JSON with the rule language in its prompt; the app compiles it and, if it does not compile, sends it
+    back once with the compiler's complaints. The result is saved as a **draft** authored "AI · <brain>", never
+    published: the brain has no market data and says so, and the normal backtest and publish gate apply. A revision
+    keeps the same draft and id. Capped per day (the larger of `COACH_MAX_CALLS_DAY` and 20).
   - **Research & background** (Lab tab): what each bee has been studying, kept apart from lessons. Write a bee's
     **background** yourself (it applies at once), or press "Ask the brain to research": the bee's brain reads only what
     the app already holds (the lab ranking, the bee's trades and lessons, its peers, the market mood; no web, no external

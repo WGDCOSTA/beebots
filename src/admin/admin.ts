@@ -18,35 +18,40 @@ import { BEES, ConfigError, isBeeId, loadConfig, MAX_BEES, parseEnv, slotId, wit
 import { skillFromSpec, type Skill } from "../lab/skills/index.js";
 import { NoteError, type NoteBook } from "../brains/notes.js";
 import type { Researcher } from "../brains/research.js";
+import { AgentError, MAX_PROMPT, type SkillAgent } from "../lab/skillAgent.js";
 import { KEY_RE, TEMPLATES, validateSkill, Workspace, WorkspaceError } from "../lab/workspace.js";
 import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
-import { anthropicLoginCommand } from "../brains/llm.js";
-import { BeeSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
+import { anthropicLoginCommand, BRAINS, brainInfo, checkBaseUrl, registerBrain, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "../brains/llm.js";
+import { BeeSchema, CustomBrainSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import type { AccountFacts } from "../okx/account.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { CHECK_STAGES, goldCsvs, preflight, verdicts } from "./check.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
 
 const MAX_BODY = 32 * 1024;
-const KEY_NAMES = ["jev", "openai", "anthropic", "kimi", "coinmarketcap"] as const;
+const KEY_NAMES = ["jev", "openai", "anthropic", "kimi", "zai", "coinmarketcap"] as const;
 type KeyName = (typeof KEY_NAMES)[number];
 const KEY_ENV: Record<KeyName, string[]> = {
   jev: ["TYPESAFE_API_KEY"],
   openai: ["OPENAI_API_KEY"],
   anthropic: ["ANTHROPIC_API_KEY"],
   kimi: ["KIMI_API_KEY", "MOONSHOT_API_KEY"],
+  zai: ["ZAI_API_KEY"],
   coinmarketcap: ["COINMARKETCAP_API_KEY", "CMC_API_KEY"],
 };
-const KEY_FIELD: Record<KeyName, "jevKey" | "openaiKey" | "anthropicKey" | "kimiKey" | "cmcKey"> = { jev: "jevKey", openai: "openaiKey", anthropic: "anthropicKey", kimi: "kimiKey", coinmarketcap: "cmcKey" };
+const KEY_FIELD: Record<KeyName, "jevKey" | "openaiKey" | "anthropicKey" | "kimiKey" | "zaiKey" | "cmcKey"> = { jev: "jevKey", openai: "openaiKey", anthropic: "anthropicKey", kimi: "kimiKey", zai: "zaiKey", coinmarketcap: "cmcKey" };
 
 export interface KeyChecks {
   jev(key: string): Promise<string | null>;
   openai(key: string): Promise<string | null>;
   anthropic(key: string): Promise<string | null>;
   kimi(key: string): Promise<string | null>;
+  zai(key: string): Promise<string | null>;
+  /** One tiny chat call to any OpenAI-compatible API: is the address, key and model right? */
+  compat?(baseUrl: string, apiKey: string | undefined, model: string, vendor: string): Promise<string | null>;
   coinmarketcap(key: string): Promise<string | null>;
 }
 
@@ -94,6 +99,8 @@ export interface AdminOpts {
   /** Research notes and background (brains/notes.ts) and the brains that draft them (brains/research.ts). */
   notes?: NoteBook;
   research?: Researcher;
+  /** Drafts skills from a description, with any brain that can answer (lab/skillAgent.ts). */
+  skillAgent?: SkillAgent;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
   /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
@@ -123,7 +130,7 @@ const BeeEdit = z.object({
   coins: BeeSchema.shape.coins,
   style: z.enum(STYLES),
   /** Extra bees only: which LLM brain it thinks with. */
-  brain: z.enum(["openai", "claude", "kimi"]).optional(),
+  brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/, "brain: an id like openai, claude, kimi, zai or a custom one").optional(),
   /** Extra bees only: what it trades (the macro squad trades stocks and commodities). */
   market: z.enum(MARKETS).optional(),
   /** Extra bees only: the money it starts with, set when it is created. */
@@ -144,6 +151,20 @@ const NoteAdd = z.object({ bee: NoteBee, title: Str(80), text: Str(700), coins: 
 const NoteDecide = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/), decision: z.enum(["approve", "reject"]) });
 const NoteRef = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/) });
 const ResearchBody = z.object({ bee: z.string().regex(/^bee[1-9]$/, "bee: bee1..bee9") });
+const CustomBrainBody = z.object({
+  id: CustomBrainSchema.shape.id,
+  label: CustomBrainSchema.shape.label,
+  vendor: CustomBrainSchema.shape.vendor.optional(),
+  baseUrl: z.string().trim().max(200),
+  model: CustomBrainSchema.shape.model,
+  apiKey: z.string().trim().max(400).optional(),
+  jsonMode: CustomBrainSchema.shape.jsonMode.optional(),
+  /** Save even though the connection test failed (a server that is down right now). */
+  force: z.boolean().optional(),
+});
+const CustomBrainTest = z.object({ id: z.string().optional(), baseUrl: z.string().trim().max(200), model: z.string().trim().min(1).max(80), apiKey: z.string().trim().max(400).optional(), vendor: z.string().trim().max(30).optional() });
+const BrainRef = z.object({ id: CustomBrainSchema.shape.id });
+const AskAgent = z.object({ prompt: z.string().trim().min(8).max(MAX_PROMPT), brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/).optional(), key: z.string().trim().regex(KEY_RE).optional() });
 const DraftKey = z.string().trim().regex(KEY_RE, "id: lowercase letters, digits and _ only (2 to 40)");
 const DraftSave = z.object({ key: DraftKey.optional(), json: z.string().min(2).max(30_000), note: Str(200).optional() });
 const DraftRef = z.object({ key: DraftKey });
@@ -177,6 +198,20 @@ export class Admin {
 
   private labDir(): string {
     return this.o.labDir ?? "./data/lab";
+  }
+
+  /** Every brain that exists here: the built-ins and the custom ones the owner added. */
+  private brainIds(): string[] {
+    return [...BRAINS, ...(loadSettings(this.o.settingsPath)?.customBrains ?? []).map((b) => b.id)];
+  }
+
+  /** Which bees and settings use each brain, so one that is in use cannot be removed from under them. */
+  private brainUsers(id: string): string[] {
+    const s = loadSettings(this.o.settingsPath);
+    const users: string[] = (s?.bees ?? []).flatMap((b, i) => (b.brain === id ? [slotId(i)] : []));
+    const ov = loadOverrides(this.o.settingsPath);
+    for (const k of ["BEE1_BRAIN", "BEE2_BRAIN", "BEE3_BRAIN"]) if ((this.o.env[k] ?? ov[k]) === id) users.push(k);
+    return users;
   }
 
   private workspace(): Workspace {
@@ -215,6 +250,26 @@ export class Admin {
         return [k, { set: env || !!saved, source: env ? "env" : saved ? "settings" : null, checkedAt: saved?.checkedAt ?? null, balanceUsd: saved?.balanceUsd ?? null }];
       }),
     ) as Record<Kind, { set: boolean; source: "env" | "settings" | null; checkedAt: number | null; balanceUsd: number | null }>;
+  }
+
+  /** The brains the panel offers, with whether each can answer right now (a key is set). Never a key. */
+  private brainsView(keys: Record<string, { set: boolean }>) {
+    const settings = loadSettings(this.o.settingsPath);
+    const custom = settings?.customBrains ?? [];
+    for (const b of custom) registerBrain(b.id, b);
+    const builtinKey: Record<string, string> = { openai: "openai", claude: "anthropic", kimi: "kimi", zai: "zai" };
+    return {
+      builtin: BRAINS.map((id) => ({ id, label: brainInfo(id).label, vendor: brainInfo(id).vendor, ready: !!keys[builtinKey[id]!]?.set })),
+      custom: custom.map((b) => ({ id: b.id, label: b.label, vendor: b.vendor, baseUrl: b.baseUrl, model: b.model, jsonMode: b.jsonMode, keySet: !!b.apiKey, usedBy: this.brainUsers(b.id) })),
+      zaiDefaults: { model: ZAI_DEFAULT_MODEL, baseUrl: ZAI_BASE_URL },
+      canEdit: !!settings,
+    };
+  }
+
+  /** Brains that can answer now, by id (built-ins with a key, and every custom brain). */
+  private readyBrains(keys: Record<string, { set: boolean }>): string[] {
+    const v = this.brainsView(keys);
+    return [...v.builtin.filter((b) => b.ready).map((b) => b.id), ...v.custom.map((b) => b.id)];
   }
 
   /** Everything the panel shows. No secret ever leaves here. */
@@ -273,6 +328,7 @@ export class Admin {
       anthropicLogin: this.o.anthropicLogin
         ? { profile: this.o.anthropicLogin.profile, active: this.o.anthropicLogin.active(), command: anthropicLoginCommand(this.o.anthropicLogin.profile) }
         : null,
+      brains: this.brainsView(keys),
       evolution: this.o.evolution?.() ?? null,
       styles: STYLES.map((s) => ({ id: s, label: STYLE_INFO[s].label, blurb: STYLE_INFO[s].blurb })),
       groups: FIELD_GROUPS.map((g) => ({ id: g, ...GROUP_INFO[g] })),
@@ -287,7 +343,7 @@ export class Admin {
           min: f.min,
           max: f.max,
           step: f.step,
-          options: f.options,
+          options: /^BEE[123]_BRAIN$/.test(f.key) ? this.brainIds() : f.options,
           secret: !!f.secret,
           lockedByEnv,
           overridden: f.key in overrides,
@@ -300,12 +356,12 @@ export class Admin {
         playbook: this.o.playbook(),
         check: {
           stages: CHECK_STAGES,
-          preflight: preflight({ mode: this.o.mode, keys, hasBees: !!settings, labDir: this.labDir() }),
+          preflight: preflight({ mode: this.o.mode, keys, hasBees: !!settings, labDir: this.labDir(), customBrains: (settings?.customBrains ?? []).map((b) => b.label) }),
           verdicts: verdicts(this.labDir(), { now: this.now(), maxAgeDays: Number(effective.SCALP_LAB_MAX_AGE_DAYS ?? 14) || 14, graph: this.o.graphStats() }),
           goldDir: join(this.labDir(), "gold", "data"),
           goldFiles: goldCsvs(this.labDir()).map((f) => f.split("/").pop()),
         },
-        workshop: { drafts: this.workspace().list(), templates: TEMPLATES },
+        workshop: { drafts: this.workspace().list(), templates: TEMPLATES, agent: this.o.skillAgent?.available() ?? [] },
         notes: {
           available: !!this.o.notes,
           notes: this.o.notes?.all().filter((n) => n.status !== "rejected").slice(0, 200) ?? [],
@@ -354,11 +410,12 @@ export class Admin {
         const next = { ...loadOverrides(this.o.settingsPath) };
         const errors: string[] = [];
         for (const [k, v] of Object.entries(values)) {
-          const f = FIELD_BY_KEY.get(k);
-          if (!f) {
+          const f0 = FIELD_BY_KEY.get(k);
+          if (!f0) {
             errors.push(`${k} cannot be changed here`);
             continue;
           }
+          const f = /^BEE[123]_BRAIN$/.test(f0.key) ? { ...f0, options: this.brainIds() } : f0;
           if (v === null) {
             delete next[k];
             continue;
@@ -463,11 +520,13 @@ export class Admin {
           okx.push(keys);
         }
         const added: BeeId[] = [];
+        let badBrain = "";
         const bees = p.data.bees.map((b, i) => {
           const coins = [...new Set(b.coins)];
           const old = s.bees[i];
           if (!old) added.push(slotId(i));
           const brain = i >= BEES.length ? (b.brain ?? old?.brain) : undefined;
+          if (brain && !this.brainIds().includes(brain)) badBrain = `${b.name}: "${brain}" is not a brain here. Add it under Custom brains first.`;
           const market = i >= BEES.length ? (b.market ?? old?.market) : undefined;
           const next: Settings["bees"][number] = { ...(old ?? { image: false }), name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins), ...(brain ? { brain } : {}) };
           if (market && market !== "crypto") next.market = market;
@@ -481,6 +540,7 @@ export class Admin {
         });
         // A brand-new bee starts with fresh paper money, never with the books of a bee that once had its slot.
         for (const id of added) this.o.forgetBee?.(id);
+        if (badBrain) return send(res, 400, { error: badBrain });
         saveSettings(this.o.settingsPath, { ...s, bees });
         this.pending = true;
         log.info("admin: bees saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
@@ -557,6 +617,89 @@ export class Admin {
           backtest: { score: result.score, returnPct: result.oos.returnPct, stabilityPct: result.stabilityPct, trades: result.oos.trades, maxDrawdownPct: result.oos.maxDrawdownPct },
           note: "Saved. It joins every lab run from now on; a council can adopt it.",
         });
+      }
+
+      case "/admin/brains/test": {
+        const p = CustomBrainTest.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "baseUrl and model" });
+        if (!this.o.checks.compat) return send(res, 503, { error: "The connection test is not available here." });
+        const bad = checkBaseUrl(p.data.baseUrl);
+        if (bad) return send(res, 400, { error: bad });
+        // Testing a saved brain without retyping its key: the panel sends the id and no key.
+        const key = p.data.apiKey || (p.data.id ? loadSettings(this.o.settingsPath)?.customBrains?.find((b) => b.id === p.data.id)?.apiKey : undefined);
+        const err = await this.o.checks.compat(p.data.baseUrl, key || undefined, p.data.model, p.data.vendor || "The server");
+        return send(res, 200, { ok: !err, error: err ?? undefined });
+      }
+
+      case "/admin/brains/save": {
+        const p = CustomBrainBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues.map((i) => `${i.path.join(".") || "brain"}: ${i.message}`).join("; ") });
+        const s = loadSettings(this.o.settingsPath);
+        if (!s) return send(res, 409, { error: "This server has no Setup file, so custom brains cannot be saved here. Run Setup first." });
+        const list = [...(s.customBrains ?? [])];
+        const at = list.findIndex((b) => b.id === p.data.id);
+        if (at < 0 && list.length >= 50) return send(res, 400, { error: "That is 50 custom brains already." });
+        const bad = checkBaseUrl(p.data.baseUrl);
+        if (bad) return send(res, 400, { error: bad });
+        const apiKey = p.data.apiKey || list[at]?.apiKey;
+        const brain = CustomBrainSchema.safeParse({ id: p.data.id, label: p.data.label, vendor: p.data.vendor ?? "Custom", baseUrl: p.data.baseUrl, model: p.data.model, ...(apiKey ? { apiKey } : {}), jsonMode: p.data.jsonMode ?? "object" });
+        if (!brain.success) return send(res, 400, { error: brain.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
+        if (!p.data.force && this.o.checks.compat) {
+          const err = await this.o.checks.compat(brain.data.baseUrl, brain.data.apiKey, brain.data.model, brain.data.label);
+          if (err) return send(res, 400, { error: `${err} Not saved. If the server is only down right now, save it anyway with "Save without testing".` });
+        }
+        if (at >= 0) list[at] = brain.data;
+        else list.push(brain.data);
+        saveSettings(this.o.settingsPath, { ...s, customBrains: list });
+        registerBrain(brain.data.id, brain.data);
+        this.pending = true;
+        log.info("admin: custom brain saved", { id: brain.data.id, model: brain.data.model, host: new URL(brain.data.baseUrl).host });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/brains/delete": {
+        const p = BrainRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "id" });
+        const s = loadSettings(this.o.settingsPath);
+        const list = s?.customBrains ?? [];
+        if (!s || !list.some((b) => b.id === p.data.id)) return send(res, 404, { error: "No such custom brain." });
+        const users = this.brainUsers(p.data.id);
+        if (users.length) return send(res, 409, { error: `${brainInfo(p.data.id).label} is in use by ${users.join(", ")}. Give them another brain first.` });
+        saveSettings(this.o.settingsPath, { ...s, customBrains: list.filter((b) => b.id !== p.data.id) });
+        this.pending = true;
+        log.info("admin: custom brain removed", { id: p.data.id });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/workspace/ai": {
+        const p = AskAgent.safeParse(body);
+        if (!p.success) return send(res, 400, { error: `Describe the strategy in 8 to ${MAX_PROMPT} characters.` });
+        const agent = this.o.skillAgent;
+        if (!agent) return send(res, 503, { error: "The skill agent is not available here." });
+        const ws = this.workspace();
+        // Revising: the newest version of an open draft goes to the brain along with the request.
+        const base = p.data.key ? ws.get(p.data.key) : null;
+        if (p.data.key && !base) return send(res, 404, { error: "No such draft to revise." });
+        const current = base?.versions[base.versions.length - 1]?.json;
+        try {
+          const r = await agent.draft({ prompt: p.data.prompt, ...(p.data.brain ? { brain: p.data.brain } : {}), ...(current ? { current } : {}) });
+          let json = r.json;
+          // A revision stays on the same draft, so its versions line up: the brain may not move it to another id.
+          if (r.valid && base) {
+            try {
+              json = JSON.stringify({ ...(JSON.parse(r.json) as object), id: base.key }, null, 2);
+            } catch {
+              /* validated already; keep the text */
+            }
+          }
+          if (!r.valid || !validateSkill(json).ok) return send(res, 200, { ok: false, ...r, json, valid: false, state: this.state() });
+          const draft = ws.save({ ...(base ? { key: base.key } : {}), json, note: `${r.brainLabel}: ${p.data.prompt}`.slice(0, 200), author: `ai:${r.brain}` });
+          log.info("admin: skill drafted by a brain", { brain: r.brain, key: draft.key });
+          return send(res, 200, { ok: true, ...r, json, draft, state: this.state() });
+        } catch (err) {
+          if (err instanceof AgentError) return send(res, 409, { error: err.message });
+          throw err;
+        }
       }
 
       case "/admin/workspace/check": {
@@ -706,7 +849,7 @@ export class Admin {
         if (!p.success) return send(res, 400, { error: `stages: any of ${CHECK_STAGES.join(", ")}` });
         const keys = this.state().keys as Record<string, { set: boolean }>;
         try {
-          this.o.jobs.startCheck(p.data.stages, { labDir: this.labDir(), hasBrain: ["jev", "openai", "anthropic", "kimi"].some((k) => keys[k]?.set) });
+          this.o.jobs.startCheck(p.data.stages, { labDir: this.labDir(), hasBrain: this.readyBrains(keys).length > 0 });
         } catch (err) {
           return send(res, 409, { error: (err as Error).message });
         }

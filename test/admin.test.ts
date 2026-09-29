@@ -33,9 +33,9 @@ function settingsFile(): string {
   return path;
 }
 
-const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, coinmarketcap: async () => null };
+const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, compat: async () => null, coinmarketcap: async () => null };
 
-function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[] } = {}) {
+function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"] } = {}) {
   const settingsPath = settingsFile();
   const forgotten: string[] = [];
   const revived: string[] = [];
@@ -73,6 +73,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     registerSkill: (sk) => imported.push(sk.id),
     labDir,
     notes: new NoteBook(join(labDir, "notes.json")),
+    ...(opts.skillAgent ? { skillAgent: opts.skillAgent } : {}),
     research: { busy: () => [], blocked: (id: string) => (id === "bee2" ? "Claude has no key (Admin → API keys)" : null), research: async (id: string) => void researched.push(id) } as never,
     okxCheck: opts.okxCheck,
   });
@@ -251,6 +252,74 @@ describe("adding and removing bees", () => {
     expect(h.revived).toEqual(["bee3"]);
     expect((await h.call("/admin/revive", { bee: "bee2" })).body.error).toMatch(/must be flat/);
     expect((await h.call("/admin/revive", { bee: "../etc" })).status).toBe(400);
+  });
+
+  it("custom brains: test, save, use, and no removal while a bee uses one; Z.ai has its own key", async () => {
+    const h = harness({ checks: { compat: async (url: string) => (url.includes("down") ? "Could not reach My LLM." : null) } });
+    const brain = { id: "my_llm", label: "My LLM", vendor: "Acme", baseUrl: "https://api.acme.example/v1", model: "acme-1", apiKey: "acme-secret-key-1234", jsonMode: "object" };
+    expect((await h.call("/admin/brains/test", { baseUrl: "http://public.example/v1", model: "m" })).status).toBe(400);
+    expect((await h.call("/admin/brains/test", { baseUrl: brain.baseUrl, model: brain.model, apiKey: brain.apiKey })).body).toMatchObject({ ok: true });
+    expect((await h.call("/admin/brains/test", { baseUrl: "https://down.example/v1", model: "m" })).body).toMatchObject({ ok: false, error: expect.stringMatching(/reach/) });
+    expect((await h.call("/admin/brains/save", { ...brain, id: "openai" })).status).toBe(400);
+    expect((await h.call("/admin/brains/save", { ...brain, baseUrl: "http://public.example/v1" })).status).toBe(400);
+    const down = await h.call("/admin/brains/save", { ...brain, baseUrl: "https://down.example/v1" });
+    expect(down.status).toBe(400);
+    expect(down.body.error).toMatch(/Not saved/);
+    const saved = await h.call("/admin/brains/save", brain);
+    expect(saved.status).toBe(200);
+    const view = (saved.body as { brains: { custom: Array<Record<string, unknown>>; builtin: Array<{ id: string }> }; fields: Array<{ key: string; options?: string[] }> }).brains;
+    expect(view.builtin.map((b) => b.id)).toEqual(["openai", "claude", "kimi", "zai"]);
+    expect(view.custom[0]).toMatchObject({ id: "my_llm", label: "My LLM", model: "acme-1", keySet: true, usedBy: [] });
+    expect(JSON.stringify(saved.body)).not.toContain("acme-secret-key-1234");
+    expect((saved.body as { fields: Array<{ key: string; options?: string[] }> }).fields.find((f) => f.key === "BEE1_BRAIN")!.options).toContain("my_llm");
+    // Editing without retyping the key keeps the saved one.
+    expect((await h.call("/admin/brains/save", { ...brain, apiKey: undefined, model: "acme-2" })).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.customBrains![0]).toMatchObject({ model: "acme-2", apiKey: "acme-secret-key-1234" });
+    // It can be a bee's brain; a brain that does not exist cannot.
+    expect((await h.call("/admin/settings", { values: { BEE1_BRAIN: "nope_llm" } })).status).toBe(400);
+    expect((await h.call("/admin/settings", { values: { BEE1_BRAIN: "my_llm" } })).status).toBe(200);
+    expect((await h.call("/admin/brains/delete", { id: "my_llm" })).body.error).toMatch(/in use by BEE1_BRAIN/);
+    expect((await h.call("/admin/settings", { values: { BEE1_BRAIN: null } })).status).toBe(200);
+    expect((await h.call("/admin/brains/delete", { id: "my_llm" })).status).toBe(200);
+    expect((await h.call("/admin/brains/delete", { id: "my_llm" })).status).toBe(404);
+    // Saving while the server is down, on purpose.
+    expect((await h.call("/admin/brains/save", { ...brain, baseUrl: "https://down.example/v1", force: true })).status).toBe(200);
+    // Z.ai is a built-in with its own key.
+    const k = await h.call("/admin/keys", { keys: { zai: "zai-key-12345678" } });
+    expect(k.status).toBe(200);
+    expect((k.body as { keys: Record<string, { set: boolean }> }).keys.zai!.set).toBe(true);
+    expect(loadSettings(h.settingsPath)!.zaiKey).toBe("zai-key-12345678");
+  });
+
+  it("skill agent: drafts a skill from a prompt into the workshop, never publishing it", async () => {
+    const good = JSON.stringify({ id: "ai_dip", name: "AI dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } });
+    let reply = good;
+    const asked: unknown[] = [];
+    const agent = {
+      available: () => [{ id: "claude", label: "Claude" }],
+      draft: async (a: unknown) => (asked.push(a), { brain: "claude", brainLabel: "Claude", model: "m", json: reply, explanation: "An idea.", valid: JSON.parse(reply).id !== "broken", errors: JSON.parse(reply).id === "broken" ? ["boom"] : [], attempts: 1 }),
+    };
+    const h = harness({ skillAgent: agent as never });
+    expect((await h.call("/admin/workspace/ai", { prompt: "x" })).status).toBe(400);
+    expect((await h.call("/admin/workspace/ai", { prompt: "Buy oversold dips with RSI", key: "nope_x" })).status).toBe(404);
+    const r = await h.call("/admin/workspace/ai", { prompt: "Buy oversold dips with RSI", brain: "claude" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, brain: "claude", explanation: "An idea." });
+    const st = (r.body as { state: { lab: { workshop: { drafts: Array<{ key: string; author: string; status: string }>; agent: Array<{ id: string }> } } } }).state.lab.workshop;
+    expect(st.agent).toEqual([{ id: "claude", label: "Claude" }]);
+    expect(st.drafts[0]).toMatchObject({ key: "ai_dip", author: "ai:claude", status: "draft" });
+    expect(h.imported).toEqual([]);
+    // Revising keeps the same draft even if the brain renames it.
+    reply = good.replace('"ai_dip"', '"renamed"');
+    const rev = await h.call("/admin/workspace/ai", { prompt: "Make the entry stricter", key: "ai_dip" });
+    expect(JSON.parse(rev.body.json as string).id).toBe("ai_dip");
+    expect((rev.body.draft as { key: string; versions: unknown[] }).versions).toHaveLength(2);
+    expect((asked[1] as { current?: string }).current).toContain('"ai_dip"');
+    // A draft that does not compile is returned for editing, not saved.
+    reply = JSON.stringify({ id: "broken" });
+    const bad = await h.call("/admin/workspace/ai", { prompt: "Something that will not compile" });
+    expect(bad.body).toMatchObject({ ok: false, valid: false, errors: ["boom"] });
+    expect(((await h.call("/admin/workspace/get", { key: "broken" })).status)).toBe(404);
   });
 
   it("skill workshop: save, read, backtest, publish, discard", async () => {

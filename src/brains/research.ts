@@ -9,7 +9,7 @@ import type { Ranking } from "../lab/tournament.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
-import { BRAIN_INFO, type BrainId, type LlmClient } from "./llm.js";
+import { brainInfo, type BrainId, type LlmClient } from "./llm.js";
 import { NoteError, type NoteBook } from "./notes.js";
 import { loadPlaybook } from "./playbook.js";
 import type { CoinInfo } from "./watchlist.js";
@@ -91,7 +91,7 @@ export class Researcher {
   blocked(slot: BeeId): string | null {
     const bee = this.o.bees().find((b) => b.slot === slot);
     if (!bee) return "that bee is not running";
-    if (!this.o.clients[bee.brain]) return `${BRAIN_INFO[bee.brain].label} has no key (Admin → API keys)`;
+    if (!this.o.clients[bee.brain]) return `${brainInfo(bee.brain).label} has no key (Admin → API keys)`;
     if (this.running.has(slot)) return "already researching";
     if (this.o.notes.pendingCount(slot) >= MAX_PENDING) return `${MAX_PENDING} notes are waiting for your review`;
     const at = this.last.get(slot);
@@ -127,7 +127,7 @@ export class Researcher {
     if (why) throw new NoteError(`Cannot research now: ${why}.`);
     const bee = this.o.bees().find((b) => b.slot === slot)!;
     const client = this.o.clients[bee.brain]!;
-    const b = BRAIN_INFO[bee.brain];
+    const b = brainInfo(bee.brain);
     const d = new Date(this.now()).toISOString().slice(0, 10);
     if (d !== this.calls.day) this.calls = { day: d, n: 0 };
     this.calls.n++;

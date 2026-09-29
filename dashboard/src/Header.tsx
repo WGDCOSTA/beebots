@@ -122,7 +122,7 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
   );
 }
 
-const BRAIN_NAME: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi" };
+const BRAIN_NAME: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi", zai: "GLM" };
 
 /** The engine's intelligence at a glance: which brains are online and which features shape the bees right now. */
 export function SystemBar({ snap }: { snap: Snapshot | null }) {
@@ -144,11 +144,11 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
         <em>tick {Math.round((snap?.tickMs ?? 0) / 1000)}s</em>
       </span>
       <span className="sys-group" title="Strategic brains: they pick skills and coins; Jev still makes every trade decision">
-        <span className="sys-key">BRAINS {up}/3</span>
+        <span className="sys-key">BRAINS {up}/{s.brains.length}</span>
         {s.brains.map((b) => (
           <span key={b.id} className={`sys-flag ${b.online ? "on" : ""}`} title={b.online ? `${b.model}` : "no key or sign-in: rules pick"}>
             <i />
-            {BRAIN_NAME[b.id] ?? b.id}
+            {b.label ?? BRAIN_NAME[b.id] ?? b.id}
           </span>
         ))}
       </span>
