@@ -24,6 +24,8 @@ WORKDIR /app
 # OKX CLI profiles (site = "eea", no keys; keys come from the environment per call) and its 7-day trade log live here.
 RUN mkdir -p /home/node/.okx /data && chown -R node:node /home/node /data
 COPY --from=ant /out/ant /usr/local/bin/ant
+# ant is Go and trusts only the system CA bundle, which the slim image lacks (Node ships its own).
+COPY --from=ant /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node package.json ./
