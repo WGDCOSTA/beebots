@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { Admin, type AdminOpts, type KeyChecks } from "../src/admin/admin.js";
 import { ADMIN_FIELDS, checkField } from "../src/admin/fields.js";
+import { NoteBook } from "../src/brains/notes.js";
 import { labArgv, LabJobs } from "../src/admin/jobs.js";
 import { loadConfig, parseEnv, withOverrides, type BeeId } from "../src/config.js";
 import { hashPassword, PasswordGate, verifyPassword } from "../src/gate.js";
@@ -39,6 +40,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
   const forgotten: string[] = [];
   const revived: string[] = [];
   const imported: string[] = [];
+  const researched: string[] = [];
   const labDir = join(settingsPath, "..", "lab");
   let hash = HASH;
   let restarted = 0;
@@ -70,6 +72,8 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     evolution: () => ({ board: [] }),
     registerSkill: (sk) => imported.push(sk.id),
     labDir,
+    notes: new NoteBook(join(labDir, "notes.json")),
+    research: { busy: () => [], blocked: (id: string) => (id === "bee2" ? "Claude has no key (Admin → API keys)" : null), research: async (id: string) => void researched.push(id) } as never,
     okxCheck: opts.okxCheck,
   });
   async function call(path: string, body: unknown = {}, password = PW) {
@@ -85,7 +89,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     await admin.handle(req as never, res as never, path);
     return out as { status: number; body: Record<string, unknown> & { error?: string } };
   }
-  return { admin, call, settingsPath, started, restarted: () => restarted, hash: () => hash, forgotten, revived, imported, labDir };
+  return { admin, call, settingsPath, started, restarted: () => restarted, hash: () => hash, forgotten, revived, imported, labDir, researched };
 }
 
 describe("admin fields", () => {
@@ -274,6 +278,29 @@ describe("adding and removing bees", () => {
     expect(existsSync(join(h.labDir, "learned", "owner_wk_dip.json"))).toBe(true);
     expect((await h.call("/admin/workspace/discard", { key: "wk_dip" })).status).toBe(200);
     expect((await h.call("/admin/workspace/discard", { key: "wk_dip_none" })).status).toBe(404);
+  });
+
+  it("research notes: owner background, review, delete, and asking a brain to research", async () => {
+    const h = harness();
+    expect((await h.call("/admin/notes/add", { bee: "nope", title: "x", text: "some text here" })).status).toBe(400);
+    expect((await h.call("/admin/notes/add", { bee: "bee1", title: "", text: "some text here" })).status).toBe(400);
+    const added = await h.call("/admin/notes/add", { bee: "bee1", title: "Study gold", text: "Watch how gold reacts to real yields.", coins: ["xau"] });
+    expect(added.status).toBe(200);
+    const st = (added.body as { lab: { notes: { available: boolean; notes: Array<{ id: string; status: string; kind: string; coins: string[] }>; blocked: Record<string, string | null> } } }).lab.notes;
+    expect(st.available).toBe(true);
+    expect(st.notes[0]).toMatchObject({ status: "approved", kind: "background", coins: ["XAU"] });
+    expect(st.blocked).toMatchObject({ bee1: null, bee2: expect.stringMatching(/no key/) });
+    const id = st.notes[0]!.id;
+    expect((await h.call("/admin/notes/decide", { id, decision: "maybe" })).status).toBe(400);
+    expect((await h.call("/admin/notes/decide", { id: "0123456789", decision: "approve" })).status).toBe(409);
+    const rej = await h.call("/admin/notes/decide", { id, decision: "reject" });
+    expect((rej.body as { lab: { notes: { notes: unknown[] } } }).lab.notes.notes).toHaveLength(0);
+    expect((await h.call("/admin/notes/delete", { id })).status).toBe(200);
+    expect((await h.call("/admin/notes/delete", { id })).status).toBe(404);
+    expect((await h.call("/admin/research", { bee: "bee2" })).body.error).toMatch(/no key/);
+    expect((await h.call("/admin/research", { bee: "../x" })).status).toBe(400);
+    expect(((await h.call("/admin/research", { bee: "bee1" })).body as { lab?: unknown }).lab).toBeDefined();
+    expect(h.researched).toEqual(["bee1"]);
   });
 
   it("imports a skill: compiled, backtested, saved and made live", async () => {

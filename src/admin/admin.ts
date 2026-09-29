@@ -16,6 +16,8 @@ import { join } from "node:path";
 import { backtestData } from "../brains/survival.js";
 import { BEES, ConfigError, isBeeId, loadConfig, MAX_BEES, parseEnv, slotId, withOverrides, type BeeId, type Mode } from "../config.js";
 import { skillFromSpec, type Skill } from "../lab/skills/index.js";
+import { NoteError, type NoteBook } from "../brains/notes.js";
+import type { Researcher } from "../brains/research.js";
 import { KEY_RE, TEMPLATES, validateSkill, Workspace, WorkspaceError } from "../lab/workspace.js";
 import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
@@ -89,6 +91,9 @@ export interface AdminOpts {
   evolution?: () => unknown;
   /** A skill the owner imported: make it live without a restart. */
   registerSkill?: (skill: Skill) => void;
+  /** Research notes and background (brains/notes.ts) and the brains that draft them (brains/research.ts). */
+  notes?: NoteBook;
+  research?: Researcher;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
   /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
@@ -134,6 +139,11 @@ const SlotBody = z.object({ bee: z.string() });
 const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
 const PasswordBody = z.object({ next: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD) });
 const RealCheckBody = z.object({ stages: z.array(z.enum(CHECK_STAGES)).min(1).max(CHECK_STAGES.length) });
+const NoteBee = z.string().regex(/^(bee[1-9]|hive)$/, "bee: bee1..bee9 or hive");
+const NoteAdd = z.object({ bee: NoteBee, title: Str(80), text: Str(700), coins: z.array(Str(20)).max(6).default([]) });
+const NoteDecide = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/), decision: z.enum(["approve", "reject"]) });
+const NoteRef = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/) });
+const ResearchBody = z.object({ bee: z.string().regex(/^bee[1-9]$/, "bee: bee1..bee9") });
 const DraftKey = z.string().trim().regex(KEY_RE, "id: lowercase letters, digits and _ only (2 to 40)");
 const DraftSave = z.object({ key: DraftKey.optional(), json: z.string().min(2).max(30_000), note: Str(200).optional() });
 const DraftRef = z.object({ key: DraftKey });
@@ -296,6 +306,12 @@ export class Admin {
           goldFiles: goldCsvs(this.labDir()).map((f) => f.split("/").pop()),
         },
         workshop: { drafts: this.workspace().list(), templates: TEMPLATES },
+        notes: {
+          available: !!this.o.notes,
+          notes: this.o.notes?.all().filter((n) => n.status !== "rejected").slice(0, 200) ?? [],
+          busy: this.o.research?.busy() ?? [],
+          blocked: Object.fromEntries((this.o.runningBees?.() ?? []).map((id) => [id, this.o.research ? this.o.research.blocked(id) : "research is not available here"])),
+        },
       },
       coachAvailable: !!this.o.coachNow,
     };
@@ -606,6 +622,58 @@ export class Admin {
           if (err instanceof WorkspaceError) return send(res, 404, { error: err.message });
           throw err;
         }
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/notes/add": {
+        const p = NoteAdd.safeParse(body);
+        if (!this.o.notes) return send(res, 503, { error: "Notes are not available here." });
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "bee, title and text" });
+        try {
+          this.o.notes.add({ bee: p.data.bee, kind: "background", author: "owner", title: p.data.title, text: p.data.text, coins: p.data.coins });
+        } catch (err) {
+          if (err instanceof NoteError) return send(res, 400, { error: err.message });
+          throw err;
+        }
+        log.info("admin: background note added", { bee: p.data.bee });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/notes/decide": {
+        const p = NoteDecide.safeParse(body);
+        if (!this.o.notes) return send(res, 503, { error: "Notes are not available here." });
+        if (!p.success) return send(res, 400, { error: "id and decision (approve or reject)" });
+        try {
+          this.o.notes.decide(p.data.id, p.data.decision);
+        } catch (err) {
+          if (err instanceof NoteError) return send(res, 409, { error: err.message });
+          throw err;
+        }
+        log.info("admin: note decided", { decision: p.data.decision });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/notes/delete": {
+        const p = NoteRef.safeParse(body);
+        if (!this.o.notes) return send(res, 503, { error: "Notes are not available here." });
+        if (!p.success) return send(res, 400, { error: "id" });
+        try {
+          this.o.notes.remove(p.data.id);
+        } catch (err) {
+          if (err instanceof NoteError) return send(res, 404, { error: err.message });
+          throw err;
+        }
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/research": {
+        const p = ResearchBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "bee: bee1..bee9" });
+        const r = this.o.research;
+        if (!r) return send(res, 503, { error: "Research is not available here." });
+        const why = r.blocked(p.data.bee as BeeId);
+        if (why) return send(res, 409, { error: `Cannot research now: ${why}.` });
+        void r.research(p.data.bee as BeeId).catch((err) => log.warn("admin: research failed", { err: safeError(err) }));
         return send(res, 200, this.state());
       }
 

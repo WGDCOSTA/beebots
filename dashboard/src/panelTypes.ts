@@ -185,6 +185,29 @@ export interface WorkshopState {
   templates: Array<{ id: string; label: string; json: string }>;
 }
 
+export interface ResearchNote {
+  id: string;
+  bee: string;
+  kind: "background" | "research";
+  author: string;
+  brain: string | null;
+  title: string;
+  text: string;
+  evidence: string[];
+  coins: string[];
+  confidence: "low" | "medium" | "high";
+  status: "pending" | "approved" | "rejected";
+  createdAt: number;
+  decidedAt: number | null;
+}
+export interface NotesState {
+  available: boolean;
+  notes: ResearchNote[];
+  busy: string[];
+  /** Per running bee: why its brain cannot research right now, or null. */
+  blocked: Record<string, string | null>;
+}
+
 export interface JobStatus {
   id: number;
   command: string;
@@ -277,7 +300,7 @@ export interface AdminState {
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];
-  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState };
+  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState; notes: NotesState };
   coachAvailable: boolean;
 }
 

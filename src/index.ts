@@ -31,6 +31,8 @@ import { ANTHROPIC_PROFILE, checkClaudeKey, checkKimiKey, hasAnthropicLogin, mak
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
 import { Workspace } from "./lab/workspace.js";
+import { NoteBook } from "./brains/notes.js";
+import { Researcher } from "./brains/research.js";
 import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
@@ -313,6 +315,11 @@ async function main() {
     specialization: cfg.lab.specialization,
   });
   coach.start();
+  const notes = new NoteBook(join(cfg.lab.dir, "notes.json"), graph);
+  const research = new Researcher({
+    graph, notes, clients, bees: () => councilBees, playbookPath: cfg.lab.playbookPath, ranking: readRanking, market: mood,
+    universe: () => coinInfos(feed.view(), 40, cmcState()), maxCallsPerDay: cfg.lab.coachMaxCallsDay,
+  });
   let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
   const labRanking = () => {
     if (Date.now() - rankingCache.at > 30_000) {
@@ -439,6 +446,8 @@ async function main() {
     evolution: () => engine?.snapshot().evolution ?? null,
     registerSkill: addSkill,
     labDir: cfg.lab.dir,
+    notes,
+    research,
   });
 
   const server = startServer(

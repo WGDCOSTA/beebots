@@ -425,6 +425,15 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
     Jev may weigh. Skills the bees write themselves land here too: the ones that passed as live, the ones that
     compiled but failed their backtest as "proposed by a bee", so you can read, improve and re-test them. Drafts live in
     `<LAB_DIR>/workspace/`.
+  - **Research & background** (Lab tab): what each bee has been studying, kept apart from lessons. Write a bee's
+    **background** yourself (it applies at once), or press "Ask the brain to research": the bee's brain reads only what
+    the app already holds (the lab ranking, the bee's trades and lessons, its peers, the market mood; no web, no external
+    tool), drafts up to 3 notes that each cite evidence from that pack (a note without evidence is dropped), and they
+    wait as **pending** until you approve them (at most 6 pending per bee, one research per bee per 30 minutes, within
+    the daily brain-call cap). Approved notes are mirrored into the hive mind as memory nodes (`bee -researched-> note`,
+    `note -about-> coin`, marked INFERRED) and reach the brains in their context under `background`, framed as
+    hypotheses and never as orders or measured facts. A note written as "approved" by a brain is impossible: only you
+    approve. Notes live in `<LAB_DIR>/notes.json`.
   - **Security**: change the owner password.
 
   Saved changes apply after **Restart engine** (the engine exits and Docker starts it again). The trading mode and

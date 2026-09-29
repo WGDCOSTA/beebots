@@ -181,6 +181,12 @@ export class KnowledgeGraph {
       .map((n) => ({ text: String(n.props.text ?? n.label), ts: n.updatedAt }));
   }
 
+  /** Delete one node and every link to or from it. */
+  remove(id: string): void {
+    this.raw.prepare("DELETE FROM g_edges WHERE src = ? OR dst = ?").run(id, id);
+    this.raw.prepare("DELETE FROM g_nodes WHERE id = ?").run(id);
+  }
+
   /** Delete lessons and messages older than `beforeMs` (they have been folded into newer ones by then). */
   prune(beforeMs: number): number {
     const old = this.raw.prepare("SELECT id FROM g_nodes WHERE type IN ('lesson','message') AND updated_at < ?").all(beforeMs) as Array<{ id: string }>;

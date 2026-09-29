@@ -1085,6 +1085,126 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
   );
 }
 
+/** What each bee has been studying: the owner's background, and notes its brain drafted that wait for a yes. */
+function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void> }) {
+  const n = s.lab.notes;
+  const bees = (s.bees ?? []).filter((b) => b.running);
+  const [bee, setBee] = useState("");
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [coins, setCoins] = useState("");
+  const target = bee || bees[0]?.slot || "hive";
+  const label = (slot: string) => (slot === "hive" ? "Every bee" : (bees.find((b) => b.slot === slot)?.name ?? slot));
+  const shown = n.notes.filter((x) => x.bee === target || (target !== "hive" && x.bee === "hive"));
+  const pending = n.notes.filter((x) => x.status === "pending");
+  const why = n.blocked[target];
+  const busy = n.busy.includes(target);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => void refresh(), 3000);
+    return () => clearInterval(t);
+  }, [busy, refresh]);
+  if (!n.available) return null;
+  return (
+    <div className="pcard">
+      <h3>
+        Research &amp; background {pending.length > 0 && <span className="badge">{pending.length} to review</span>}
+      </h3>
+      <p className="dim">
+        What a bee has been studying. Write its <strong>background</strong> yourself (it applies at once), or ask its brain to <strong>research</strong>: it reads only what the app already holds (the lab ranking, the bee's trades,
+        its peers, the market mood), cites that evidence, and its notes wait here until you approve them. Approved notes reach the brains as context and hypotheses, never as orders or facts, and show in the hive-mind graph.
+      </p>
+      <div className="row-actions">
+        <select className="pinput" value={target} onChange={(e) => setBee(e.target.value)} aria-label="Bee">
+          {bees.map((b) => (
+            <option key={b.slot} value={b.slot}>
+              {b.name} ({b.slot}){n.notes.some((x) => x.bee === b.slot && x.status === "pending") ? " · to review" : ""}
+            </option>
+          ))}
+          <option value="hive">Every bee</option>
+        </select>
+        {target !== "hive" && (
+          <button className="pbtn" disabled={!!why || busy} title={why ?? ""} onClick={() => void call("research", { bee: target }, "Research started: its notes appear here for your review in a minute or two.").then(() => setTimeout(() => void refresh(), 4000))}>
+            {busy ? "Researching…" : `Ask ${label(target)}'s brain to research`}
+          </button>
+        )}
+      </div>
+      {target !== "hive" && why && !busy && <p className="dim small">Not now: {why}.</p>}
+      <ul className="notes">
+        {shown.length === 0 && <li className="dim small">No notes yet for {label(target)}.</li>}
+        {shown.map((x) => (
+          <li key={x.id} className={`note ${x.status}`}>
+            <div className="note-head">
+              <strong>{x.title}</strong>{" "}
+              <span className={`badge ${x.status === "approved" ? "ok" : ""}`}>{x.status === "pending" ? "● waiting for you" : x.kind === "background" ? "✓ background" : "✓ approved"}</span>{" "}
+              <span className="dim small">
+                {x.author === "owner" ? "you" : `${x.brain ?? "brain"} (${x.author})`}
+                {x.bee === "hive" ? " · every bee" : ""} · {x.kind === "research" ? `confidence ${x.confidence}` : "your words"}
+                {x.coins.length ? ` · ${x.coins.join(", ")}` : ""}
+              </span>
+            </div>
+            <p className="small">{x.text}</p>
+            {x.evidence.length > 0 && (
+              <ul className="dim small">
+                {x.evidence.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+            <div className="row-actions">
+              {x.status === "pending" && (
+                <>
+                  <button className="pbtn small" onClick={() => void call("notes/decide", { id: x.id, decision: "approve" }, "Note approved: the brains will read it.")}>
+                    Approve
+                  </button>
+                  <button className="pbtn ghost small" onClick={() => void call("notes/decide", { id: x.id, decision: "reject" }, "Note rejected.")}>
+                    Reject
+                  </button>
+                </>
+              )}
+              {x.status === "approved" && (
+                <button className="pbtn ghost small" onClick={() => void call("notes/decide", { id: x.id, decision: "reject" }, "Note archived: the brains no longer read it.")}>
+                  Archive
+                </button>
+              )}
+              <button className="pbtn ghost small" onClick={() => window.confirm("Delete this note for good?") && void call("notes/delete", { id: x.id }, "Note deleted.")}>
+                Delete
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <h4>Write a background note for {label(target)}</h4>
+      <div className="form-grid">
+        <label className="plabel">
+          Title
+          <input className="pinput" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Study gold vs real yields" />
+        </label>
+        <label className="plabel">
+          Coins (optional, comma separated)
+          <input className="pinput mono" value={coins} onChange={(e) => setCoins(e.target.value)} placeholder="BTC, XAU" />
+        </label>
+        <label className="plabel wide">
+          What it should know or keep in mind
+          <textarea className="pinput" rows={3} maxLength={700} value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+      </div>
+      <button
+        className="pbtn"
+        disabled={!title.trim() || text.trim().length < 10}
+        onClick={() => {
+          void call("notes/add", { bee: target, title, text, coins: coins.split(",").map((c) => c.trim()).filter(Boolean) }, "Background note saved.");
+          setTitle("");
+          setText("");
+          setCoins("");
+        }}
+      >
+        Save background note
+      </button>
+    </div>
+  );
+}
+
 function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void>; password: string }) {
   const [cmd, setCmd] = useState<"cycle" | "fetch" | "run" | "council">("cycle");
   const [source, setSource] = useState<"okx" | "ccxt" | "synthetic">("okx");
@@ -1236,6 +1356,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
       </div>
 
       <SkillWorkshop s={s} password={password} refresh={refresh} />
+
+      <ResearchNotes s={s} call={call} refresh={refresh} />
 
       <ImportSkill password={password} />
 
