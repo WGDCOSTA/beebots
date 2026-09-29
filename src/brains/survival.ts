@@ -98,6 +98,8 @@ export interface SurvivalOpts {
   ranking: () => Ranking | null;
   /** A new skill passed its backtest: make it live (lab votes) without a restart. */
   onNewSkill?: (skill: Skill) => void;
+  /** Every skill a brain wrote, accepted or not, so the owner can read and improve it (the skill workshop). */
+  onDraft?: (d: { slot: BeeId; brain: string; id: string; raw: string; result: Omit<SkillResult, "rank"> | null; real: boolean; datasets: string[]; accepted: boolean }) => void;
   maxCallsPerDay: number;
   /** Minimum time between two councils for one bee. */
   cooldownMs?: number;
@@ -134,6 +136,16 @@ export function backtestData(historyDir: string, bar: Bar = "1H"): Dataset[] {
   }
   if (!out.length) for (let i = 0; i < 2; i++) out.push({ id: `SYN${i + 1} ${bar}`, instId: `SYN${i + 1}`, bar, candles: syntheticCandles(4242 + i, 2500), source: "synthetic" });
   return out;
+}
+
+/** The id trySkill gives a bee's skill: its slot plus the id the brain chose. */
+export function namespaced(raw: string, slot: BeeId): string {
+  try {
+    const spec = JSON.parse(raw) as { id?: unknown };
+    return `${slot}_${String(spec.id ?? "skill").toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 30)}`.slice(0, 40);
+  } catch {
+    return `${slot}_skill`;
+  }
 }
 
 /** Compile, backtest and judge a skill a brain wrote. Accepted only with a positive out-of-sample score and 50%+ stability. */
@@ -315,6 +327,7 @@ export class SurvivalCouncil {
         const t = trySkill(d.raw, bee.slot, data);
         const id = t.skill?.id ?? (JSON.parse(safeJson(d.raw)) as { id?: string }).id ?? "?";
         newSkills.push({ id, accepted: !!t.skill, why: `${BRAIN_INFO[d.brain].label}: ${t.why}` });
+        if (t.result) this.o.onDraft?.({ slot: bee.slot, brain: BRAIN_INFO[d.brain].label, id: t.skill?.id ?? namespaced(d.raw, bee.slot), raw: d.raw, result: t.result, real: data.every((x) => x.source !== "synthetic"), datasets: data.map((x) => x.id), accepted: !!t.skill });
         if (!t.skill || !t.result) continue;
         mkdirSync(this.o.learnedDir, { recursive: true });
         const spec = JSON.parse(d.raw) as Record<string, unknown>;

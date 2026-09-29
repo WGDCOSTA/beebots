@@ -249,6 +249,33 @@ describe("adding and removing bees", () => {
     expect((await h.call("/admin/revive", { bee: "../etc" })).status).toBe(400);
   });
 
+  it("skill workshop: save, read, backtest, publish, discard", async () => {
+    const h = harness();
+    const json = JSON.stringify({ id: "wk_dip", name: "Workshop dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } });
+    expect((await h.call("/admin/workspace/check", { json: "{nope" })).body).toMatchObject({ ok: false });
+    expect((await h.call("/admin/workspace/check", { json })).body).toMatchObject({ ok: true, id: "wk_dip" });
+    expect((await h.call("/admin/workspace/save", { json: "{nope" })).status).toBe(400);
+    expect((await h.call("/admin/workspace/save", { key: "../x", json })).status).toBe(400);
+    const saved = await h.call("/admin/workspace/save", { json, note: "first" });
+    expect(saved.status).toBe(200);
+    const lab = (saved.body as { state: { lab: { workshop: { drafts: Array<{ key: string }>; templates: unknown[] } } } }).state.lab.workshop;
+    expect(lab.drafts.map((d) => d.key)).toEqual(["wk_dip"]);
+    expect(lab.templates.length).toBeGreaterThan(0);
+    expect(((await h.call("/admin/workspace/get", { key: "wk_dip" })).body.draft as { versions: unknown[] }).versions).toHaveLength(1);
+    expect((await h.call("/admin/workspace/get", { key: "nope_x" })).status).toBe(404);
+    // No real history in the harness: the backtest is synthetic, so publishing is refused until forced.
+    const bt = await h.call("/admin/workspace/backtest", { key: "wk_dip" });
+    expect(bt.status).toBe(200);
+    expect((bt.body.draft as { versions: Array<{ backtest: { data: string } }> }).versions[0]!.backtest.data).toBe("synthetic");
+    expect((await h.call("/admin/workspace/publish", { key: "wk_dip" })).body.error).toMatch(/synthetic/);
+    expect(h.imported).toEqual([]);
+    expect((await h.call("/admin/workspace/publish", { key: "wk_dip", force: true })).status).toBe(200);
+    expect(h.imported).toEqual(["wk_dip"]);
+    expect(existsSync(join(h.labDir, "learned", "owner_wk_dip.json"))).toBe(true);
+    expect((await h.call("/admin/workspace/discard", { key: "wk_dip" })).status).toBe(200);
+    expect((await h.call("/admin/workspace/discard", { key: "wk_dip_none" })).status).toBe(404);
+  });
+
   it("imports a skill: compiled, backtested, saved and made live", async () => {
     const h = harness();
     const skill = { id: "owner_dip", name: "Owner dip", family: "mean_reversion", long: { entry: [{ left: "rsi(14)", op: "<", right: 30 }], exit: [{ left: "rsi(14)", op: ">", right: 55 }] } };

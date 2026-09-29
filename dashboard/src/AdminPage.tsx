@@ -4,7 +4,7 @@
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
-import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
+import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
@@ -861,6 +861,230 @@ function ImportSkill({ password }: { password: string }) {
   );
 }
 
+const DRAFT_BADGE: Record<DraftFull["status"], { text: string; cls: string }> = {
+  draft: { text: "draft", cls: "" },
+  proposed: { text: "proposed by a bee", cls: "" },
+  published: { text: "✓ live", cls: "ok" },
+  discarded: { text: "discarded", cls: "err" },
+};
+
+/** Write, test and publish skills. A version is only ever live after a backtest; a bee's own drafts land here too. */
+function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: string; refresh: () => Promise<void> }) {
+  const w = s.lab.workshop;
+  const [draft, setDraft] = useState<DraftFull | null>(null);
+  const [text, setText] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [force, setForce] = useState(false);
+  const latest = draft?.versions[draft.versions.length - 1] ?? null;
+  const dirty = latest ? text !== latest.json : text.trim().length > 0;
+  const bt = !dirty ? (latest?.backtest ?? null) : null;
+
+  const run = async <T,>(what: string, f: () => Promise<T>): Promise<T | null> => {
+    setBusy(what);
+    setMsg(null);
+    try {
+      return await f();
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+      return null;
+    } finally {
+      setBusy("");
+    }
+  };
+  const open = (key: string) =>
+    void run("open", async () => {
+      const r = await adminCall<{ draft: DraftFull }>("workspace/get", password, { key });
+      setDraft(r.draft);
+      setText(r.draft.versions[r.draft.versions.length - 1]?.json ?? "");
+      setErrors([]);
+      setForce(false);
+    });
+  const fresh = (json: string) => {
+    setDraft(null);
+    setText(json);
+    setNote("");
+    setErrors([]);
+    setForce(false);
+    setMsg(null);
+  };
+  const save = async (): Promise<DraftFull | null> => {
+    const r = await run("save", () => adminCall<{ draft: DraftFull }>("workspace/save", password, { ...(draft ? { key: draft.key } : {}), json: text, ...(note ? { note } : {}) }));
+    if (!r) return null;
+    setDraft(r.draft);
+    setNote("");
+    void refresh();
+    const v = r.draft.versions[r.draft.versions.length - 1]!;
+    setErrors(v.errors);
+    setMsg({ ok: v.valid, text: v.valid ? `Saved as version ${v.n}.` : "Saved as work in progress. It does not compile yet, so it cannot be tested or published." });
+    return r.draft;
+  };
+  const check = () =>
+    void run("check", async () => {
+      const r = await adminCall<{ ok: boolean; errors?: string[]; id?: string }>("workspace/check", password, { json: text });
+      setErrors(r.errors ?? []);
+      setMsg({ ok: r.ok, text: r.ok ? `It compiles (${r.id}).` : "It does not compile yet." });
+    });
+  const backtest = async () => {
+    const d = dirty ? await save() : draft;
+    if (!d || !d.versions[d.versions.length - 1]?.valid) return;
+    const r = await run("backtest", () => adminCall<{ draft: DraftFull }>("workspace/backtest", password, { key: d.key }));
+    if (r) {
+      setDraft(r.draft);
+      void refresh();
+    }
+  };
+  const publish = async () => {
+    if (!draft) return;
+    const r = await run("publish", () => adminCall<{ draft: DraftFull; note: string }>("workspace/publish", password, { key: draft.key, force }));
+    if (r) {
+      setDraft(r.draft);
+      setMsg({ ok: true, text: r.note });
+      void refresh();
+    }
+  };
+  const discard = async () => {
+    if (!draft) return;
+    if (!window.confirm(`Discard the draft ${draft.key}? A published skill stays live.`)) return;
+    const r = await run("discard", () => adminCall("workspace/discard", password, { key: draft.key }));
+    if (r) {
+      fresh("");
+      void refresh();
+    }
+  };
+
+  const canPublish = !!bt && !dirty && (force || (bt.pass && bt.data === "real"));
+  return (
+    <div className="pcard">
+      <h3>Skill workshop</h3>
+      <p className="dim">
+        Write a skill in the JSON rule language, test it walk-forward on real history, keep every version, and publish it. Nothing reaches a bee until it is published, and even then it is one vote Jev may weigh. Skills the bees
+        write themselves appear here too, so you can read, improve and re-test them.
+      </p>
+      <div className="workshop">
+        <div className="workshop-list">
+          <div className="row-actions">
+            <select className="pinput" value="" onChange={(e) => e.target.value && fresh(w.templates.find((t) => t.id === e.target.value)?.json ?? "")} aria-label="New draft from a template">
+              <option value="">＋ New draft…</option>
+              <option value="__blank">Blank</option>
+              {w.templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {w.drafts.length === 0 && <p className="dim small">No drafts yet.</p>}
+          <ul className="draft-list">
+            {w.drafts.map((d: DraftSummary) => (
+              <li key={d.key}>
+                <button className={`draft-item ${draft?.key === d.key ? "on" : ""}`} onClick={() => open(d.key)}>
+                  <strong>{d.name}</strong>
+                  <span className="dim small">
+                    {d.author === "owner" ? "you" : d.author} · v{d.versions} · <span className={`badge ${DRAFT_BADGE[d.status].cls}`}>{DRAFT_BADGE[d.status].text}</span>
+                    {d.backtest ? ` · ${d.backtest.pass ? "✓" : "✗"} ${d.backtest.data === "real" ? "real" : "synthetic"} data` : d.valid ? "" : " · does not compile"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="workshop-edit">
+          <textarea className="pinput mono" rows={18} spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} placeholder="Pick a template, or paste a skill…" aria-label="Skill JSON" />
+          {errors.length > 0 && (
+            <ul className="bad small">
+              {errors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+          <div className="row-actions">
+            <input className="pinput" style={{ maxWidth: 260 }} placeholder="What changed? (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} />
+            <button className="pbtn ghost" disabled={!text.trim() || !!busy} onClick={check}>
+              Check
+            </button>
+            <button className="pbtn ghost" disabled={!text.trim() || !dirty || !!busy} onClick={() => void save()}>
+              {busy === "save" ? "Saving…" : "Save version"}
+            </button>
+            <button className="pbtn" disabled={!text.trim() || !!busy} onClick={() => void backtest()}>
+              {busy === "backtest" ? "Backtesting…" : dirty ? "Save & backtest" : "Backtest"}
+            </button>
+          </div>
+          {msg && <p className={msg.ok ? "good small" : "bad small"}>{msg.text}</p>}
+
+          {bt && (
+            <div className="verdict">
+              <div className="verdict-head">
+                <strong>Walk-forward backtest</strong> <span className={`badge ${bt.pass ? "ok" : "err"}`}>{bt.pass ? "✓ clears the bar" : "✗ does not clear the bar"}</span>{" "}
+                <span className={`badge ${bt.data === "real" ? "" : "err"}`}>{bt.data === "real" ? "real history" : "synthetic data"}</span>
+              </div>
+              <p className="small">
+                Out of sample {bt.returnPct.toFixed(1)}% vs buy-and-hold {bt.benchmarkPct.toFixed(1)}% · score {bt.score.toFixed(2)} · positive in {bt.stabilityPct}% of folds · {bt.trades} trades · max drawdown {bt.maxDrawdownPct.toFixed(1)}% · Sharpe{" "}
+                {bt.sharpe.toFixed(2)} · overfit gap {bt.overfitGap.toFixed(2)}
+              </p>
+              <p className="dim small">
+                {bt.datasets.join(", ")}.{" "}
+                {bt.data === "synthetic" ? "No real history is cached, so this only exercises the skill. Run the Real-data check first, then backtest again." : "The bar: a positive out-of-sample score with at least 50% of folds positive."}
+              </p>
+            </div>
+          )}
+
+          {draft && (
+            <>
+              <div className="row-actions">
+                <button className="pbtn" disabled={!canPublish || !!busy} onClick={() => void publish()}>
+                  {busy === "publish" ? "Publishing…" : draft.status === "published" && draft.publishedVersion === latest?.n ? "Published" : "Publish"}
+                </button>
+                {bt && (!bt.pass || bt.data === "synthetic") ? (
+                  <label className="switch">
+                    <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+                    <span>Publish anyway (I accept it has no passing real-data backtest)</span>
+                  </label>
+                ) : null}
+                <button className="pbtn ghost" disabled={!!busy} onClick={() => void discard()}>
+                  Discard draft
+                </button>
+              </div>
+              <details>
+                <summary>Versions ({draft.versions.length})</summary>
+                <ul className="checklist">
+                  {[...draft.versions].reverse().map((v) => (
+                    <li key={v.n}>
+                      <button className="hg-jump" onClick={() => setText(v.json)}>
+                        v{v.n}
+                      </button>{" "}
+                      <span className="dim small">
+                        {v.author === "owner" ? "you" : v.author} · {new Date(v.at).toISOString().slice(0, 16).replace("T", " ")}
+                        {v.note ? ` · ${v.note}` : ""}
+                        {v.n === draft.publishedVersion ? " · live" : ""}
+                        {v.backtest ? ` · ${v.backtest.pass ? "✓" : "✗"} ${v.backtest.returnPct.toFixed(1)}% (${v.backtest.data})` : ""}
+                        {!v.valid ? " · does not compile" : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="dim small">Click a version to load it into the editor; Save version makes it the newest.</p>
+              </details>
+            </>
+          )}
+        </div>
+      </div>
+      <details>
+        <summary>Rule language, in short</summary>
+        <p className="dim small">
+          A skill is JSON: <span className="mono">id</span>, <span className="mono">name</span>, <span className="mono">family</span> (trend, breakout, momentum, mean_reversion, hybrid), optional{" "}
+          <span className="mono">params</span> with a grid to scan, exits (<span className="mono">stopAtr</span>, <span className="mono">stoploss</span>, <span className="mono">roi</span>, <span className="mono">trailing</span>), and a{" "}
+          <span className="mono">long</span> and/or <span className="mono">short</span> side with <span className="mono">entry</span> and <span className="mono">exit</span> conditions. A condition is{" "}
+          <span className="mono">{`{"left":…,"op":…,"right":…}`}</span> (ops: &lt; &lt;= &gt; &gt;= crosses_above crosses_below) or <span className="mono">{`{"any":[…]}`}</span>. Values: close open high low volume, sma(n) ema(n) rsi(n) atr(n) roc(n) zscore(n)
+          highest(n) lowest(n) bb_*(n,k) macd_hist adx supertrend cci mfi willr…, numbers, or $param. Signals are read at a bar's close and filled at the next open. The id may not be a built-in's.
+        </p>
+      </details>
+    </div>
+  );
+}
+
 function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void>; password: string }) {
   const [cmd, setCmd] = useState<"cycle" | "fetch" | "run" | "council">("cycle");
   const [source, setSource] = useState<"okx" | "ccxt" | "synthetic">("okx");
@@ -1010,6 +1234,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
         </button>
         {!s.coachAvailable && <p className="dim small">Needs at least one brain key (API keys tab).</p>}
       </div>
+
+      <SkillWorkshop s={s} password={password} refresh={refresh} />
 
       <ImportSkill password={password} />
 

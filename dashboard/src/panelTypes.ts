@@ -133,6 +133,58 @@ export interface CheckState {
   goldFiles: string[];
 }
 
+export interface BacktestSummary {
+  at: number;
+  data: "real" | "synthetic";
+  datasets: string[];
+  score: number;
+  returnPct: number;
+  benchmarkPct: number;
+  sharpe: number;
+  stabilityPct: number;
+  trades: number;
+  maxDrawdownPct: number;
+  overfitGap: number;
+  pass: boolean;
+  why: string;
+}
+export interface DraftVersion {
+  n: number;
+  at: number;
+  author: string;
+  note: string;
+  json: string;
+  valid: boolean;
+  errors: string[];
+  backtest: BacktestSummary | null;
+}
+export interface DraftFull {
+  key: string;
+  author: string;
+  status: "draft" | "proposed" | "published" | "discarded";
+  createdAt: number;
+  updatedAt: number;
+  publishedVersion: number | null;
+  versions: DraftVersion[];
+}
+export interface DraftSummary {
+  key: string;
+  name: string;
+  family: string;
+  author: string;
+  status: DraftFull["status"];
+  updatedAt: number;
+  versions: number;
+  publishedVersion: number | null;
+  valid: boolean;
+  errors: string[];
+  backtest: BacktestSummary | null;
+}
+export interface WorkshopState {
+  drafts: DraftSummary[];
+  templates: Array<{ id: string; label: string; json: string }>;
+}
+
 export interface JobStatus {
   id: number;
   command: string;
@@ -225,7 +277,7 @@ export interface AdminState {
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];
-  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState };
+  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState };
   coachAvailable: boolean;
 }
 

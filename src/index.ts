@@ -30,6 +30,7 @@ import type { CouncilBee } from "./brains/council.js";
 import { ANTHROPIC_PROFILE, checkClaudeKey, checkKimiKey, hasAnthropicLogin, makeClients } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
+import { Workspace } from "./lab/workspace.js";
 import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
@@ -246,6 +247,13 @@ async function main() {
     historyDir: join(cfg.lab.dir, "history"),
     ranking: readRanking,
     onNewSkill: addSkill,
+    onDraft: (d) => {
+      try {
+        new Workspace(cfg.lab.dir).recordBee(d);
+      } catch (err) {
+        log.warn("skill workshop: could not record a bee's draft", { err: safeError(err) });
+      }
+    },
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
     watchlist: cfg.lab.watchlist,
     universe: () => coinInfos(feed.view(), 40, cmcState()),

@@ -414,8 +414,17 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
     beat buy-and-hold out of sample on real data, the scalper needs an edge after costs (synthetic data never counts),
     gold needs its validation gates (a gate that did not run is not passed). Gold needs your own XAUUSD bar export
     from MT5 in `<LAB_DIR>/gold/data/`; without it those steps are skipped. Below it: start fetch / run / council / cycle (a child process, so the engine keeps trading),
-    watch its log, run a coach review, **import a skill** (compiled and backtested on the spot), and set learning,
+    watch its log, run a coach review, the **Skill workshop** (below), **import a skill** (compiled and backtested on the spot), and set learning,
     survival and rewards;
+  - **Skill workshop** (Lab tab): write skills in the JSON rule language from a template or blank, keep every version
+    (30 per draft, the live one never dropped), check that it compiles, run a walk-forward backtest, and publish.
+    Publishing needs a passing backtest on **real** history (positive out-of-sample score, 50%+ of folds positive, the
+    same bar a bee's own skill must clear); a synthetic-data backtest is labelled and does not count, and only an explicit
+    "publish anyway" overrides it. A draft cannot take a built-in's id. Published skills are written to
+    `<LAB_DIR>/learned/owner_<id>.json`, join every lab run and can be adopted by a council, where they are one vote
+    Jev may weigh. Skills the bees write themselves land here too: the ones that passed as live, the ones that
+    compiled but failed their backtest as "proposed by a bee", so you can read, improve and re-test them. Drafts live in
+    `<LAB_DIR>/workspace/`.
   - **Security**: change the owner password.
 
   Saved changes apply after **Restart engine** (the engine exits and Docker starts it again). The trading mode and

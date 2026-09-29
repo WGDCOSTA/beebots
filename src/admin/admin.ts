@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { backtestData } from "../brains/survival.js";
 import { BEES, ConfigError, isBeeId, loadConfig, MAX_BEES, parseEnv, slotId, withOverrides, type BeeId, type Mode } from "../config.js";
 import { skillFromSpec, type Skill } from "../lab/skills/index.js";
+import { KEY_RE, TEMPLATES, validateSkill, Workspace, WorkspaceError } from "../lab/workspace.js";
 import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
@@ -133,6 +134,11 @@ const SlotBody = z.object({ bee: z.string() });
 const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
 const PasswordBody = z.object({ next: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD) });
 const RealCheckBody = z.object({ stages: z.array(z.enum(CHECK_STAGES)).min(1).max(CHECK_STAGES.length) });
+const DraftKey = z.string().trim().regex(KEY_RE, "id: lowercase letters, digits and _ only (2 to 40)");
+const DraftSave = z.object({ key: DraftKey.optional(), json: z.string().min(2).max(30_000), note: Str(200).optional() });
+const DraftRef = z.object({ key: DraftKey });
+const DraftPublish = z.object({ key: DraftKey, force: z.boolean().optional() });
+const DraftCheck = z.object({ json: z.string().max(30_000) });
 const LabBody = z.object({
   command: z.enum(LAB_COMMANDS),
   args: z
@@ -161,6 +167,10 @@ export class Admin {
 
   private labDir(): string {
     return this.o.labDir ?? "./data/lab";
+  }
+
+  private workspace(): Workspace {
+    return new Workspace(this.labDir(), this.now);
   }
 
   private keySet(k: KeyName): boolean {
@@ -285,6 +295,7 @@ export class Admin {
           goldDir: join(this.labDir(), "gold", "data"),
           goldFiles: goldCsvs(this.labDir()).map((f) => f.split("/").pop()),
         },
+        workshop: { drafts: this.workspace().list(), templates: TEMPLATES },
       },
       coachAvailable: !!this.o.coachNow,
     };
@@ -530,6 +541,72 @@ export class Admin {
           backtest: { score: result.score, returnPct: result.oos.returnPct, stabilityPct: result.stabilityPct, trades: result.oos.trades, maxDrawdownPct: result.oos.maxDrawdownPct },
           note: "Saved. It joins every lab run from now on; a council can adopt it.",
         });
+      }
+
+      case "/admin/workspace/check": {
+        const p = DraftCheck.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "json: the skill text" });
+        const v = validateSkill(p.data.json);
+        return send(res, 200, v.ok ? { ok: true, id: v.skill.id, name: v.skill.name, family: v.skill.family } : { ok: false, errors: v.errors });
+      }
+
+      case "/admin/workspace/get": {
+        const p = DraftRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "key" });
+        const d = this.workspace().get(p.data.key);
+        return d ? send(res, 200, { draft: d }) : send(res, 404, { error: "No such draft." });
+      }
+
+      case "/admin/workspace/save": {
+        const p = DraftSave.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "json: the skill text" });
+        try {
+          const d = this.workspace().save({ ...(p.data.key ? { key: p.data.key } : {}), json: p.data.json, ...(p.data.note ? { note: p.data.note } : {}) });
+          log.info("admin: skill draft saved", { key: d.key, version: d.versions.length });
+          return send(res, 200, { draft: d, state: this.state() });
+        } catch (err) {
+          if (err instanceof WorkspaceError) return send(res, 400, { error: err.message });
+          throw err;
+        }
+      }
+
+      case "/admin/workspace/backtest": {
+        const p = DraftRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "key" });
+        try {
+          const r = this.workspace().backtest(p.data.key, backtestData(join(this.labDir(), "history")));
+          log.info("admin: skill draft backtested", { key: p.data.key, score: r.summary.score, data: r.summary.data });
+          return send(res, 200, { draft: r.draft, state: this.state() });
+        } catch (err) {
+          if (err instanceof WorkspaceError) return send(res, 400, { error: err.message });
+          return send(res, 500, { error: `backtest failed: ${safeError(err)}` });
+        }
+      }
+
+      case "/admin/workspace/publish": {
+        const p = DraftPublish.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "key" });
+        try {
+          const r = this.workspace().publish(p.data.key, { force: !!p.data.force });
+          this.o.registerSkill?.(r.skill);
+          log.info("admin: skill published", { key: p.data.key, forced: !!p.data.force });
+          return send(res, 200, { draft: r.draft, state: this.state(), note: "Published. It joins every lab run from now on; a council can adopt it. Only a council pick makes it one vote Jev may weigh." });
+        } catch (err) {
+          if (err instanceof WorkspaceError) return send(res, 409, { error: err.message });
+          throw err;
+        }
+      }
+
+      case "/admin/workspace/discard": {
+        const p = DraftRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "key" });
+        try {
+          this.workspace().discard(p.data.key);
+        } catch (err) {
+          if (err instanceof WorkspaceError) return send(res, 404, { error: err.message });
+          throw err;
+        }
+        return send(res, 200, this.state());
       }
 
       case "/admin/password": {
