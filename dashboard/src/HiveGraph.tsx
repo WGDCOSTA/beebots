@@ -1,4 +1,4 @@
-// The hive mind as an interactive graph on React Flow. d3-force does the physics (kinds pulled to rings, links as springs,
+// The warren memory as an interactive graph on React Flow. d3-force does the physics (kinds pulled to rings, links as springs,
 // collision so nothing overlaps; drag a node and the rest reacts), React Flow does pan, zoom, minimap and hit-testing.
 // Node kind is encoded twice, a validated categorical colour and a shape; link confidence is encoded by line style
 // (fact = solid, inference = dashed, disputed = dotted) so it survives without colour. Hover a node for details, click to
@@ -264,7 +264,7 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
   const toggleConf = (c: Confidence) => setHiddenConf((h) => (h.has(c) ? new Set([...h].filter((x) => x !== c)) : new Set([...h, c])));
   const goTo = (ids: string[]) => void rf.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.4, duration: 500, maxZoom: 1.6 });
 
-  if (!raw.length) return <p className="dim">The hive mind is empty. Run the lab and the council (Admin → Lab) and it fills in.</p>;
+  if (!raw.length) return <p className="dim">The warren memory is empty. Run the lab and the council (Admin → Lab) and it fills in.</p>;
 
   const hoverNode = hover ? byId.get(hover) : null;
   const pin = pinned ? byId.get(pinned) : null;
@@ -282,7 +282,7 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
           ))}
         </div>
         <div className="hg-tools">
-          <input className="pinput hg-search" type="search" placeholder="Search nodes…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && hits && goTo([...hits])} aria-label="Search the hive mind" />
+          <input className="pinput hg-search" type="search" placeholder="Search nodes…" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && hits && goTo([...hits])} aria-label="Search the warren memory" />
           <button className={`pbtn small ${live ? "" : "ghost"}`} onClick={() => setLive((x) => !x)} aria-pressed={live} title="Follow the 30 s refresh, or freeze the picture">
             {live ? "Live" : "Paused"}
           </button>

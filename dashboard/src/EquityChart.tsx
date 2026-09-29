@@ -10,7 +10,7 @@ interface Props {
 
 const PAD = { top: 12, right: 72, bottom: 22, left: 4 };
 const usd = (x: number) => `$${x.toFixed(2)}`;
-/** Axis labels are % from the start stake, so every bee reads on the same scale. */
+/** Axis labels are % from the start stake, so every bunny reads on the same scale. */
 const pctFrom = (x: number, base: number) => `${x >= base ? "+" : "−"}${Math.abs(((x - base) / base) * 100).toFixed(1)}%`;
 const time = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 

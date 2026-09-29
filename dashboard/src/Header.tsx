@@ -67,7 +67,7 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
           <div className="logo">beebots</div>
           <HiveButton />
           <a className="nav-pill" href="#/lab">
-            Lab & hive mind
+            Lab & warren memory
           </a>
           <a className="nav-pill" href="#/admin">
             Admin
@@ -81,7 +81,7 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
             </a>
           ) : null}
           <span className="dim">
-            day {day} · {ALL_BEES.length} bees · OKX X-Perps · not financial advice
+            day {day} · {ALL_BEES.length} bunnies · OKX X-Perps · not financial advice
           </span>
         </div>
       </div>
@@ -124,7 +124,7 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
 
 const BRAIN_NAME: Record<string, string> = { openai: "ChatGPT", claude: "Claude", kimi: "Kimi", zai: "GLM" };
 
-/** The engine's intelligence at a glance: which brains are online and which features shape the bees right now. */
+/** The engine's intelligence at a glance: which brains are online and which features shape the bunnies right now. */
 export function SystemBar({ snap }: { snap: Snapshot | null }) {
   const s = snap?.system;
   if (!s) return null;
@@ -154,8 +154,8 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
       </span>
       <span className="sys-group">
         <span className="sys-key">INTEL</span>
-        {flag(s.labSignals, "lab votes", "Jev sees each bee's backtested skill vote per coin")}
-        {flag(s.watchlist, "AI watchlists", "Brains choose each bee's coins from lab evidence")}
+        {flag(s.labSignals, "lab votes", "Jev sees each bunny's backtested skill vote per coin")}
+        {flag(s.watchlist, "AI watchlists", "Brains choose each bunny's coins from lab evidence")}
         {flag(s.survival, "survival", "Health tiers, smaller size in danger, rescue councils")}
         {flag(s.rewards, "rewards", "Points and levels unlock skills, brains, limits")}
         {flag(s.maxPositions > 1 && s.rewards, "multi-orders", "Top performers hold several positions inside one leverage cap", `≤${s.maxPositions}`)}
@@ -181,7 +181,7 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
         <span className="sys-key">RISK</span>
         <span className="sys-val">≤{s.maxLeverage}x lev</span>
         {s.scalp?.enabled && flag(s.scalp.gateOpen, "scalper", s.scalp.gateOpen ? `Open: ${s.scalp.reason}` : `Closed: ${s.scalp.reason}`, s.scalp.bees ? String(s.scalp.bees) : undefined)}
-        {flag(s.macroTrading, "macro squad", s.macroTrading ? "Stocks and commodities trade in verified sessions" : "Macro bees watch and learn only (ALLOW_NON_CRYPTO off)", s.macroBees ? String(s.macroBees) : undefined)}
+        {flag(s.macroTrading, "macro squad", s.macroTrading ? "Stocks and commodities trade in verified sessions" : "Macro bunnies watch and learn only (ALLOW_NON_CRYPTO off)", s.macroBees ? String(s.macroBees) : undefined)}
       </span>
     </div>
   );

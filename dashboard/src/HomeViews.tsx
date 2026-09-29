@@ -1,5 +1,5 @@
-// The home page's data views next to the live Overview: Market (every coin the bees can trade, with CoinMarketCap's
-// view), Watchlists (the coins each bee's AI brains chose, and why) and Positions (everything open, across bees).
+// The home page's data views next to the live Overview: Market (every coin the bunnies can trade, with CoinMarketCap's
+// view), Watchlists (the coins each bunny's AI brains chose, and why) and Positions (everything open, across bunnies).
 // Read-only: everything comes from the engine's snapshot.
 import { useMemo, useState } from "react";
 import { money } from "./BeeColumn";
@@ -40,7 +40,7 @@ export function ViewTabs({ view, onView, snap, bees }: { view: ViewId; onView: (
   const open = ALL_BEES.reduce((n, b) => n + (bees[b]?.position ? 1 : 0) + (bees[b]?.legs?.length ?? 0), 0);
   const watching = ALL_BEES.filter((b) => bees[b]?.watchlist?.coins.length).length;
   const counts: Record<ViewId, string | null> = {
-    overview: `${ALL_BEES.length} bees`,
+    overview: `${ALL_BEES.length} bunnies`,
     market: snap?.market.board ? `${snap.market.board.length} coins` : null,
     watchlists: `${watching}/${ALL_BEES.length}`,
     positions: `${open} open`,
@@ -69,7 +69,7 @@ function Tile({ label, value, sub, valueClass, children }: { label: string; valu
   );
 }
 
-/** Which bees watch / hold each coin, from the snapshot. */
+/** Which bunnies watch / hold each coin, from the snapshot. */
 function coinOwners(bees: Bees) {
   const watch = new Map<string, string[]>();
   const held = new Map<string, Array<{ bee: string; side: "long" | "short" }>>();
@@ -173,7 +173,7 @@ export function MarketView({ snap, bees }: { snap: Snapshot | null; bees: Bees }
             </span>
           )}
         </Tile>
-        <Tile label="Volume 24h" value={compact(vol)} sub={`OKX perps in the bees' universe${macroCount ? ` · ${macroCount} macro` : ""}`} />
+        <Tile label="Volume 24h" value={compact(vol)} sub={`OKX perps in the bunnies' universe${macroCount ? ` · ${macroCount} macro` : ""}`} />
       </div>
 
       <div className="dv-filters">
@@ -186,7 +186,7 @@ export function MarketView({ snap, bees }: { snap: Snapshot | null; bees: Bees }
           ))}
         </div>
         <label className="dv-check">
-          <input type="checkbox" checked={onlyWatched} onChange={(e) => setOnlyWatched(e.target.checked)} /> Watched or held by a bee
+          <input type="checkbox" checked={onlyWatched} onChange={(e) => setOnlyWatched(e.target.checked)} /> Watched or held by a bunny
         </label>
         <span className="dim small dv-when">prices {snap ? ago(snap.market.refreshedAt) || "now" : "–"}</span>
       </div>
@@ -273,11 +273,11 @@ export function WatchlistsView({ snap, bees }: { snap: Snapshot | null; bees: Be
   return (
     <div className="dataview">
       <p className="dv-intro">
-        Each bee's LLM brains choose the coins it trades, from lab backtests, the bee's real record, live liquidity
+        Each bunny's LLM brains choose the coins it trades, from lab backtests, the bunny's real record, live liquidity
         {snap?.system?.cmc ? " and CoinMarketCap's rank and volume" : ""}. The council, the coach and survival councils update the list; the engine then offers
         Jev <b>only</b> these coins. A coin marked
         <span className="wl-trial"> trial </span>trades at half size until the coach keeps it.{" "}
-        {on ? "" : "AI watchlists are off (BRAIN_WATCHLIST=false): every bee trades its style's normal coins."}
+        {on ? "" : "AI watchlists are off (BRAIN_WATCHLIST=false): every bunny trades its style's normal coins."}
       </p>
 
       {coins.length > 0 && (
@@ -394,7 +394,7 @@ export function PositionsView({ bees }: { bees: Bees }) {
   return (
     <div className="dataview">
       <div className="dv-tiles">
-        <Tile label="Open positions" value={String(rows.length)} sub={`${inPos} of ${ALL_BEES.length} bees in the market`} />
+        <Tile label="Open positions" value={String(rows.length)} sub={`${inPos} of ${ALL_BEES.length} bunnies in the market`} />
         <Tile
           label="Gross exposure"
           value={money(gross, 0)}
@@ -407,7 +407,7 @@ export function PositionsView({ bees }: { bees: Bees }) {
         <table className="dv-table num">
           <thead>
             <tr>
-              <th className="l">Bee</th>
+              <th className="l">Bunny</th>
               <th className="l">Coin</th>
               <th className="l">Side</th>
               <th>Size</th>
@@ -447,7 +447,7 @@ export function PositionsView({ bees }: { bees: Bees }) {
             {!rows.length && (
               <tr>
                 <td colSpan={11} className="dim l">
-                  Every bee is flat right now.
+                  Every bunny is flat right now.
                 </td>
               </tr>
             )}

@@ -1,5 +1,5 @@
 // What the first-run Setup page saves: the Jev key, an optional OpenAI key, the risk acknowledgement, the three
-// bees (name, trading style, tagline, optional generated portrait), and whether to join the Hive. Stored as one JSON file in the data volume,
+// bunnies (name, trading style, tagline, optional generated portrait), and whether to join the Warren. Stored as one JSON file in the data volume,
 // readable by the engine's user only. Secrets in here are never sent to the dashboard or written to a log.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -7,11 +7,11 @@ import { z } from "zod";
 import { BRAIN_ID_RE, checkBaseUrl, RESERVED_BRAIN_IDS } from "./brains/llm.js";
 
 export const STYLES = ["bizzy", "breezy", "boozy"] as const;
-/** A trading style is one of the three built-in strategies, named after the bee that first traded it. */
+/** A trading style is one of the three built-in strategies, named after the bunny that first traded it. */
 export type StyleId = (typeof STYLES)[number];
 
 /**
- * What a bee trades. The main three and every bee by default: crypto. Extra bees may join the macro squad instead:
+ * What a bunny trades. The main three and every bunny by default: crypto. Extra bunnies may join the macro squad instead:
  * commodities (gold, silver, oil), stocks (stocks and ETFs) or macro (both). Non-crypto trading also needs
  * ALLOW_NON_CRYPTO=true and a verified open session (market/sessions.ts).
  */
@@ -23,7 +23,7 @@ export const MARKET_INFO: Record<MarketId, { label: string; blurb: string }> = {
   stocks: { label: "Stocks & ETFs", blurb: "NVDA, TSLA, MSTR, SPY, QQQ, SOXL and more. Session hours and gaps apply." },
   macro: { label: "Macro (both)", blurb: "Commodities and stocks together." },
 };
-/** The squad a bee races in: crypto, or the macro squad. */
+/** The squad a bunny races in: crypto, or the macro squad. */
 export const squadOf = (m: MarketId): "crypto" | "macro" => (m === "crypto" ? "crypto" : "macro");
 
 export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: string; tagline: string }> = {
@@ -47,12 +47,12 @@ export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: s
   },
 };
 
-/** The original three are the official bees: owners' bees may not use their names ("Bizzy", "bizzy-bee", "Bizzie Bee"). */
+/** The original three are the official bunnies: owners' bunnies may not use their names ("Bizzy", "bizzy-bee", "Bizzie Bunny"). */
 const squash = (s: string) =>
   s
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "")
-    .replace(/bee$/, "")
+    .replace(/(bee|bunny|bunnie)$/, "")
     .replace(/(.)\1+/g, "$1")
     .replace(/(ie|ey|i)$/, "y");
 const RESERVED = new Set(STYLES.map((s) => squash(STYLE_INFO[s].name)));
@@ -80,12 +80,12 @@ const BeeSchema = z.object({
     .min(1)
     .max(24)
     .regex(/^[\p{L}\p{N} .'_-]+$/u, "letters, numbers, spaces and . ' _ - only"),
-  /** The built-in brain this bee runs on (Setup derives it from the bee's coins; see bees/custom.ts). */
+  /** The built-in brain this bunny runs on (Setup derives it from the bunny's coins; see bees/custom.ts). */
   style: z.enum(STYLES),
   tagline: z.string().trim().max(40).default(""),
-  /** The owner's rules for this bee in plain English, fed to Jev with every decision. */
+  /** The owner's rules for this bunny in plain English, fed to Jev with every decision. */
   rules: z.string().trim().max(500).default(""),
-  /** Coin tickers this bee is restricted to ([] = any). */
+  /** Coin tickers this bunny is restricted to ([] = any). */
   coins: z
     .array(
       z
@@ -96,22 +96,22 @@ const BeeSchema = z.object({
     )
     .max(20)
     .default([]),
-  /** What the bee looks like (used for its portrait). */
+  /** What the bunny looks like (used for its portrait). */
   look: z.string().trim().max(400).optional(),
-  /** What it trades (extra bees only; absent = crypto, and the main three are always crypto). */
+  /** What it trades (extra bunnies only; absent = crypto, and the main three are always crypto). */
   market: z.enum(MARKETS).optional(),
-  /** Extra bees: the LLM brain chosen when the bee was added (main bees use BEE1_BRAIN..BEE3_BRAIN). */
+  /** Extra bunnies: the LLM brain chosen when the bunny was added (main bunnies use BEE1_BRAIN..BEE3_BRAIN). */
   brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/).optional(),
-  /** true once a portrait has been generated for this bee (served from the data volume). */
+  /** true once a portrait has been generated for this bunny (served from the data volume). */
   image: z.boolean().default(false),
   /**
-   * The bee's own wallet: the money it starts with (and is revived with), in USD. Absent = BEE_START_EQUITY_USD.
-   * Set when the bee is created from the admin panel; the main three share BEE_START_EQUITY_USD (the Hive compares them).
+   * The bunny's own wallet: the money it starts with (and is revived with), in USD. Absent = BEE_START_EQUITY_USD.
+   * Set when the bunny is created from the admin panel; the main three share BEE_START_EQUITY_USD (the Warren compares them).
    */
   walletUsd: z.number().min(10).max(1_000_000).optional(),
   /**
-   * The bee's OKX sub-account keys, set (and checked for balance) when it is created. The environment's
-   * BEE<n>_OKX_*_API_* still wins. Never sent to the dashboard or written to a log.
+   * The bunny's OKX sub-account keys, set (and checked for balance) when it is created. The environment's
+   * BUNNY<n>_OKX_*_API_* still wins. Never sent to the dashboard or written to a log.
    */
   okx: z
     .object({
@@ -142,10 +142,10 @@ export const McpToolSchema = z.object({
   inputSchema: z.record(z.unknown()).default({}),
 });
 
-/** Which bees may call which tool of a server. A tool that is not proven read-only needs the owner's explicit confirmation. */
+/** Which bunnies may call which tool of a server. A tool that is not proven read-only needs the owner's explicit confirmation. */
 export const McpGrantSchema = z.object({
   tool: z.string().min(1).max(80),
-  /** Bee slots ("bee1"..), or "all". */
+  /** Bunny slots ("bee1"..), or "all". */
   bees: z.array(z.string().regex(/^(bee[1-9]|all)$/)).min(1).max(10),
   confirmed: z.boolean().optional(),
 });
@@ -186,9 +186,9 @@ export const SettingsSchema = z.object({
   ownerPasswordHash: z.string().startsWith("scrypt$").optional(),
   /** When the operator ticked the risk statements on the Setup page. */
   acceptedRiskAt: z.number(),
-  /** The three main bees, then up to six extra bees added from the admin panel. */
+  /** The three main bunnies, then up to six extra bunnies added from the admin panel. */
   bees: z.array(BeeSchema).min(3).max(9),
-  /** The "Join the Hive?" answer on the Setup page (absent in files saved before the Hive existed). */
+  /** The "Join the Warren?" answer on the Setup page (absent in files saved before the Warren existed). */
   hive: z.boolean().optional(),
   createdAt: z.number(),
 });
@@ -225,7 +225,7 @@ export function saveOverrides(settingsPath: string, overrides: Record<string, st
   writePrivateJson(adminPath(settingsPath), { version: 1, overrides, updatedAt: Date.now() });
 }
 
-/** Atomic JSON write, readable by the engine's user only (Setup file, Hive file). */
+/** Atomic JSON write, readable by the engine's user only (Setup file, Warren file). */
 export function writePrivateJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;

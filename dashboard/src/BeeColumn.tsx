@@ -59,7 +59,7 @@ function TechStrip({ bee }: { bee: PublicBee }) {
   return (
     <div className="tech-strip num">
       {b && (
-        <span className={`chip-t ${b.online ? "" : "off"}`} title={b.online ? `${b.label ?? BRAIN_LABEL[b.id] ?? b.id} plans for this bee (${b.model})` : "No key or sign-in: a rules pick plans for this bee"}>
+        <span className={`chip-t ${b.online ? "" : "off"}`} title={b.online ? `${b.label ?? BRAIN_LABEL[b.id] ?? b.id} plans for this bunny (${b.model})` : "No key or sign-in: a rules pick plans for this bunny"}>
           <i className={`dot ${b.online ? "on" : ""}`} />
           {b.label ?? BRAIN_LABEL[b.id] ?? b.id}
           {b.online && b.model ? <em> {b.model}</em> : <em> rules</em>}
@@ -94,7 +94,7 @@ function TechStrip({ bee }: { bee: PublicBee }) {
   );
 }
 
-/** Every position the bee holds (main first, then multi-order legs), as a compact table. */
+/** Every position the bunny holds (main first, then multi-order legs), as a compact table. */
 function PositionsTable({ bee }: { bee: PublicBee }) {
   const rows = [...(bee.position ? [{ ...bee.position, main: true }] : []), ...(bee.legs ?? []).map((l) => ({ ...l, main: false }))];
   if (rows.length < 2) return null;
@@ -179,7 +179,7 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
 
       {bee && <TechStrip bee={bee} />}
       {bee?.watchlist && bee.watchlist.coins.length > 0 && (
-        <a className="ai-watch" href="#/?v=watchlists" title="Coins this bee's AI brains chose. Open the AI watchlists view for the reasons.">
+        <a className="ai-watch" href="#/?v=watchlists" title="Coins this bunny's AI brains chose. Open the AI watchlists view for the reasons.">
           <span className="ai-watch-key">AI WATCHLIST</span>
           {bee.watchlist.coins.map((c) => {
             const it = bee.watchlist!.items?.find((i) => i.coin === c);

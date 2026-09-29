@@ -2,8 +2,8 @@
 // Prints only sanitised facts: works?, permissions, IP-bound yes/no, sub-account yes/no, distinct accounts, USDC equity.
 // Never prints key values, UIDs, labels or IPs.
 // pnpm keycheck
-// KEYCHECK_ONLY=live|demo checks just that set (deploy.sh preflight). KEYCHECK_MIN_USDC=333 also fails any bee
-// whose USDC equity is below that (live go-live check: each bee must start with its full stake).
+// KEYCHECK_ONLY=live|demo checks just that set (deploy.sh preflight). KEYCHECK_MIN_USDC=333 also fails any bunny
+// whose USDC equity is below that (live go-live check: each bunny must start with its full stake).
 import { lookup } from "node:dns/promises";
 import { createRequire } from "node:module";
 import { BEES, type OkxCreds } from "../config.js";
@@ -33,7 +33,7 @@ try {
   console.log(`Jev          FAILED ${e.code} ${e.message}`);
 }
 
-// ---- OKX, per bee, live and demo keys ----
+// ---- OKX, per bunny, live and demo keys ----
 const uids = new Map<string, string>(); // internal only, never printed
 // VPS IP, resolved locally and compared only; never printed.
 let vpsIp = "";
@@ -121,7 +121,7 @@ for (const kind of ["live", "demo"]) {
   if (ids.length >= 2) {
     const distinct = new Set(ids).size === ids.length;
     if (!distinct) failures++;
-    console.log(`${kind} keys map to ${distinct ? "distinct accounts: yes" : "the SAME account: NO, each bee needs its own sub-account"}`);
+    console.log(`${kind} keys map to ${distinct ? "distinct accounts: yes" : "the SAME account: NO, each bunny needs its own sub-account"}`);
   }
 }
 console.log(failures ? `\n${failures} problem(s) found` : "\nall checks passed");

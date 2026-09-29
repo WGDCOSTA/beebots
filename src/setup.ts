@@ -5,7 +5,7 @@
 //  - caps on the calls that cost money (designs and portraits, in total and per visitor).
 // The owner picks an owner password here; later writes from the public dashboard need it (gate.ts).
 // After a save the engine exits and Docker restarts it with the new settings, in paper trading.
-// Each bee is designed from one sentence ("how do you want this bee to trade?"): OpenAI invents its name, rules, coins
+// Each bunny is designed from one sentence ("how do you want this bunny to trade?"): OpenAI invents its name, rules, coins
 // and look, the engine checks the coins against OKX's live list and picks the brain it runs on, then OpenAI paints it.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -36,7 +36,7 @@ export interface SetupOpts {
   settingsPath: string;
   jevModel: string;
   openai: { apiKey?: string; textModel: string; imageModel: string };
-  /** Reference portraits for the image model (the default bee art). */
+  /** Reference portraits for the image model (the default bunny art). */
   refDir: string;
   /** Called after a successful save (the engine exits so Docker restarts it). */
   onSaved: () => void;
@@ -63,7 +63,7 @@ export const TIMED_OUT =
   "Setup timed out to keep this server safe. Restart the engine container (Hostinger Docker Manager → Restart, or `docker compose restart engine`) to open it again.";
 
 const reservedMsg = (name: string) =>
-  `"${name}" belongs to one of the official bees (${STYLES.map((s) => STYLE_INFO[s].name).join(", ")}). Pick another name.`;
+  `"${name}" belongs to one of the official bunnies (${STYLES.map((s) => STYLE_INFO[s].name).join(", ")}). Pick another name.`;
 
 /**
  * Checks a design from the model: coins must be on OKX's live list (unknown ones are dropped; if none are left, the
@@ -77,7 +77,7 @@ export function finishDesign(raw: BeeDesign, known: string[]): BeeDesign {
   const asked = [...new Set(raw.coins.map((c) => c.trim().toUpperCase().replace(/-.*$/, "")).filter(Boolean))];
   const coins = asked.filter((c) => set.has(c)).slice(0, 20);
   if (asked.length && !coins.length) {
-    throw new DesignError(`${asked.slice(0, 5).join(", ")} ${asked.length > 1 ? "aren't" : "isn't"} tradable on OKX EEA right now. Try describing your bee again with a coin like BTC, ETH, SOL or DOGE.`);
+    throw new DesignError(`${asked.slice(0, 5).join(", ")} ${asked.length > 1 ? "aren't" : "isn't"} tradable on OKX EEA right now. Try describing your bunny again with a coin like BTC, ETH, SOL or DOGE.`);
   }
   const rules = raw.rules.replace(/\s+/g, " ").trim().slice(0, 500);
   if (rules.length < 10) throw new DesignError("The designer didn't write any rules. Press Create again.");
@@ -93,11 +93,11 @@ export function finishDesign(raw: BeeDesign, known: string[]): BeeDesign {
 const STYLE_COINS: Partial<Record<BeeDesign["baseStyle"], readonly string[]>> = { bizzy: BIZZY_BREAKOUT_COINS, breezy: BREEZY_COINS };
 const list = (xs: readonly string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : (xs[0] ?? ""));
 
-/** Says out loud why a bee runs on a different brain than the one it was designed for (Setup used to switch silently). */
+/** Says out loud why a bunny runs on a different brain than the one it was designed for (Setup used to switch silently). */
 export function styleNote(wanted: BeeDesign["baseStyle"], got: BeeDesign["baseStyle"], coins: string[]): string {
   const only = STYLE_COINS[wanted] ?? [];
   const what = coins.length ? `with ${list(coins)}` : "on any coin";
-  return `${STYLE_INFO[wanted].label} only trades ${list(only)}, so ${what} this bee runs on ${STYLE_INFO[got].label}.`;
+  return `${STYLE_INFO[wanted].label} only trades ${list(only)}, so ${what} this bunny runs on ${STYLE_INFO[got].label}.`;
 }
 
 export function imageDir(settingsPath: string): string {
@@ -111,12 +111,12 @@ export function imagePath(settingsPath: string, slot: string): string | null {
 }
 
 const Accept = z.object({ notAdvice: z.literal(true), paperDefault: z.literal(true), ownRisk: z.literal(true) });
-/** A Setup-made bee: designed (rules, look) and painted. */
+/** A Setup-made bunny: designed (rules, look) and painted. */
 const SetupBee = BeeSchema.extend({
-  name: BeeSchema.shape.name.refine((n) => !isReservedName(n), { message: "that name belongs to an official bee" }),
+  name: BeeSchema.shape.name.refine((n) => !isReservedName(n), { message: "that name belongs to an official bunny" }),
   rules: z.string().trim().min(10).max(500),
   look: z.string().trim().min(3).max(400),
-  image: z.literal(true, { errorMap: () => ({ message: "every bee needs its portrait" }) }),
+  image: z.literal(true, { errorMap: () => ({ message: "every bunny needs its portrait" }) }),
 });
 const SaveBody = z.object({
   jevKey: z.string().trim().min(8),
@@ -126,9 +126,9 @@ const SaveBody = z.object({
   kimiKey: z.string().trim().min(8).optional(),
   accept: Accept,
   bees: z.array(SetupBee).length(3),
-  /** Gates the dashboard's writes (joining or leaving the Hive). Stored as a salted scrypt hash only. */
+  /** Gates the dashboard's writes (joining or leaving the Warren). Stored as a salted scrypt hash only. */
   ownerPassword: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD),
-  /** "Join the Hive?" step: an explicit yes or no. A yes joins on the engine's first start (hive.ts). */
+  /** "Join the Warren?" step: an explicit yes or no. A yes joins on the engine's first start (hive.ts). */
   hive: z.boolean(),
 });
 
@@ -174,7 +174,7 @@ export class Setup {
   }
 
   announce(): void {
-    log.info("setup is open: open this server's address in a browser to set up your bees", { windowMin: this.o.windowMin });
+    log.info("setup is open: open this server's address in a browser to set up your bunnies", { windowMin: this.o.windowMin });
     const t = setTimeout(() => {
       if (!this.saved) log.warn("setup timed out; restart the engine container to open it again");
     }, this.o.windowMin * 60_000);
@@ -286,10 +286,10 @@ export class Setup {
       case "/setup/design": {
         const key = this.openaiKey(body);
         const description = String(body.description ?? "").trim();
-        if (!key) return send(res, 400, { error: "Designing a bee needs an OpenAI key." });
-        if (description.length < 3) return send(res, 400, { error: "Tell us how you want this bee to trade first." });
+        if (!key) return send(res, 400, { error: "Designing a bunny needs an OpenAI key." });
+        if (description.length < 3) return send(res, 400, { error: "Tell us how you want this bunny to trade first." });
         if (description.length > 400) return send(res, 400, { error: "Keep it under 400 characters." });
-        if (this.designs >= MAX_DESIGNS) return send(res, 429, { error: "That is a lot of bees. Restart the engine to design more." });
+        if (this.designs >= MAX_DESIGNS) return send(res, 429, { error: "That is a lot of bunnies. Restart the engine to design more." });
         let known: string[];
         try {
           known = await this.coinList();
@@ -308,11 +308,11 @@ export class Setup {
         const name = String(body.name ?? "").trim().slice(0, 24);
         const look = String(body.look ?? "").trim();
         if (!key) return send(res, 400, { error: "Portraits need an OpenAI key." });
-        if (!Number.isInteger(slot) || slot < 0 || slot > 2) return send(res, 400, { error: "bad bee" });
-        if (look.length < 3) return send(res, 400, { error: "Describe how your bee looks first." });
+        if (!Number.isInteger(slot) || slot < 0 || slot > 2) return send(res, 400, { error: "bad bunny" });
+        if (look.length < 3) return send(res, 400, { error: "Describe how your bunny looks first." });
         if (this.paints >= MAX_PAINTS) return send(res, 429, { error: "That is a lot of portraits. Restart the engine to paint more." });
         this.paints++;
-        const jpg = await this.paint(key, this.o.openai.imageModel, this.o.refDir, name || "a new bee", look);
+        const jpg = await this.paint(key, this.o.openai.imageModel, this.o.refDir, name || "a new bunny", look);
         const dir = imageDir(this.o.settingsPath);
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, `${BEES[slot]}.jpg`), jpg);
@@ -326,9 +326,9 @@ export class Setup {
           return send(res, 400, { error: `Something is missing or not allowed (${what}).` });
         }
         const b = parsed.data;
-        if (!b.openaiKey && !this.o.openai.apiKey) return send(res, 400, { error: "Your bees need an OpenAI key (it designs and paints them)." });
+        if (!b.openaiKey && !this.o.openai.apiKey) return send(res, 400, { error: "Your bunnies need an OpenAI key (it designs and paints them)." });
         const missing = BEES.filter((slot) => imagePath(this.o.settingsPath, slot) === null);
-        if (missing.length) return send(res, 400, { error: "Every bee needs its portrait before you start." });
+        if (missing.length) return send(res, 400, { error: "Every bunny needs its portrait before you start." });
         const jevErr = await this.checkJev(b.jevKey, this.o.jevModel);
         if (jevErr) return send(res, 400, { error: jevErr });
         const claudeErr = b.anthropicKey ? await checkClaudeKey(b.anthropicKey) : null;

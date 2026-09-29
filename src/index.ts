@@ -52,7 +52,7 @@ import { skillRegistry } from "./lab/skills/index.js";
 import type { Skill } from "./lab/skills/types.js";
 
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
-// Reference portraits for generated bees: the dashboard's default art (copied into the image by the Dockerfile).
+// Reference portraits for generated bunnies: the dashboard's default art (copied into the image by the Dockerfile).
 const REF_DIR = process.env.REF_DIR?.trim() || "./dashboard/public/bees";
 
 /** Names, rules, styles and pictures for the dashboard. */
@@ -74,8 +74,8 @@ function profile(cfg: Config | null) {
             coins: s.coins,
             market: s.market,
             squad: s.squad,
-            // A Setup-made bee only ever shows its own portrait (null = the dashboard's placeholder mark), never the
-            // original bees' art, which belongs to the three official bees.
+            // A Setup-made bunny only ever shows its own portrait (null = the dashboard's placeholder mark), never the
+            // original bunnies' art, which belongs to the three official bunnies.
             img: s.customImage && imagePath(cfg.settingsPath, id) ? `/bee-image/${id}` : s.fromSetup ? null : `/bees/${s.style}.jpg`,
           };
         })
@@ -132,7 +132,7 @@ async function main() {
 
   let engine: Engine | null = null;
   const held = () => (engine ? cfg.beeIds.map((id) => engine!.bees[id]?.position?.instId).filter((x): x is string => !!x) : []);
-  // News needs a key: borrow the first Momentum bee's (demo/live only).
+  // News needs a key: borrow the first Momentum bunny's (demo/live only).
   const newsCreds = cfg.beeIds.filter((b) => cfg.slots[b].style === "boozy").map((b) => cfg.creds[b]).find((c) => !!c);
   const news = cfg.mode !== "dry" && newsCreds ? createNewsSource(cli, newsCreds, demo) : null;
   const feed = new MarketFeed(
@@ -141,7 +141,7 @@ async function main() {
       min24hVolUsd: cfg.universe.min24hVolUsd,
       spreadGateBps: Math.max(...STYLES.map((s) => cfg.bees[s].spreadGateBps)),
       trendCoins: [...BREEZY_COINS],
-      // Stocks and commodities get gated (and their stats kept) only when a macro bee runs.
+      // Stocks and commodities get gated (and their stats kept) only when a macro bunny runs.
       macro: cfg.beeIds.some((id) => cfg.slots[id].squad === "macro") ? { min24hVolUsd: cfg.macro.min24hVolUsd, spreadGateBps: cfg.macro.spreadGateBps } : null,
     },
     news,
@@ -158,14 +158,14 @@ async function main() {
 
   // `deploy/close.sh` drops this file into the data volume to end the experiment cleanly (see Engine.windDown).
   const closeFlag = join(dirname(cfg.dbPath), `close-${cfg.mode}`);
-  // Dry run only: `resume-last-dry` puts benched, flat bees back into their last position (consumed on use).
+  // Dry run only: `resume-last-dry` puts benched, flat bunnies back into their last position (consumed on use).
   const resumeFlag = join(dirname(cfg.dbPath), `resume-last-${cfg.mode}`);
   const takeResumeRequest = () => {
     if (cfg.mode !== "dry" || !existsSync(resumeFlag)) return false;
     unlinkSync(resumeFlag);
     return true;
   };
-  // The hive mind (knowledge graph) and the three LLM brains. Brains never trade: they curate skills and lessons.
+  // The warren memory (knowledge graph) and the three LLM brains. Brains never trade: they curate skills and lessons.
   const graph = new KnowledgeGraph(cfg.lab.graphPath);
   const clients = makeClients(cfg.brains.creds);
   const councilBees: CouncilBee[] = cfg.beeIds.map((id) => {
@@ -177,14 +177,14 @@ async function main() {
   const playbook = new PlaybookWatcher(cfg.lab.playbookPath);
   const registry = skillRegistry(cfg.lab.skillsDirs);
   for (const e of registry.errors) log.warn("skill import failed", { error: e });
-  // One registry of every skill (built-in, imported, learned): the lab votes and the bees' specialisations share it.
+  // One registry of every skill (built-in, imported, learned): the lab votes and the bunnies' specialisations share it.
   const skillMap = new Map(registry.skills.map((s) => [s.id, s]));
   const signals = cfg.lab.signals ? new LabSignals(skillMap, () => playbook.get()) : null;
   const addSkill = (skill: Skill) => {
     skillMap.set(skill.id, skill);
     signals?.register(skill);
   };
-  if (cfg.skippedBees.length) log.warn("extra bees sit out: no exchange keys for this mode", { bees: cfg.skippedBees.join(",") });
+  if (cfg.skippedBees.length) log.warn("extra bunnies sit out: no exchange keys for this mode", { bees: cfg.skippedBees.join(",") });
   log.info("brains", { brains: cfg.beeIds.map((id) => `${id}:${cfg.brains.slots[id]}${clients[cfg.brains.slots[id]] ? "" : "(no key)"}`).join(" "), labSignals: cfg.lab.signals, watchlist: cfg.lab.watchlist, coachMin: cfg.lab.coachIntervalMin });
 
   // Survival and rewards: health tiers, points, levels, prizes (evolution.ts), and the councils they wake.
@@ -256,7 +256,7 @@ async function main() {
       try {
         new Workspace(cfg.lab.dir).recordBee(d);
       } catch (err) {
-        log.warn("skill workshop: could not record a bee's draft", { err: safeError(err) });
+        log.warn("skill workshop: could not record a bunny's draft", { err: safeError(err) });
       }
     },
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
@@ -341,16 +341,16 @@ async function main() {
     return rankingCache.body;
   };
 
-  // The owner password (picked on Setup) gates joining and leaving the Hive from the dashboard. Installs without one
+  // The owner password (picked on Setup) gates joining and leaving the Warren from the dashboard. Installs without one
   // (a Setup file from before it existed, or keys only in .env) can set OWNER_PASSWORD instead.
   const envPassword = process.env.OWNER_PASSWORD ?? "";
   if (envPassword && envPassword.length < MIN_PASSWORD) log.warn(`OWNER_PASSWORD is ignored: it needs at least ${MIN_PASSWORD} characters`);
   let ownerHash = settings?.ownerPasswordHash ?? (envPassword.length >= MIN_PASSWORD ? hashPassword(envPassword) : null);
   const ownerPasswordHash = () => ownerHash;
-  // One gate, one lockout, for every owner write (Hive and admin panel).
+  // One gate, one lockout, for every owner write (Warren and admin panel).
   const gate = new PasswordGate("x-owner-password", ownerPasswordHash, "owner password");
 
-  // The Hive (opt-in public leaderboard, paper only).
+  // The Warren (opt-in public leaderboard, paper only).
   const hive = new Hive({
     ownerPasswordHash,
     gate,
@@ -364,7 +364,7 @@ async function main() {
       return {
         startedAt: snap.startedAt,
         startEquityUsd: snap.startEquityUsd,
-        // The Hive leaderboard knows the three main slots only; extra bees race locally.
+        // The Warren leaderboard knows the three main slots only; extra bunnies race locally.
         bees: snap.bees.filter((b) => (BEES as readonly string[]).includes(b.bee)).map((b) => {
           const s = cfg.slots[b.bee];
           return { slot: b.bee, name: s.name, style: s.style, tagline: s.tagline, rules: s.rules, coins: s.coins, equityUsd: b.equityUsd, fundingUsd: b.totals.fundingUsd, cap: b.cap, tradesToday: b.tradesToday };
@@ -378,7 +378,7 @@ async function main() {
   const updates = new UpdateCheck({ repo: cfg.update.repo, current: cfg.update.version, enabled: cfg.update.enabled });
   updates.start();
 
-  // The admin panel: settings, keys, bees, password, lab jobs, coach, restart (admin/admin.ts).
+  // The admin panel: settings, keys, bunnies, password, lab jobs, coach, restart (admin/admin.ts).
   const jobs = new LabJobs(
     () => withOverrides(process.env, loadOverrides(SETTINGS_PATH)),
     () => {
@@ -439,16 +439,16 @@ async function main() {
     runningBees: () => cfg.beeIds,
     isFlat: (id) => !engine?.bees[id]?.position,
     forgetBee: (id) => {
-      // Only a slot the engine is not running (a bee added since the last restart).
+      // Only a slot the engine is not running (a bunny added since the last restart).
       if (cfg.beeIds.includes(id)) return;
-      db.raw.prepare("DELETE FROM bee_state WHERE bee = ?").run(id);
+      db.raw.prepare("DELETE FROM bee_state WHERE bunny = ?").run(id);
       delete evolution.bees[id];
       engine?.saveEvolution();
     },
     revive: (id) => engine!.respawn(id),
     council: async (id) => {
       const bee = beeByslot(id);
-      if (!bee) throw new Error("That bee is not running; restart the engine after adding it.");
+      if (!bee) throw new Error("That bunny is not running; restart the engine after adding it.");
       return survival?.convene(bee, "manual");
     },
     evolution: () => engine?.snapshot().evolution ?? null,

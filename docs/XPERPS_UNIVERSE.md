@@ -1,4 +1,4 @@
-# What the bees can trade: OKX EEA X-Perps (measured 2026-09-24 ~08:10 UTC)
+# What the bunnies can trade: OKX EEA X-Perps (measured 2026-09-24 ~08:10 UTC)
 
 Source: `GET https://eea.okx.com/api/v5/public/instruments?instType=FUTURES` + `/market/tickers?instType=FUTURES`, no key. Full list with numbers: `xperps_eea_2026-09-24.json`. **This moves daily. The engine must rebuild it at startup and re-rank hourly.**
 
@@ -66,8 +66,8 @@ Spread is a single top-of-book snapshot, so treat it as indicative. The engine m
 
 ## Non-crypto (excluded by default: `ALLOW_NON_CRYPTO=false`)
 
-Stocks, ETFs and pre-IPO names (NVDA, TSLA, MSTR, **OPENAI, ANTHROPIC**, SPY, QQQ, SOXL...) and commodities (XAU, XAG, CL, BZ). **Their trading hours on OKX are UNVERIFIED.** A bee holding a stock contract into a closed session could face a gap. Verify before enabling. Enabling them later is a strong story beat ("boozy just bought OpenAI").
+Stocks, ETFs and pre-IPO names (NVDA, TSLA, MSTR, **OPENAI, ANTHROPIC**, SPY, QQQ, SOXL...) and commodities (XAU, XAG, CL, BZ). **Their trading hours on OKX are UNVERIFIED.** A bunny holding a stock contract into a closed session could face a gap. Verify before enabling. Enabling them later is a strong story beat ("boozy just bought OpenAI").
 
-Update: they are now traded only by the **macro squad** (extra bees whose market is commodities or stocks), with their
-own gates, and only in trading hours the engine has verified from the market itself. The crypto bees stay crypto. See
+Update: they are now traded only by the **macro squad** (extra bunnies whose market is commodities or stocks), with their
+own gates, and only in trading hours the engine has verified from the market itself. The crypto bunnies stay crypto. See
 [MACRO_SQUAD.md](MACRO_SQUAD.md).

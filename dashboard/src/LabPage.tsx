@@ -1,4 +1,4 @@
-// #/lab: the strategy lab's ranking, each bee's playbook, and the hive mind (graph + the bees' latest messages and
+// #/lab: the strategy lab's ranking, each bunny's playbook, and the warren memory (graph + the bunnies' latest messages and
 // lessons). Read-only and public, like the rest of the dashboard: no keys ever reach these endpoints.
 import { useEffect, useMemo, useState } from "react";
 import { HiveGraph } from "./HiveGraph";
@@ -226,7 +226,7 @@ function PlaybookCards({ playbook }: { playbook: Playbook | null }) {
                 )}
                 {p.message && (
                   <>
-                    <div className="eyebrow">To the hive</div>
+                    <div className="eyebrow">To the warren</div>
                     <blockquote className="pb-msg">{p.message}</blockquote>
                   </>
                 )}
@@ -261,21 +261,21 @@ function perkText(p: EvolutionRow["perks"]): string {
   return out.join(" · ");
 }
 
-/** Survival and rewards: bees ranked by points, with health against the danger and death lines. */
+/** Survival and rewards: bunnies ranked by points, with health against the danger and death lines. */
 function EvolutionBoard({ evo }: { evo: NonNullable<Snapshot["evolution"]> }) {
-  if (!evo.board.length) return <p className="dim">No bee has a record yet: the board fills in after the first tick.</p>;
+  if (!evo.board.length) return <p className="dim">No bunny has a record yet: the board fills in after the first tick.</p>;
   return (
     <>
       <p className="dim small">
-        {evo.survival ? "Survival mode is on: every bee knows it dies at the retire line. In danger it trades smaller and its brains meet to save it." : "Survival mode is off."}{" "}
-        {evo.rewards ? "Profitable days earn points (10 per 1% gained, half that lost on a losing day, +1 for surviving, +5 for the day's best bee); levels unlock prizes." : "Rewards are off."}
+        {evo.survival ? "Survival mode is on: every bunny knows it dies at the retire line. In danger it trades smaller and its brains meet to save it." : "Survival mode is off."}{" "}
+        {evo.rewards ? "Profitable days earn points (10 per 1% gained, half that lost on a losing day, +1 for surviving, +5 for the day's best bunny); levels unlock prizes." : "Rewards are off."}
       </p>
       <div className="ptable-wrap">
         <table className="ptable">
           <thead>
             <tr>
               <th>#</th>
-              <th>Bee</th>
+              <th>Bunny</th>
               <th>State</th>
               <th>Health (% of start)</th>
               <th className="r">Points</th>
@@ -333,7 +333,7 @@ function EvolutionBoard({ evo }: { evo: NonNullable<Snapshot["evolution"]> }) {
           </tbody>
         </table>
       </div>
-      <p className="dim small">Levels at 50, 150, 300, 500 and 800 points. ★ = best bee of the day. Leverage is never raised; bigger limits are off with real money unless the owner allows it.</p>
+      <p className="dim small">Levels at 50, 150, 300, 500 and 800 points. ★ = best bunny of the day. Leverage is never raised; bigger limits are off with real money unless the owner allows it.</p>
     </>
   );
 }
@@ -408,10 +408,10 @@ export function LabPage() {
     <div className="page">
       <PageNav current="lab" />
       <div className="page-inner">
-        <h1>Strategy lab & hive mind</h1>
+        <h1>Strategy lab & warren memory</h1>
         <p className="lead">
-          Every skill is simulated on history with fees, slippage and funding, and ranked only on data its parameters never saw. Each bee's brain picks from
-          this ranking; the hive mind remembers what they learned and what they told each other. Paper only, not financial advice.
+          Every skill is simulated on history with fees, slippage and funding, and ranked only on data its parameters never saw. Each bunny's brain picks from
+          this ranking; the warren memory remembers what they learned and what they told each other. Paper only, not financial advice.
         </p>
         {error && <p className="bad">{error}</p>}
 
@@ -446,16 +446,16 @@ export function LabPage() {
         </section>
 
         <section>
-          <h2>Hive mind</h2>
-          <p className="dim small">Bees, their brains, skills, coins, lessons and messages. Hover a node for details, click to pin it and see its links.</p>
+          <h2>Warren memory</h2>
+          <p className="dim small">Bunnies, their brains, skills, coins, lessons and messages. Hover a node for details, click to pin it and see its links.</p>
           <div className="pcard">{graph ? <HiveGraph graph={graph} onRefresh={() => setReload((n) => n + 1)} /> : <p className="dim">{loaded ? "No graph yet." : "Loading…"}</p>}</div>
         </section>
 
         <section>
-          <h2>Ask the hive mind</h2>
+          <h2>Ask the warren memory</h2>
           <p className="dim small">
             Graphify-style recall: the slice of the graph about your words, each link marked as a measured fact (EXTRACTED), a brain's conclusion (INFERRED) or facts that
-            disagree. The report lists the god nodes, communities, surprising connections, each bee's specialisation and its memories.
+            disagree. The report lists the god nodes, communities, surprising connections, each bunny's specialisation and its memories.
           </p>
           <div className="pcard">
             <HiveQuery />
@@ -463,7 +463,7 @@ export function LabPage() {
         </section>
 
         <section>
-          <h2>Latest from the hive</h2>
+          <h2>Latest from the warren</h2>
           <div className="pcard">{graph ? <HiveFeed graph={graph} /> : <p className="dim">–</p>}</div>
         </section>
       </div>
@@ -479,7 +479,7 @@ export function PageNav({ current }: { current: "lab" | "admin" }) {
       </a>
       <a href="#/">Live</a>
       <a href="#/lab" className={current === "lab" ? "on" : ""}>
-        Lab & hive mind
+        Lab & warren memory
       </a>
       <a href="#/admin" className={current === "admin" ? "on" : ""}>
         Admin
@@ -488,7 +488,7 @@ export function PageNav({ current }: { current: "lab" | "admin" }) {
   );
 }
 
-/** A question to the hive mind (/hive-mind/query) and its report (/hive-mind/report). */
+/** A question to the warren memory (/hive-mind/query) and its report (/hive-mind/report). */
 function HiveQuery() {
   const [q, setQ] = useState("");
   const [res, setRes] = useState<{ focus: string[]; nodes: Array<{ id: string; type: string; label: string }>; edges: Array<{ src: string; rel: string; dst: string; w: number; confidence: string }> } | null>(null);
@@ -524,7 +524,7 @@ function HiveQuery() {
       )}
       {report && (
         <details className="hq-report">
-          <summary>Hive report</summary>
+          <summary>Warren report</summary>
           <pre className="mono small">{report}</pre>
         </details>
       )}

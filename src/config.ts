@@ -4,8 +4,8 @@ import { parseHug, parseLock, type HugRung, type LockRung } from "./bees/ratchet
 import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
 /**
- * The three main bee slots (the live dashboard's columns, Setup, the Hive). Each one trades one of the three styles
- * (settings.ts); two bees may share a style. Extra bees added from the admin panel take slots bee4..bee9: the engine
+ * The three main bunny slots (the live dashboard's columns, Setup, the Warren). Each one trades one of the three styles
+ * (settings.ts); two bunnies may share a style. Extra bunnies added from the admin panel take slots bee4..bee9: the engine
  * runs every slot in `cfg.beeIds`.
  */
 export const BEES = ["bee1", "bee2", "bee3"] as const;
@@ -17,10 +17,10 @@ export const slotId = (i: number): BeeId => ALL_SLOTS[i]!;
 export const isBeeId = (s: string): s is BeeId => (ALL_SLOTS as readonly string[]).includes(s);
 export { STYLES, type StyleId };
 
-/** Each main bee thinks with its own LLM brain (strategy, lessons, messages; Jev still makes the per-tick call). */
+/** Each main bunny thinks with its own LLM brain (strategy, lessons, messages; Jev still makes the per-tick call). */
 const DEFAULT_BRAINS: Record<(typeof BEES)[number], BrainId> = { bee1: "openai", bee2: "claude", bee3: "kimi" };
 
-/** With no Setup file (settings only from .env), the bees are the original three. */
+/** With no Setup file (settings only from .env), the bunnies are the original three. */
 const DEFAULT_SLOTS: Record<(typeof BEES)[number], StyleId> = { bee1: "bizzy", bee2: "breezy", bee3: "boozy" };
 /** Typed as the only acknowledgement that unlocks MODE=live. */
 export const LIVE_ACK_PHRASE = "I-ACCEPT-REAL-MONEY-RISK";
@@ -56,14 +56,14 @@ const oneOf = <T extends readonly [string, ...string[]]>(values: T, def: T[numbe
 /** A brain id: a built-in's or a custom brain's. Blank means the default; whether it exists is checked where clients are built. */
 const brainId = (def: BrainId) =>
   z.preprocess((v) => (typeof v === "string" ? (v.trim() === "" ? undefined : v.trim()) : v), z.string().regex(BRAIN_ID_RE, "a brain id like openai, claude, kimi, zai or a custom one").optional().default(def)) as unknown as z.ZodType<BrainId, z.ZodTypeDef, string | undefined>;
-/** The three brains extra bees take turns on when none was chosen (unchanged by adding more brains). */
+/** The three brains extra bunnies take turns on when none was chosen (unchanged by adding more brains). */
 const ROTATION: BrainId[] = ["openai", "claude", "kimi"];
 const opt = z
   .string()
   .optional()
   .transform((v) => (v === undefined || v.trim() === "" ? undefined : v.trim()));
 
-// Per-style knobs: BIZZY_* = Breakout, BREEZY_* = Trend, BOOZY_* = Momentum. Every bee on that style uses them.
+// Per-style knobs: BIZZY_* = Breakout, BREEZY_* = Trend, BOOZY_* = Momentum. Every bunny on that style uses them.
 const perStyle = (prefix: string, d: { trades: number; fee: number; spread: number; cooldown: number; stopAtr: number; maxFlat: number }) => ({
   [`${prefix}_MAX_TRADES_PER_DAY`]: num(d.trades),
   [`${prefix}_FEE_BUDGET_USD_DAY`]: num(d.fee),
@@ -109,7 +109,7 @@ const EnvSchema = z.object({
   LIVE_SIZE_MULTIPLIER: num(0.25),
   LIVE_RAMP_HOURS: num(2),
   MIN_24H_VOL_USD: num(1_000_000),
-  // Master switch for the macro squad (stocks, commodities): off = macro bees watch and learn but never open.
+  // Master switch for the macro squad (stocks, commodities): off = macro bunnies watch and learn but never open.
   ALLOW_NON_CRYPTO: bool(false),
   // Macro squad gates: stocks and gold trade far less than crypto on OKX, so they get their own volume and spread gates.
   MACRO_MIN_24H_VOL_USD: num(200_000),
@@ -119,7 +119,7 @@ const EnvSchema = z.object({
   SESSION_FLATTEN: oneOf(["all", "weekend", "off"] as const, "all"),
   // How many minutes before the close the flatten fires.
   SESSION_FLATTEN_MIN: num(10),
-  // Macro bees' leverage cap (x equity), below MAX_LEVERAGE: gold and stocks gap.
+  // Macro bunnies' leverage cap (x equity), below MAX_LEVERAGE: gold and stocks gap.
   MACRO_MAX_LEVERAGE: num(1),
   // Size factor for a macro open late in a session (under 2 h to the close): less to lose to a gap.
   MACRO_LATE_SESSION_SIZE: num(0.5),
@@ -131,7 +131,7 @@ const EnvSchema = z.object({
   BIZZY_UNIVERSE_SIZE: num(8),
   BIZZY_TIME_STOP_MINUTES: num(240),
   BOOZY_CANDIDATES: num(5),
-  // Defaults = the "wider swings" rules in strategies/*.md (what the original bees ran from 2026-09-24).
+  // Defaults = the "wider swings" rules in strategies/*.md (what the original bunnies ran from 2026-09-24).
   ...perStyle("BREEZY", { trades: 3, fee: 1.0, spread: 5, cooldown: 240, stopAtr: 2, maxFlat: 0 }),
   ...perStyle("BIZZY", { trades: 1, fee: 1.0, spread: 5, cooldown: 5, stopAtr: 1.5, maxFlat: 20 }),
   ...perStyle("BOOZY", { trades: 3, fee: 3.0, spread: 15, cooldown: 2, stopAtr: 2, maxFlat: 0 }),
@@ -155,7 +155,7 @@ const EnvSchema = z.object({
   // Optional links shown on the dashboard (the "Hosted on Hostinger" chip and the "Get the code" link).
   HOST_LINK: str("https://mrc.fm/beebots"),
   REPO_LINK: str("https://github.com/imikerussell/beebots"),
-  // The Hive: the public leaderboard that installs can join (paper only). Reports go to <HIVE_URL>/hive/report.
+  // The Warren: the public leaderboard that installs can join (paper only). Reports go to <HIVE_URL>/hive/report.
   HIVE_URL: str("https://beebots.tech"),
   // "Update available" on the dashboard: checks this repo's latest GitHub Release against APP_VERSION (set by the build).
   UPDATE_CHECK: bool(true),
@@ -196,11 +196,11 @@ const EnvSchema = z.object({
   GRAPH_PATH: str("./data/lab/hive-mind.sqlite"),
   // Extra folders of importable JSON skills (comma separated), on top of ./skills.
   SKILLS_DIRS: str("./skills"),
-  // Show Jev each bee's lab vote (its playbook skills on 1h bars). Off by default: it changes what Jev sees.
+  // Show Jev each bunny's lab vote (its playbook skills on 1h bars). Off by default: it changes what Jev sees.
   LAB_SIGNALS: bool(false),
-  // Let the brains choose each bee's coins (a watchlist in the playbook). The owner's coins and the style still limit it.
+  // Let the brains choose each bunny's coins (a watchlist in the playbook). The owner's coins and the style still limit it.
   BRAIN_WATCHLIST: bool(true),
-  // Let the brains choose each bee's specialisation: any style or any backtested lab skill (bees/skill.ts). The bee
+  // Let the brains choose each bunny's specialisation: any style or any backtested lab skill (bees/skill.ts). The bunny
   // switches method only when flat, and not more often than SPECIALIZE_MIN_HOURS. Risk rules never change.
   SPECIALIZATION: bool(true),
   SPECIALIZE_MIN_HOURS: num(6),
@@ -212,14 +212,14 @@ const EnvSchema = z.object({
   RATCHET_HUG: str("2.5:1.2,5:0.8,8:0.6"),
   RATCHET_STYLES: str("bizzy,boozy,macro,skill"),
   // ---- The scalper (bees/scalp.ts; phases 2 and 3) ----
-  // Off by default. Even on, a bee only scalps when its brains chose the "scalp" method AND the strategy lab's latest
+  // Off by default. Even on, a bunny only scalps when its brains chose the "scalp" method AND the strategy lab's latest
   // report on real 1-minute data (pnpm lab scalp) found an edge after costs (SCALP_REQUIRE_LAB). Entries are maker limits.
   SCALP: bool(false),
   SCALP_REQUIRE_LAB: bool(true),
   SCALP_LAB_MAX_AGE_DAYS: num(14),
   SCALP_COINS: str("BTC,ETH"),
   SCALP_MAKER_FEE: num(0.0002),
-  // Fast loop for scalping bees (code only, no Jev call), and how long a maker order may wait for its fill.
+  // Fast loop for scalping bunnies (code only, no Jev call), and how long a maker order may wait for its fill.
   SCALP_TICK_MS: num(2000),
   SCALP_MAKER_WAIT_S: num(8),
   SCALP_EXIT_WAIT_S: num(3),
@@ -231,24 +231,24 @@ const EnvSchema = z.object({
   SCALP_FEE_BUDGET_USD_DAY: num(3),
   SCALP_SPREAD_GATE_BPS: num(1.5),
   SCALP_SIZE_FRAC: num(0.5),
-  // Circuit breaker: this many losses in a row pause the bee for SCALP_PAUSE_MIN minutes.
+  // Circuit breaker: this many losses in a row pause the bunny for SCALP_PAUSE_MIN minutes.
   SCALP_MAX_LOSS_STREAK: num(4),
   SCALP_PAUSE_MIN: num(30),
   // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
   COACH_INTERVAL_MIN: num(0),
   COACH_MAX_CALLS_DAY: num(12),
   // ---- Survival and rewards (evolution.ts) ----
-  // A bee in danger trades smaller and is told how close it is to death (BEE_RETIRE_AT_PCT); its brains meet to save it.
+  // A bunny in danger trades smaller and is told how close it is to death (BEE_RETIRE_AT_PCT); its brains meet to save it.
   SURVIVAL_MODE: bool(true),
   SURVIVAL_DANGER_PCT: num(80),
   SURVIVAL_CRITICAL_PCT: num(60),
   SURVIVAL_MAX_CALLS_DAY: num(12),
-  // Profitable bees earn points and levels; levels unlock more skills, skill writing, extra brains and bigger limits.
+  // Profitable bunnies earn points and levels; levels unlock more skills, skill writing, extra brains and bigger limits.
   REWARDS: bool(true),
   REWARD_MAX_LIMIT_BOOST: num(0.5),
   // Limit boosts with real money too (off: in live mode rewards unlock skills and brains, never bigger limits).
   REWARDS_IN_LIVE: bool(false),
-  // Multi-orders: top bees (level 3: 2 positions, level 5: 3) may hold several positions on different coins, all
+  // Multi-orders: top bunnies (level 3: 2 positions, level 5: 3) may hold several positions on different coins, all
   // inside one leverage cap. 1 turns multi-orders off.
   MAX_POSITIONS_PER_BEE: num(3),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
@@ -289,7 +289,7 @@ export interface OkxCreds {
   passphrase: string;
 }
 
-/** A bee as the dashboard shows it. No secrets. */
+/** A bunny as the dashboard shows it. No secrets. */
 export interface SlotProfile {
   style: StyleId;
   name: string;
@@ -299,20 +299,20 @@ export interface SlotProfile {
   /** The owner's rules (fed to Jev) and coin restriction, from Setup. Empty for the original three. */
   rules: string;
   coins: string[];
-  /** Made on the Setup page (never shown with the original bees' art). */
+  /** Made on the Setup page (never shown with the original bunnies' art). */
   fromSetup: boolean;
   /** What it trades, and the squad it races in (crypto, or macro: stocks and commodities). */
   market: MarketId;
   squad: "crypto" | "macro";
-  /** The money this bee starts with (and is revived with): its own wallet, else BEE_START_EQUITY_USD. */
+  /** The money this bunny starts with (and is revived with): its own wallet, else BEE_START_EQUITY_USD. */
   startEquityUsd: number;
 }
 
 export interface Config {
   mode: Mode;
-  /** Every bee the engine runs: bee1..bee3, then any extra bees from the admin panel (with exchange keys, outside paper). */
+  /** Every bunny the engine runs: bee1..bee3, then any extra bunnies from the admin panel (with exchange keys, outside paper). */
   beeIds: BeeId[];
-  /** Extra bees left out because their exchange keys are missing in demo/live mode (named in the log). */
+  /** Extra bunnies left out because their exchange keys are missing in demo/live mode (named in the log). */
   skippedBees: BeeId[];
   slots: Record<BeeId, SlotProfile>;
   openai: { apiKey?: string; textModel: string; imageModel: string };
@@ -364,7 +364,7 @@ export interface Config {
     spreadGateBps: number;
     noOpenMin: number;
     sessionsPath: string;
-    /** The macro style's knobs (MACRO_*), used by every macro bee instead of its crypto style's. */
+    /** The macro style's knobs (MACRO_*), used by every macro bunny instead of its crypto style's. */
     knobs: BeeKnobs;
     maxLeverage: number;
     flatten: "all" | "weekend" | "off";
@@ -382,7 +382,7 @@ export interface Config {
   dbPath: string;
   logLevel: "debug" | "info" | "warn" | "error";
   alertWebhookUrl?: string;
-  /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bee thinks with. */
+  /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bunny thinks with. */
   brains: { creds: BrainCreds; slots: Record<BeeId, BrainId> };
   lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; specialization: boolean; specializeMinHours: number; coachIntervalMin: number; coachMaxCallsDay: number };
   evolution: {
@@ -394,14 +394,14 @@ export interface Config {
     maxLimitBoost: number;
     /** Whether reward limit boosts apply in this mode. */
     boostLimits: boolean;
-    /** Most positions a bee may hold at once (multi-orders perk). */
+    /** Most positions a bunny may hold at once (multi-orders perk). */
     maxPositions: number;
   };
 }
 
 export class ConfigError extends Error {}
 
-/** The money a bee starts with: its own wallet (extra bees created with one), else BEE_START_EQUITY_USD. */
+/** The money a bunny starts with: its own wallet (extra bunnies created with one), else BEE_START_EQUITY_USD. */
 export const startEquityOf = (cfg: Pick<Config, "slots" | "risk">, id: BeeId): number => cfg.slots[id]?.startEquityUsd ?? cfg.risk.startEquityUsd;
 
 /** Parse and validate the environment (plus the Setup file, if any). Throws ConfigError listing NAMES only, never values. */
@@ -438,9 +438,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   allIds.forEach((id, i) => {
     const b = settings?.bees[i];
     const style = b?.style ?? DEFAULT_SLOTS[id as (typeof BEES)[number]] ?? "boozy";
-    // The main three are always crypto (Setup, the Hive and the live columns are about crypto).
+    // The main three are always crypto (Setup, the Warren and the live columns are about crypto).
     const market: MarketId = i < BEES.length ? "crypto" : (b?.market ?? "crypto");
-    // Extra bees have their own wallet; the main three share BEE_START_EQUITY_USD (the Hive compares them).
+    // Extra bunnies have their own wallet; the main three share BEE_START_EQUITY_USD (the Warren compares them).
     const startEquityUsd = i >= BEES.length && b?.walletUsd ? b.walletUsd : e.BEE_START_EQUITY_USD;
     slots[id] = b
       ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true, market, squad: squadOf(market), startEquityUsd }
@@ -453,9 +453,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     allIds.forEach((bee, i) => {
       const p = bee.toUpperCase();
       const extra = !(BEES as readonly string[]).includes(bee);
-      // Keys set when the bee was created (admin panel, checked for balance then), unless the environment has its own.
+      // Keys set when the bunny was created (admin panel, checked for balance then), unless the environment has its own.
       const saved = settings?.bees[i]?.okx?.[mode === "demo" ? "demo" : "live"];
-      // Extra bees read their keys straight from the environment (BEE4_OKX_DEMO_API_KEY, ...); without them they sit
+      // Extra bunnies read their keys straight from the environment (BEE4_OKX_DEMO_API_KEY, ...); without them they sit
       // out demo/live rather than blocking the whole engine.
       const raw = (k: string) => (extra ? (env[k] ?? "").trim() || undefined : (e[k] as string | undefined));
       const envK = raw(`${p}_${infix}_KEY`);
@@ -585,7 +585,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       dir: e.LAB_DIR,
       graphPath: e.GRAPH_PATH,
       playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,
-      // Skills the bees wrote and passed their backtest (brains/survival.ts) live in <LAB_DIR>/learned.
+      // Skills the bunnies wrote and passed their backtest (brains/survival.ts) live in <LAB_DIR>/learned.
       skillsDirs: [...e.SKILLS_DIRS.split(",").map((d) => d.trim()).filter(Boolean), `${e.LAB_DIR.replace(/\/+$/, "")}/learned`],
       signals: e.LAB_SIGNALS,
       watchlist: e.BRAIN_WATCHLIST,
@@ -607,7 +607,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   };
 }
 
-/** Main bees: BEE1_BRAIN..BEE3_BRAIN. Extra bees: the brain picked when they were added, else they take turns. */
+/** Main bunnies: BEE1_BRAIN..BEE3_BRAIN. Extra bunnies: the brain picked when they were added, else they take turns. */
 function brainSlots(ids: BeeId[], main: Record<(typeof BEES)[number], BrainId>, settings: Settings | null): Record<BeeId, BrainId> {
   const out = {} as Record<BeeId, BrainId>;
   ids.forEach((id, i) => {

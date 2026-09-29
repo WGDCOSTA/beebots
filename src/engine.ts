@@ -214,9 +214,9 @@ export class Engine {
    * still holds a position. Its lessons stay in the hive mind; it keeps half its points.
    */
   respawn(id: BeeId): void {
-    if (!this.ids.includes(id)) throw new Error("no such bee");
+    if (!this.ids.includes(id)) throw new Error("no such bunny");
     const b = this.bees[id];
-    if (b.position) throw new Error("This bee still holds a position; it must be flat before it can be revived.");
+    if (b.position) throw new Error("This bunny still holds a position; it must be flat before it can be revived.");
     const now = this.now();
     this.bees[id] = freshBee(id, startEquityOf(this.d.cfg, id), now);
     this.d.db.saveBee(this.bees[id], now);
@@ -887,7 +887,7 @@ export class Engine {
       this.d.db.setMeta("experiment_flat_at", String(now));
       this.lastReconAt = 0; // confirm flat against OKX on the next tick
       this.d.bus.emit("status", { event: "experiment_closed" }, now);
-      this.d.alerts.send("experiment closed: every bee is flat");
+      this.d.alerts.send("experiment closed: every bunny is flat");
     }
   }
 
@@ -1306,7 +1306,7 @@ export class Engine {
       this.jevDownAlerted = false;
     } else if (!this.jevDownAlerted && now - since > 5 * 60_000) {
       this.jevDownAlerted = true;
-      this.d.alerts.send("Jev unreachable for over 5 minutes: all bees holding");
+      this.d.alerts.send("Jev unreachable for over 5 minutes: all bunnies holding");
     }
   }
 

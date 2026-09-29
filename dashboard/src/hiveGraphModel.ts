@@ -18,7 +18,7 @@ export interface RawLink {
 
 /** Validated categorical slots of the dark palette, fixed order. Status colours (good/warn/bad) are not used for kinds. */
 export const KINDS = [
-  { id: "bee", label: "Bees", color: "#c98500", radius: 0 },
+  { id: "bee", label: "Bunnies", color: "#c98500", radius: 0 },
   { id: "brain", label: "Brains", color: "#3987e5", radius: 150 },
   { id: "skill", label: "Skills", color: "#199e70", radius: 260 },
   { id: "coin", label: "Coins", color: "#d95926", radius: 260 },

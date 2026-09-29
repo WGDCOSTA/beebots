@@ -1,5 +1,5 @@
-// The placeholder bee: a simple mark shown wherever a bee has no portrait of its own yet. The original three bees'
-// art belongs to the official bees and is never used for an owner's bee.
+// The placeholder bunny: a simple mark shown wherever a bunny has no portrait of its own yet. The original three bunnies'
+// art belongs to the official bunnies and is never used for an owner's bunny.
 
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
 <rect width="120" height="120" rx="18" fill="#13121a"/>

@@ -193,7 +193,7 @@ describe("setup", () => {
   it("refuses the official bees' names, typed by the owner", async () => {
     const t = await boot();
     t.paintAll();
-    for (const name of ["Bizzy", "breezy-bee", "Boozy Bee", "BIZZIE"]) {
+    for (const name of ["Bizzy", "breezy-bee", "Boozy Bee", "Boozy Bunny", "BIZZIE"]) {
       const bees = [{ ...BEES[0]!, name }, BEES[1], BEES[2]];
       expect((await t.post("/setup/save", { ...SAVE, bees })).status).toBe(400);
     }
@@ -239,7 +239,7 @@ describe("designing a bee", () => {
     const t = await boot({ designs: [design({ name: "Boozy Bee" })] });
     const r = await t.post("/setup/design", { openaiKey: "sk-test", description: "a party bee" });
     expect(r.status).toBe(422);
-    expect(((await r.json()) as { error: string }).error).toMatch(/official bees.*Create again/);
+    expect(((await r.json()) as { error: string }).error).toMatch(/official bunnies.*Create again/);
   });
 
   it("asks the owner to rephrase when none of the coins are on OKX", async () => {
@@ -270,9 +270,9 @@ describe("finishDesign", () => {
 
   it("says why when the brain is switched, and stays quiet when it isn't", () => {
     expect(finishDesign(design({ coins: ["SOL", "DOGE"], baseStyle: "bizzy" }), COINS).styleNote).toBe(
-      "Breakout only trades BTC, ETH, SOL and HYPE, so with SOL and DOGE this bee runs on Momentum.",
+      "Breakout only trades BTC, ETH, SOL and HYPE, so with SOL and DOGE this bunny runs on Momentum.",
     );
-    expect(finishDesign(design({ coins: [], baseStyle: "breezy" }), COINS).styleNote).toBe("Trend only trades BTC and ETH, so on any coin this bee runs on Momentum.");
+    expect(finishDesign(design({ coins: [], baseStyle: "breezy" }), COINS).styleNote).toBe("Trend only trades BTC and ETH, so on any coin this bunny runs on Momentum.");
     expect(finishDesign(design({ coins: ["BTC"], baseStyle: "breezy" }), COINS).styleNote).toBeUndefined();
     expect(finishDesign(design({ coins: ["DOGE"], baseStyle: "boozy" }), COINS).styleNote).toBeUndefined();
   });
@@ -290,7 +290,7 @@ describe("finishDesign", () => {
 
 describe("settings", () => {
   it("reserves the official names in their obvious spellings only", () => {
-    for (const n of ["Bizzy", "bizzy-bee", "Bizzy Bee", "BizzyBee", "BREEZY", "Breezey bee", "Boozie", "bizy"]) expect(isReservedName(n), n).toBe(true);
+    for (const n of ["Bizzy", "bizzy-bee", "Bizzy Bee", "BizzyBee", "Bizzy Bunny", "breezy-bunny", "BREEZY", "Breezey bee", "Boozie", "bizy"]) expect(isReservedName(n), n).toBe(true);
     for (const n of ["Buzzy", "Beatrice", "Bee", "Boozer", "Breeze", "Donny"]) expect(isReservedName(n), n).toBe(false);
   });
 

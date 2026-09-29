@@ -249,7 +249,7 @@ export interface NotesState {
   available: boolean;
   notes: ResearchNote[];
   busy: string[];
-  /** Per running bee: why its brain cannot research right now, or null. */
+  /** Per running bunny: why its brain cannot research right now, or null. */
   blocked: Record<string, string | null>;
 }
 
@@ -268,7 +268,7 @@ export interface JobStatus {
 export type KeyName = "jev" | "openai" | "anthropic" | "kimi" | "zai" | "coinmarketcap";
 
 export type ExchangeKind = "demo" | "live";
-/** A bee's OKX keys as the panel may see them: never the keys, only where they come from and the last check. */
+/** A bunny's OKX keys as the panel may see them: never the keys, only where they come from and the last check. */
 export interface ExchangeStatus {
   set: boolean;
   source: "env" | "settings" | null;
@@ -321,13 +321,13 @@ export interface AdminState {
     extra: boolean;
     running: boolean;
     flat: boolean;
-    /** The money it starts with (extra bees: set at creation; main three: the shared start equity). */
+    /** The money it starts with (extra bunnies: set at creation; main three: the shared start equity). */
     walletUsd: number;
     exchange: Record<ExchangeKind, ExchangeStatus>;
   }> | null;
   maxBees: number;
   defaultWalletUsd: number;
-  /** Outside paper trading: the OKX environment a new bee must be connected to before it is created. */
+  /** Outside paper trading: the OKX environment a new bunny must be connected to before it is created. */
   exchangeRequired: ExchangeKind | null;
   /** The server can check OKX keys. */
   exchangeCheck: boolean;

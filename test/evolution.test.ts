@@ -59,14 +59,14 @@ describe("survival tiers", () => {
 });
 
 describe("rewards", () => {
-  it("scores each UTC day: gains, half-rate losses, a survival point, the day's best bee bonus", () => {
+  it("scores each UTC day: gains, half-rate losses, a survival point, the day's best bunny bonus", () => {
     const events: EvolutionEvent[] = [];
     const evo = new Evolution(OPTS, {}, (e) => events.push(e));
     evo.tick([bee("bee1", 1000), bee("bee2", 1000)], T0);
     evo.tick([bee("bee1", 1050), bee("bee2", 980)], T0 + DAY);
     expect(evo.bees.bee1.points).toBe(50 + 1 + 5);
     expect(evo.bees.bee2.points).toBe(0);
-    expect(evo.bees.bee1.history[0]).toMatchObject({ day: "2026-09-01", pnlPct: 5, bonus: "best bee of the day" });
+    expect(evo.bees.bee1.history[0]).toMatchObject({ day: "2026-09-01", pnlPct: 5, bonus: "best bunny of the day" });
     expect(evo.bees.bee1.level).toBe(1);
     expect(events.some((e) => e.kind === "level" && e.bee === "bee1" && e.to === 1)).toBe(true);
   });

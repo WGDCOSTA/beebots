@@ -182,7 +182,7 @@ describe("admin API", () => {
     // Coins must be tradable right now.
     const badCoin = await h.call("/admin/bees", { bees: [bees[0], { ...bees[1], coins: ["NOPE"] }, bees[2]] });
     expect(badCoin.body.error).toMatch(/not a live Crypto X-Perp.*NOPE/);
-    expect((await h.call("/admin/bees", { bees: [{ ...bees[0], name: "Bizzy" }, bees[1], bees[2]] })).body.error).toMatch(/official bee/);
+    expect((await h.call("/admin/bees", { bees: [{ ...bees[0], name: "Bizzy" }, bees[1], bees[2]] })).body.error).toMatch(/official bunn/);
   });
 
   it("changes the owner password and the old one stops working", async () => {

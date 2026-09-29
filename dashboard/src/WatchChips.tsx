@@ -1,6 +1,6 @@
 import type { WatchItem } from "./panelTypes";
 
-/** The coins a bee's brains chose, as chips (reason on hover, probation marked). */
+/** The coins a bunny's brains chose, as chips (reason on hover, probation marked). */
 export function WatchChips({ items }: { items: WatchItem[] }) {
   return (
     <div className="chips watch-chips">

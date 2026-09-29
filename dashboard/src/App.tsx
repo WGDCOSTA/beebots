@@ -149,7 +149,7 @@ export function App() {
   );
 }
 
-/** A rail card for a group of extra bees: the crypto challengers, or the macro squad (stocks and commodities). */
+/** A rail card for a group of extra bunnies: the crypto challengers, or the macro squad (stocks and commodities). */
 function SquadCard({ title, hint, bees, feed }: { title: string; hint?: string; bees: string[]; feed: ReturnType<typeof useFeed> }) {
   return (
     <section className="rail-card challengers">

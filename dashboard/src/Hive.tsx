@@ -1,5 +1,5 @@
-// "Join the Hive" in the header: the public leaderboard at beebots.tech. Status comes from this install's own engine
-// (GET /hive/status, never the leaderboard itself), so the dashboard is the same whether or not the Hive is reachable.
+// "Join the Warren" in the header: the public leaderboard at beebots.tech. Status comes from this install's own engine
+// (GET /hive/status, never the leaderboard itself), so the dashboard is the same whether or not the Warren is reachable.
 // Joining and leaving carry the owner password picked on Setup.
 import { useCallback, useEffect, useState } from "react";
 import { beeMeta, BEE_NAMES, HIVE_DISCLAIMER, type HiveStatus } from "./types";
@@ -40,7 +40,7 @@ function HiveDialog({ status, onClose, onStatus }: { status: HiveStatus; onClose
       const j = (await r.json().catch(() => ({}))) as HiveStatus & { error?: string; left?: { remote: boolean; detail: string } };
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
       onStatus(j);
-      setNote(what === "join" ? "You're in. The first report goes out in a few seconds." : (j.left?.detail ?? "You left the Hive."));
+      setNote(what === "join" ? "You're in. The first report goes out in a few seconds." : (j.left?.detail ?? "You left the Warren."));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -56,7 +56,7 @@ function HiveDialog({ status, onClose, onStatus }: { status: HiveStatus; onClose
         <button className="modal-x" onClick={onClose} aria-label="Close">
           ×
         </button>
-        <h2 id="hive-title">{status.joined ? "In the Hive ✓" : "Join the Hive"}</h2>
+        <h2 id="hive-title">{status.joined ? "In the Warren ✓" : "Join the Warren"}</h2>
         <p className="modal-disclaimer">{HIVE_DISCLAIMER}</p>
 
         {status.joined && (
@@ -77,7 +77,7 @@ function HiveDialog({ status, onClose, onStatus }: { status: HiveStatus; onClose
         )}
 
         {!status.paper && !status.joined ? (
-          <p className="bad">The Hive is for paper trading only. This engine runs with real money, so it can't join.</p>
+          <p className="bad">The Warren is for paper trading only. This engine runs with real money, so it can't join.</p>
         ) : !status.passwordSet ? (
           <p className="bad">
             This server has no owner password yet. Run Setup again to pick one (see the README), or set <code>OWNER_PASSWORD</code> and restart the
@@ -108,7 +108,7 @@ function HiveDialog({ status, onClose, onStatus }: { status: HiveStatus; onClose
 
         <div className="modal-actions">
           <a href={board} target="_blank" rel="noopener">
-            See the hive on {boardHost(board)} ↗
+            See the warren on {boardHost(board)} ↗
           </a>
           {status.joined ? (
             <button className="danger" disabled={busy || !passwordOk || !status.passwordSet} onClick={() => void act("leave")}>
@@ -148,7 +148,7 @@ export function HiveButton() {
   return (
     <>
       <button className={`hive-btn ${status.joined ? "in" : ""}`} onClick={() => setOpen(true)}>
-        {status.joined ? "In the Hive ✓" : "🐝 Join the Hive"}
+        {status.joined ? "In the Warren ✓" : "🐝 Join the Warren"}
       </button>
       {open && <HiveDialog status={status} onClose={() => setOpen(false)} onStatus={setStatus} />}
     </>

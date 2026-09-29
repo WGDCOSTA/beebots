@@ -1,10 +1,10 @@
 // The admin panel's API. Every call is a POST carrying the owner password (x-owner-password, the same gate and lockout
-// as joining the Hive). What it can change:
+// as joining the Warren). What it can change:
 // - settings on the ADMIN_FIELDS list, stored as overrides in admin.json (the environment still wins, as for Setup);
-// - the Jev / OpenAI / Anthropic / Kimi keys, the three bees and the owner password, in the Setup file;
+// - the Jev / OpenAI / Anthropic / Kimi keys, the three bunnies and the owner password, in the Setup file;
 // - lab jobs (fetch, run, council, cycle), a coach review now, and an engine restart to apply saved changes.
-// - each bee's wallet (the money it starts with) and its OKX sub-account keys, checked for permissions and balance
-//   before the bee is created (a bee is never created on keys that fail, or on an account holding less than its wallet).
+// - each bunny's wallet (the money it starts with) and its OKX sub-account keys, checked for permissions and balance
+//   before the bunny is created (a bunny is never created on keys that fail, or on an account holding less than its wallet).
 // What it cannot: the trading mode and LIVE_ACK stay in the environment, so real money is never one click away, and
 // exchange keys set in the environment win over the panel's. Keys are write-only: the page only ever learns whether
 // one is set, where from, and what the last check found.
@@ -67,7 +67,7 @@ export interface AdminOpts {
   version: string;
   checks: KeyChecks;
   jobs: LabJobs;
-  /** Run every bee's coach review now (null when no brain has a key). */
+  /** Run every bunny's coach review now (null when no brain has a key). */
   coachNow: (() => Promise<void>) | null;
   graphStats: () => Record<string, number>;
   playbook: () => unknown;
@@ -86,14 +86,14 @@ export interface AdminOpts {
   anthropicLogin?: { profile: string; active: () => boolean; check: () => Promise<string | null> };
   /** The trading-hours calendar the engine is learning (market/sessions.ts), summarised. */
   sessions?: () => unknown;
-  /** Bees the running engine trades, and whether one is flat (a bee may only be removed flat). */
+  /** Bunnies the running engine trades, and whether one is flat (a bunny may only be removed flat). */
   runningBees?: () => BeeId[];
   isFlat?: (id: BeeId) => boolean;
-  /** Drop the stored books of a slot about to be (re)used by a brand-new bee. */
+  /** Drop the stored books of a slot about to be (re)used by a brand-new bunny. */
   forgetBee?: (id: BeeId) => void;
-  /** Revive a dead bee (fresh paper money). Throws a readable error when it cannot. */
+  /** Revive a dead bunny (fresh paper money). Throws a readable error when it cannot. */
   revive?: (id: BeeId) => void;
-  /** Convene a council for a bee now (all the brains its tier and level allow). */
+  /** Convene a council for a bunny now (all the brains its tier and level allow). */
   council?: (id: BeeId) => Promise<unknown>;
   /** Survival and rewards board (evolution.ts). */
   evolution?: () => unknown;
@@ -104,7 +104,7 @@ export interface AdminOpts {
   research?: Researcher;
   /** Drafts skills from a description, with any brain that can answer (lab/skillAgent.ts). */
   skillAgent?: SkillAgent;
-  /** The gate to outside MCP servers (mcp/gateway.ts): discovery here, grants enforced when a bee researches. */
+  /** The gate to outside MCP servers (mcp/gateway.ts): discovery here, grants enforced when a bunny researches. */
   mcp?: McpGateway;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
@@ -134,13 +134,13 @@ const BeeEdit = z.object({
   rules: Str(500).default(""),
   coins: BeeSchema.shape.coins,
   style: z.enum(STYLES),
-  /** Extra bees only: which LLM brain it thinks with. */
+  /** Extra bunnies only: which LLM brain it thinks with. */
   brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/, "brain: an id like openai, claude, kimi, zai or a custom one").optional(),
-  /** Extra bees only: what it trades (the macro squad trades stocks and commodities). */
+  /** Extra bunnies only: what it trades (the macro squad trades stocks and commodities). */
   market: z.enum(MARKETS).optional(),
-  /** Extra bees only: the money it starts with, set when it is created. */
+  /** Extra bunnies only: the money it starts with, set when it is created. */
   walletUsd: Wallet.optional(),
-  /** OKX sub-account keys to check and save for this bee (new keys, or a replacement while it is flat). */
+  /** OKX sub-account keys to check and save for this bunny (new keys, or a replacement while it is flat). */
   exchange: Exchange.optional(),
 });
 /** bee4 -> 3 */
@@ -151,11 +151,11 @@ const SlotBody = z.object({ bee: z.string() });
 const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
 const PasswordBody = z.object({ next: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD) });
 const RealCheckBody = z.object({ stages: z.array(z.enum(CHECK_STAGES)).min(1).max(CHECK_STAGES.length) });
-const NoteBee = z.string().regex(/^(bee[1-9]|hive)$/, "bee: bee1..bee9 or hive");
+const NoteBee = z.string().regex(/^(bee[1-9]|hive)$/, "bunny: bee1..bee9 or warren");
 const NoteAdd = z.object({ bee: NoteBee, title: Str(80), text: Str(700), coins: z.array(Str(20)).max(6).default([]) });
 const NoteDecide = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/), decision: z.enum(["approve", "reject"]) });
 const NoteRef = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/) });
-const ResearchBody = z.object({ bee: z.string().regex(/^bee[1-9]$/, "bee: bee1..bee9") });
+const ResearchBody = z.object({ bee: z.string().regex(/^bee[1-9]$/, "bunny: bee1..bee9") });
 const CustomBrainBody = z.object({
   id: CustomBrainSchema.shape.id,
   label: CustomBrainSchema.shape.label,
@@ -224,7 +224,7 @@ export class Admin {
     return [...BRAINS, ...(loadSettings(this.o.settingsPath)?.customBrains ?? []).map((b) => b.id)];
   }
 
-  /** Which bees and settings use each brain, so one that is in use cannot be removed from under them. */
+  /** Which bunnies and settings use each brain, so one that is in use cannot be removed from under them. */
   private brainUsers(id: string): string[] {
     const s = loadSettings(this.o.settingsPath);
     const users: string[] = (s?.bees ?? []).flatMap((b, i) => (b.brain === id ? [slotId(i)] : []));
@@ -245,7 +245,7 @@ export class Admin {
     return !!(this.o.env[name] ?? "").trim();
   }
 
-  /** The environment holds this bee's OKX keys for that kind (they win over the panel's). */
+  /** The environment holds this bunny's OKX keys for that kind (they win over the panel's). */
   private envExchange(slot: BeeId, kind: Kind): boolean {
     const infix = kind === "demo" ? "OKX_DEMO_API" : "OKX_API";
     return ["KEY", "SECRET", "PASSPHRASE"].some((x) => this.envSet(`${slot.toUpperCase()}_${infix}_${x}`));
@@ -260,7 +260,7 @@ export class Admin {
     }
   }
 
-  /** What the panel may know about a bee's exchange keys: set?, from where, and the last check. Never a key. */
+  /** What the panel may know about a bunny's exchange keys: set?, from where, and the last check. Never a key. */
   private exchangeView(slot: BeeId, b: Settings["bees"][number]) {
     return Object.fromEntries(
       KINDS.map((k) => {
@@ -368,7 +368,7 @@ export class Admin {
         : null,
       maxBees: MAX_BEES,
       defaultWalletUsd: this.defaultWallet(),
-      /** Outside paper trading a new bee needs checked keys for this kind before it is created. */
+      /** Outside paper trading a new bunny needs checked keys for this kind before it is created. */
       exchangeRequired: this.o.mode === "dry" ? null : this.o.mode,
       exchangeCheck: !!this.o.okxCheck,
       coins: this.o.coins?.() ?? [],
@@ -517,17 +517,17 @@ export class Admin {
 
       case "/admin/bees": {
         const p = BeesBody.safeParse(body);
-        if (!p.success) return send(res, 400, { error: p.error.issues.map((i) => `bee ${Number(i.path[1] ?? 0) + 1} ${String(i.path[2] ?? "")}: ${i.message}`).join("; ") });
+        if (!p.success) return send(res, 400, { error: p.error.issues.map((i) => `bunny ${Number(i.path[1] ?? 0) + 1} ${String(i.path[2] ?? "")}: ${i.message}`).join("; ") });
         const s = loadSettings(this.o.settingsPath);
-        if (!s) return send(res, 409, { error: "The original three bees run without a Setup file; design your own on Setup first." });
+        if (!s) return send(res, 409, { error: "The original three bunnies run without a Setup file; design your own on Setup first." });
         const names = p.data.bees.map((b) => b.name.toLowerCase());
-        if (new Set(names).size !== names.length) return send(res, 400, { error: "Each bee needs its own name." });
-        // Only the last bees can go (slots are positions: removing one in the middle would hand its books to another),
+        if (new Set(names).size !== names.length) return send(res, 400, { error: "Each bunny needs its own name." });
+        // Only the last bunnies can go (slots are positions: removing one in the middle would hand its books to another),
         // and only while flat.
         const removed = s.bees.slice(p.data.bees.length).map((_, i) => slotId(p.data.bees.length + i));
         const holding = removed.filter((id) => this.o.isFlat && !this.o.isFlat(id));
         if (holding.length) return send(res, 409, { error: `${holding.join(", ")} still holds a position; it must be flat before it is removed.` });
-        // Each bee's coins must be live X-Perps of its own market (the main three trade crypto only).
+        // Each bunny's coins must be live X-Perps of its own market (the main three trade crypto only).
         const crypto = this.o.coins?.() ?? [];
         const macro = this.o.macroCoins?.() ?? { commodities: [], stocks: [] };
         const listFor = (m: MarketId) => (m === "crypto" ? crypto : m === "commodities" ? macro.commodities : m === "stocks" ? macro.stocks : [...macro.commodities, ...macro.stocks]);
@@ -539,8 +539,8 @@ export class Admin {
           if (bad.length) return send(res, 400, { error: `${b.name}: not a live ${MARKET_INFO[m].label} X-Perp on OKX right now: ${bad.join(", ")}.` });
         }
         const reserved = p.data.bees.find((b) => isReservedName(b.name));
-        if (reserved) return send(res, 400, { error: `"${reserved.name}" belongs to an official bee.` });
-        // Wallet and exchange: a new bee is created only with its wallet set and, outside paper trading, with keys
+        if (reserved) return send(res, 400, { error: `"${reserved.name}" belongs to an official bunny.` });
+        // Wallet and exchange: a new bunny is created only with its wallet set and, outside paper trading, with keys
         // for this mode that pass the account check (Trade, no Withdraw, a sub-account holding at least the wallet).
         const running = this.o.runningBees?.() ?? [];
         const okx: Array<Settings["bees"][number]["okx"]> = [];
@@ -550,11 +550,11 @@ export class Admin {
           const extra = i >= BEES.length;
           const fresh = !old || !running.includes(slot);
           if (!extra && b.walletUsd !== undefined && b.walletUsd !== this.defaultWallet())
-            return send(res, 400, { error: `${b.name}: the main three share the start equity (Settings → Risk), so the Hive can compare them.` });
+            return send(res, 400, { error: `${b.name}: the main three share the start equity (Settings → Risk), so the Warren can compare them.` });
           const wallet = extra ? (b.walletUsd ?? old?.walletUsd) : this.defaultWallet();
           if (extra && !old && !b.walletUsd) return send(res, 400, { error: `${b.name}: set its wallet (the money it starts with) before creating it.` });
           if (extra && old && b.walletUsd !== undefined && b.walletUsd !== (old.walletUsd ?? this.defaultWallet()) && !fresh)
-            return send(res, 400, { error: `${b.name}: the wallet is set when a bee is created. It already trades, so it keeps $${old.walletUsd ?? this.defaultWallet()}.` });
+            return send(res, 400, { error: `${b.name}: the wallet is set when a bunny is created. It already trades, so it keeps $${old.walletUsd ?? this.defaultWallet()}.` });
           let keys = old?.okx;
           const need = this.o.mode === "dry" ? null : this.o.mode;
           if (b.exchange) {
@@ -564,7 +564,7 @@ export class Admin {
             const f = await this.o.okxCheck(b.exchange, b.exchange.kind, wallet ?? this.defaultWallet());
             if (f.problems.length) return send(res, 400, { error: `${b.name}: ${f.problems.join(" ")}` });
             const clash = s.bees.findIndex((o, j) => j !== i && f.uidHash && KINDS.some((k) => o.okx?.[k]?.uidHash === f.uidHash));
-            if (clash >= 0) return send(res, 400, { error: `${b.name}: these keys open the same OKX account as ${s.bees[clash]!.name}. Each bee needs its own sub-account.` });
+            if (clash >= 0) return send(res, 400, { error: `${b.name}: these keys open the same OKX account as ${s.bees[clash]!.name}. Each bunny needs its own sub-account.` });
             keys = { ...(keys ?? {}), [b.exchange.kind]: { apiKey: b.exchange.apiKey, secretKey: b.exchange.secretKey, passphrase: b.exchange.passphrase, checkedAt: this.now(), balanceUsd: f.usdcUsd, uidHash: f.uidHash } };
           }
           if (need && !old && !keys?.[need] && !this.envExchange(slot, need))
@@ -590,17 +590,17 @@ export class Admin {
           else delete next.okx;
           return next;
         });
-        // A brand-new bee starts with fresh paper money, never with the books of a bee that once had its slot.
+        // A brand-new bunny starts with fresh paper money, never with the books of a bunny that once had its slot.
         for (const id of added) this.o.forgetBee?.(id);
         if (badBrain) return send(res, 400, { error: badBrain });
         saveSettings(this.o.settingsPath, { ...s, bees });
         this.pending = true;
-        log.info("admin: bees saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
+        log.info("admin: bunnies saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
         return send(res, 200, this.state());
       }
 
       case "/admin/exchange/check": {
-        // Test keys before the bee is created: read-only, nothing saved.
+        // Test keys before the bunny is created: read-only, nothing saved.
         const p = CheckBody.safeParse(body);
         if (!p.success) return send(res, 400, { error: "kind (demo or live), apiKey, secretKey, passphrase and walletUsd (10 to 1,000,000)" });
         if (!this.o.okxCheck) return send(res, 503, { error: "The OKX account check is not available on this server." });
@@ -608,7 +608,7 @@ export class Admin {
         const s = loadSettings(this.o.settingsPath);
         const self = p.data.bee && isBeeId(p.data.bee) ? ALL_INDEX(p.data.bee) : -1;
         const clash = s?.bees.findIndex((o, j) => j !== self && !!f.uidHash && KINDS.some((k) => o.okx?.[k]?.uidHash === f.uidHash)) ?? -1;
-        if (clash >= 0) f.problems.push(`These keys open the same OKX account as ${s!.bees[clash]!.name}. Each bee needs its own sub-account.`);
+        if (clash >= 0) f.problems.push(`These keys open the same OKX account as ${s!.bees[clash]!.name}. Each bunny needs its own sub-account.`);
         log.info("admin: exchange keys checked", { kind: p.data.kind, ok: f.ok && !f.problems.length });
         return send(res, 200, { ...f, uidHash: undefined, ready: f.ok && !f.problems.length });
       }
@@ -625,21 +625,21 @@ export class Admin {
 
       case "/admin/revive": {
         const p = SlotBody.safeParse(body);
-        if (!p.success || !isBeeId(p.data.bee) || !this.o.revive) return send(res, 400, { error: "bee: bee1..bee9" });
+        if (!p.success || !isBeeId(p.data.bee) || !this.o.revive) return send(res, 400, { error: "bunny: bee1..bee9" });
         try {
           this.o.revive(p.data.bee);
         } catch (err) {
           return send(res, 409, { error: (err as Error).message });
         }
-        log.info("admin: bee revived", { bee: p.data.bee });
+        log.info("admin: bunny revived", { bee: p.data.bee });
         return send(res, 200, this.state());
       }
 
       case "/admin/council": {
         const p = SlotBody.safeParse(body);
-        if (!p.success || !isBeeId(p.data.bee) || !this.o.council) return send(res, 400, { error: "bee: bee1..bee9" });
+        if (!p.success || !isBeeId(p.data.bee) || !this.o.council) return send(res, 400, { error: "bunny: bee1..bee9" });
         void this.o.council(p.data.bee).catch((err) => log.warn("admin: council failed", { err: safeError(err) }));
-        return send(res, 200, { ok: true, note: "Council convened: its brains are thinking. Lessons, messages and any new skill appear in the hive mind in a minute or two." });
+        return send(res, 200, { ok: true, note: "Council convened: its brains are thinking. Lessons, messages and any new skill appear in the warren memory in a minute or two." });
       }
 
       case "/admin/skills/import": {
@@ -943,7 +943,7 @@ export class Admin {
       case "/admin/notes/add": {
         const p = NoteAdd.safeParse(body);
         if (!this.o.notes) return send(res, 503, { error: "Notes are not available here." });
-        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "bee, title and text" });
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "bunny, title and text" });
         try {
           this.o.notes.add({ bee: p.data.bee, kind: "background", author: "owner", title: p.data.title, text: p.data.text, coins: p.data.coins });
         } catch (err) {
@@ -983,7 +983,7 @@ export class Admin {
 
       case "/admin/research": {
         const p = ResearchBody.safeParse(body);
-        if (!p.success) return send(res, 400, { error: "bee: bee1..bee9" });
+        if (!p.success) return send(res, 400, { error: "bunny: bee1..bee9" });
         const r = this.o.research;
         if (!r) return send(res, 503, { error: "Research is not available here." });
         const why = r.blocked(p.data.bee as BeeId);
@@ -1036,7 +1036,7 @@ export class Admin {
       case "/admin/coach": {
         if (!this.o.coachNow) return send(res, 409, { error: "No brain has a key, so there is nobody to coach." });
         void this.o.coachNow().catch((err) => log.warn("admin: coach run failed", { err: safeError(err) }));
-        return send(res, 200, { ok: true, note: "Coach review started; lessons appear in the hive mind in a minute or two." });
+        return send(res, 200, { ok: true, note: "Coach review started; lessons appear in the warren memory in a minute or two." });
       }
 
       case "/admin/restart":

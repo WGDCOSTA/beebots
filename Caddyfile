@@ -28,7 +28,7 @@
 		}
 	}
 
-	# Joining or leaving the Hive from the dashboard. The engine needs the owner password for both.
+	# Joining or leaving the Warren from the dashboard. The engine needs the owner password for both.
 	# (/hive/report is the live leaderboard's own route; the engine does not serve it.)
 	@hive {
 		method POST

@@ -58,16 +58,16 @@ export async function designBee(apiKey: string, model: string, description: stri
         {
           role: "system",
           content:
-            "You design a cartoon trading bee for a paper-trading game on OKX perpetual futures, from its owner's description. Return:\n" +
+            "You design a cartoon trading bunny for a paper-trading game on OKX perpetual futures, from its owner's description. Return:\n" +
             "- name: a fun name, one or two words, max 20 characters, letters and spaces only. Never " +
             reserved +
-            " or any spelling of them (they belong to the official bees).\n" +
+            " or any spelling of them (they belong to the official bunnies).\n" +
             "- tagline: 2-5 words starting with 'the', e.g. 'the sleepy dip hunter'.\n" +
-            "- rules: the bee's trading instructions in plain English, 2-4 short imperative sentences, max 450 characters. " +
+            "- rules: the bunny's trading instructions in plain English, 2-4 short imperative sentences, max 450 characters. " +
             "They are read by the decision model on every tick, so be concrete: which coins, when to go long or short, when to hold, when to get out. No prices or dates.\n" +
-            "- coins: tickers the bee is restricted to, only from the list below, [] if the owner wants any coin.\n" +
+            "- coins: tickers the bunny is restricted to, only from the list below, [] if the owner wants any coin.\n" +
             "- baseStyle: the built-in engine it runs on. bizzy only if coins are all in BTC, ETH, SOL, HYPE; breezy only if coins are all in BTC, ETH; otherwise boozy.\n" +
-            "- look: one or two sentences on what the bee looks like (props, outfit, mood) for its portrait. No real people's faces, no logos, no text.\n" +
+            "- look: one or two sentences on what the bunny looks like (props, outfit, mood) for its portrait. No real people's faces, no logos, no text.\n" +
             "Never give financial advice.\n\nBuilt-in engines:\n" +
             styles +
             "\n\nCoins on OKX EEA right now: " +
@@ -107,19 +107,21 @@ export async function designBee(apiKey: string, model: string, description: stri
 }
 
 const PORTRAIT_BRIEF =
-  "Create a new character portrait in exactly the same art style as the reference images: a glossy 3D animated " +
-  "cartoon bee with big expressive eyes, fuzzy yellow and black stripes, translucent wings, one or two character " +
-  "props, dramatic rim lighting and a dark background with glowing particles, square head-and-shoulders framing. " +
-  "It must be a different bee from the references, clearly part of the same family. No text, no letters, no logos.";
+  "Create a new character portrait in exactly the same art style as the reference images (glossy 3D animated cartoon, big " +
+  "expressive eyes, one or two character props, dramatic rim lighting, a dark background with glowing particles, square " +
+  "head-and-shoulders framing), but the character is a BUNNY, not a bee: a cartoon rabbit with long expressive ears, soft " +
+  "fuzzy fur and a small cotton tail. The references show the older bee characters; take their rendering, lighting and " +
+  "background, not their species, wings or stripes. It must be a different character from the references, clearly part of " +
+  "the same family. No text, no letters, no logos.";
 
 /**
- * Paints a portrait with the three original bees as style references. Returns PNG bytes.
+ * Paints a bunny portrait with the three original characters as style references. Returns PNG bytes.
  * `refDir` holds the reference portraits (the dashboard's default bee art).
  */
 export async function paintBee(apiKey: string, model: string, refDir: string, name: string, look: string, timeoutMs = 180_000): Promise<Buffer> {
   const form = new FormData();
   form.append("model", model);
-  form.append("prompt", `${PORTRAIT_BRIEF}\n\nThis bee is called ${name}. What it looks like and how it behaves: ${look.slice(0, 400)}`);
+  form.append("prompt", `${PORTRAIT_BRIEF}\n\nThis bunny is called ${name}. What it looks like and how it behaves: ${look.slice(0, 400)}`);
   form.append("size", "1024x1024");
   form.append("quality", "medium");
   form.append("output_format", "jpeg");

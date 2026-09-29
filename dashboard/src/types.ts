@@ -2,12 +2,12 @@
 import { BEE_MARK_URL } from "./BeeMark";
 
 /**
- * Bee slots: the three main bees (the live columns), then any extra bees added from the admin panel (bee4..bee9).
+ * Bunny slots: the three main bunnies (the live columns), then any extra bunnies added from the admin panel (bee4..bee9).
  * Names, taglines and portraits come from the engine's /profile.
  */
 export type BeeName = string;
 export const BEE_NAMES: BeeName[] = ["bee1", "bee2", "bee3"];
-/** Every bee the engine runs, main three first. Filled in from /profile. */
+/** Every bunny the engine runs, main three first. Filled in from /profile. */
 export const ALL_BEES: BeeName[] = [...BEE_NAMES];
 
 export type Cap = "trade_cap" | "fee_budget" | "loss_stop" | "retired" | null;
@@ -26,7 +26,7 @@ export interface LastDecision {
 export interface PublicBee {
   bee: BeeName;
   equityUsd: number;
-  /** What this bee started with (its own wallet, or the shared start equity). */
+  /** What this bunny started with (its own wallet, or the shared start equity). */
   startEquityUsd?: number;
   pnlUsd: number;
   pnlPct: number;
@@ -53,7 +53,7 @@ export interface PublicBee {
   evo?: { tier: Tier; health: number; points: number; level: number; deaths: number } | null;
   /** The coins its AI brains chose that the engine applies right now (null = the style's normal choice). */
   watchlist?: { coins: string[]; probation: string[]; items?: Array<{ coin: string; reason: string; probation: boolean; addedAt: number | null }> } | null;
-  /** The scalper's mandate, circuit breaker and last look (null unless this bee scalps). */
+  /** The scalper's mandate, circuit breaker and last look (null unless this bunny scalps). */
   scalp?: { gateOpen: boolean; note: string; last: string | null; mandate: { coin: string; bias: string; used: number; maxTrades: number; expiresAt: number } | null; pausedUntil: number | null; lossStreak: number } | null;
   /** The LLM brain that plans for it, and whether that brain has a key or sign-in. */
   brain?: { id: string; label?: string; model: string | null; online: boolean };
@@ -100,7 +100,7 @@ export interface SystemInfo {
   macroTrading: boolean;
   macroBees: number;
   maxLeverage: number;
-  /** The scalper: master switch, whether the lab's gate is open, and how many bees scalp. */
+  /** The scalper: master switch, whether the lab's gate is open, and how many bunnies scalp. */
   scalp?: { enabled: boolean; gateOpen: boolean; reason: string; bees: number };
   /** CoinMarketCap's market mood (null when no key or stale). */
   cmc?: {
@@ -174,13 +174,13 @@ export interface DecisionEvent {
   forcedBy: string | null;
   status: string;
   jev: string;
-  /** A benched bee's live row: no Jev call, just its position P&L moving. */
+  /** A benched bunny's live row: no Jev call, just its position P&L moving. */
   pulse?: boolean;
-  /** Flat bee with nothing to ask Jev: what it is watching for (e.g. "SOL is 0.80% from breakout"). */
+  /** Flat bunny with nothing to ask Jev: what it is watching for (e.g. "SOL is 0.80% from breakout"). */
   watch?: string;
   /** One legal move (a hold, e.g. boozy's 24h lock): the rules decided and Jev was not asked. */
   required?: boolean;
-  /** The bee's money at this moment: open P&L while positioned, total P&L when flat, and the move since its last row. */
+  /** The bunny's money at this moment: open P&L while positioned, total P&L when flat, and the move since its last row. */
   live?: { coin: string | null; side: "long" | "short" | null; valueUsd: number; kind: "open" | "total"; deltaUsd: number };
 }
 
@@ -225,12 +225,12 @@ export type AnyEvent =
   | { type: "order" | "heartbeat" | "status" | "evolution"; ts: number; [k: string]: unknown };
 
 export interface BeeMeta {
-  /** Card title: "Boozy Bee" for the official three, the owner's own name for a Setup-made bee. */
+  /** Card title: "Boozy Bunny" for the official three, the owner's own name for a Setup-made bunny. */
   title: string;
   short: string;
   tagline: string;
   styleLabel: string;
-  /** The owner's rules for this bee (Setup), "" for the original three. */
+  /** The owner's rules for this bunny (Setup), "" for the original three. */
   rules: string;
   coins: string[];
   img: string;
@@ -241,18 +241,18 @@ export interface BeeMeta {
   squad?: "crypto" | "macro";
 }
 
-/** Colours belong to the slot, so two bees on the same style still look different. Filled in from /profile at load. */
+/** Colours belong to the slot, so two bunnies on the same style still look different. Filled in from /profile at load. */
 export const BEE_META: Record<string, BeeMeta> = {
-  bee1: { title: "Bizzy Bee", short: "Bizzy", tagline: "the grinder", styleLabel: "Breakout", rules: "", coins: [], img: "/bees/bizzy.jpg", color: "var(--bizzy)", glow: "var(--bizzy-glow)" },
-  bee2: { title: "Breezy Bee", short: "Breezy", tagline: "the calculated one", styleLabel: "Trend", rules: "", coins: [], img: "/bees/breezy.jpg", color: "var(--breezy)", glow: "var(--breezy-glow)" },
-  bee3: { title: "Boozy Bee", short: "Boozy", tagline: "the degen", styleLabel: "Momentum", rules: "", coins: [], img: "/bees/boozy.jpg", color: "var(--boozy)", glow: "var(--boozy-glow)" },
+  bee1: { title: "Bizzy Bunny", short: "Bizzy", tagline: "the grinder", styleLabel: "Breakout", rules: "", coins: [], img: "/bees/bizzy.jpg", color: "var(--bizzy)", glow: "var(--bizzy-glow)" },
+  bee2: { title: "Breezy Bunny", short: "Breezy", tagline: "the calculated one", styleLabel: "Trend", rules: "", coins: [], img: "/bees/breezy.jpg", color: "var(--breezy)", glow: "var(--breezy-glow)" },
+  bee3: { title: "Boozy Bunny", short: "Boozy", tagline: "the degen", styleLabel: "Momentum", rules: "", coins: [], img: "/bees/boozy.jpg", color: "var(--boozy)", glow: "var(--boozy-glow)" },
 };
 
 export interface Profile {
   setup: boolean;
   mode: "dry" | "demo" | "live";
   links: { sponsor: string; code: string } | null;
-  /** img null: a Setup-made bee without its portrait (the dashboard shows the placeholder mark). */
+  /** img null: a Setup-made bunny without its portrait (the dashboard shows the placeholder mark). */
   bees: Array<{ id: BeeName; name: string; tagline: string; style: string; styleLabel: string; rules?: string; coins?: string[]; img: string | null; market?: string; squad?: "crypto" | "macro" }>;
 }
 
@@ -261,7 +261,7 @@ export const PROFILE: { links: Profile["links"] } = { links: null };
 const OFFICIAL_NAMES = ["Bizzy", "Breezy", "Boozy"];
 
 /**
- * Extra bees take the remaining categorical slots of the validated dark palette in fixed order (the main three hold
+ * Extra bunnies take the remaining categorical slots of the validated dark palette in fixed order (the main three hold
  * yellow, violet and magenta): blue, orange, aqua, green, red, then again with a lighter glow.
  */
 const EXTRA_COLORS = ["#3987e5", "#d95926", "#199e70", "#008300", "#e66767", "#6da7ec"];
@@ -282,7 +282,7 @@ export function applyProfile(p: Profile): void {
     }
     const m = BEE_META[b.id]!;
     m.short = b.name;
-    m.title = OFFICIAL_NAMES.includes(b.name) ? `${b.name} Bee` : b.name;
+    m.title = OFFICIAL_NAMES.includes(b.name) ? `${b.name} Bunny` : b.name;
     m.tagline = b.tagline;
     m.styleLabel = b.styleLabel;
     m.rules = b.rules ?? "";
@@ -293,14 +293,14 @@ export function applyProfile(p: Profile): void {
   }
 }
 
-/** Shown on Setup and in the dashboard's Hive dialog. */
+/** Shown on Setup and in the dashboard's Warren dialog. */
 export const HIVE_DISCLAIMER =
-  "You're about to share your bees' names, styles and paper-trading results on the public leaderboard at beebots.tech. The board shows % gain/loss only. No keys, no exchange account details, no IP address. Paper trading only. Not financial advice. You can leave any time.";
+  "You're about to share your bunnies' names, styles and paper-trading results on the public leaderboard at beebots.tech. The board shows % gain/loss only. No keys, no exchange account details, no IP address. Paper trading only. Not financial advice. You can leave any time.";
 
-/** The engine's GET /hive/status. No hive id, no key. */
+/** The engine's GET /hive/status. No warren id, no key. */
 export interface HiveStatus {
   joined: boolean;
-  /** false in MODE=live: the Hive is paper only. */
+  /** false in MODE=live: the Warren is paper only. */
   paper: boolean;
   /** The leaderboard's base URL (HIVE_URL). */
   board: string;

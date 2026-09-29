@@ -8,7 +8,7 @@ import "./styles.css";
 import "./panels.css";
 import { applyProfile, type Profile } from "./types";
 
-/** Hash routes: #/ live dashboard, #/lab ranking + hive mind, #/admin owner panel. */
+/** Hash routes: #/ live dashboard, #/lab ranking + warren memory, #/admin owner panel. */
 function Routes() {
   const read = () => location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] ?? "";
   const [route, setRoute] = useState(read);

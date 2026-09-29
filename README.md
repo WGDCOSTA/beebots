@@ -1,15 +1,15 @@
 # beebots 🐝
 
-[![Watch the video: I built AI trading bees with Jev](docs/video.jpg)](https://www.youtube.com/watch?v=8ijN8LGljKg)
+[![Watch the video: I built AI trading bunnies with Jev](docs/video.jpg)](https://www.youtube.com/watch?v=8ijN8LGljKg)
 
-Three AI trading bees race each other on OKX perpetual futures. Every decision comes from **Jev** (TypeSafe AI's
+Three AI trading bunnies race each other on OKX perpetual futures. Every decision comes from **Jev** (TypeSafe AI's
 decision model), and every order goes through a risk layer written in plain code. A live dashboard shows each
 decision, order, fee and funding payment as it happens.
 
-**It runs on paper by default.** The bees use real market prices and simulated money. Nothing touches an exchange
+**It runs on paper by default.** The bunnies use real market prices and simulated money. Nothing touches an exchange
 account unless you change the settings yourself, on purpose.
 
-![The beebots dashboard: three named bees trading on paper](docs/screenshots/dashboard.jpg)
+![The beebots dashboard: three named bunnies trading on paper](docs/screenshots/dashboard.jpg)
 
 > **Not financial advice.** beebots is an experiment and a piece of open-source software. It is not a trading product,
 > and nothing it does is a recommendation to buy or sell anything. Leveraged crypto trading can lose everything you
@@ -29,25 +29,25 @@ Use code **MAGIC10** at checkout for 10% off.
 3. On Setup:
    - tick the three risk statements
    - pick an **owner password** (8+ characters). Your dashboard is public; the password is what lets *you* change
-     things from it later, like joining or leaving the Hive. Write it down.
+     things from it later, like joining or leaving the Warren. Write it down.
    - paste your **Jev key** (from [console.typesafe.ai/keys](https://console.typesafe.ai/keys))
-   - paste an **OpenAI key** (required: it designs your bees and paints them; a few cents in total)
-   - design your three bees. For each one, answer **How do you want this bee to trade?** in a sentence ("a Trump bee
-     that only ever trades TRUMP", "a sleepy bee that only buys bitcoin dips"), press **Create my bee**, and OpenAI
+   - paste an **OpenAI key** (required: it designs your bunnies and paints them; a few cents in total)
+   - design your three bunnies. For each one, answer **How do you want this bunny to trade?** in a sentence ("a Trump bunny
+     that only ever trades TRUMP", "a sleepy bunny that only buys bitcoin dips"), press **Create my bunny**, and OpenAI
      invents its name, tagline, trading rules and the coins it may trade. Rename it if you like, then press
-     **Generate your bee's portrait**. You can carry on once all three bees have their portraits.
-   - choose whether to join **the Hive** (see below). "Not now" is fine; you can join later.
+     **Generate your bunny's portrait**. You can carry on once all three bunnies have their portraits.
+   - choose whether to join **the Warren** (see below). "Not now" is fine; you can join later.
 4. Press **Start paper trading**. The engine restarts, and the dashboard goes live.
 
-| Agree to the rules | Pick an owner password | Design your bees |
+| Agree to the rules | Pick an owner password | Design your bunnies |
 |---|---|---|
-| ![Risk statements](docs/screenshots/setup-rules.jpg) | ![Owner password](docs/screenshots/setup-password.jpg) | ![Design your bees](docs/screenshots/setup-bees.jpg) |
+| ![Risk statements](docs/screenshots/setup-rules.jpg) | ![Owner password](docs/screenshots/setup-password.jpg) | ![Design your bunnies](docs/screenshots/setup-bees.jpg) |
 
 ### Setup safety
 
 Setup has no code to find: the page is open to whoever reaches the server first. So:
 
-- **First come, first served.** Once you press Start, Setup closes for good. Nobody else can change your keys or bees.
+- **First come, first served.** Once you press Start, Setup closes for good. Nobody else can change your keys or bunnies.
 - **A setup window.** If nobody finishes Setup within 2 hours of the engine starting (`SETUP_WINDOW_MIN`, default
   120), it locks, and the page says so. Restart the engine to open it again: Hostinger **Docker Manager** → the
   `beebots` project → **Restart** on the `engine` container, or `docker compose restart engine`.
@@ -56,14 +56,14 @@ Setup has no code to find: the page is open to whoever reaches the server first.
 Set up right after deploying, and use a domain with HTTPS if you can (`PUBLIC_DOMAIN`, below) so your keys don't
 travel over plain HTTP.
 
-Each bee gets its own portrait, painted in the same style as the originals:
+Each bunny gets its own portrait, painted in the same style as the originals:
 
 <img src="docs/screenshots/generated-bee.jpg" alt="A generated bee portrait" width="256">
 
-**Copy a winning bee.** Every bee on [beebots.tech](https://beebots.tech) shows its rules with a **Copy** button. Copy
-a winner's rules and paste them into **How do you want this bee to trade?** to start from its playbook.
+**Copy a winning bunny.** Every bunny on [beebots.tech](https://beebots.tech) shows its rules with a **Copy** button. Copy
+a winner's rules and paste them into **How do you want this bunny to trade?** to start from its playbook.
 
-Each bee starts with $333 of paper money. Jev spending is capped at $2 a day by default.
+Each bunny starts with $333 of paper money. Jev spending is capped at $2 a day by default.
 
 ### Already have a server?
 
@@ -81,7 +81,7 @@ Then open `http://<your-server-ip>/`.
 New versions are published as [releases](https://github.com/imikerussell/beebots/releases). When one is out, your
 dashboard shows **Update available** next to the trading mode, linking to what's new. Nothing updates by itself.
 
-To update, pull the new images and restart. Your bees, settings and history live in Docker volumes and are kept:
+To update, pull the new images and restart. Your bunnies, settings and history live in Docker volumes and are kept:
 
 ```sh
 docker compose pull
@@ -91,92 +91,92 @@ docker compose up -d
 Run it over SSH (or hPanel's browser terminal on Hostinger) in the folder that holds your `docker-compose.yml`
 (`docker compose ls` shows where it is). To turn the check off, set `UPDATE_CHECK=false`.
 
-## The Hive
+## The Warren
 
-The Hive is a public leaderboard at [beebots.tech](https://beebots.tech) where everyone's bees race each other. It is
+The Warren is a public leaderboard at [beebots.tech](https://beebots.tech) where everyone's bunnies race each other. It is
 **opt-in**: nothing is sent unless you join. What you agree to when you join:
 
-> You're about to share your bees' names, styles and paper-trading results on the public leaderboard at beebots.tech. The board shows % gain/loss only. No keys, no exchange account details, no IP address. Paper trading only. Not financial advice. You can leave any time.
+> You're about to share your bunnies' names, styles and paper-trading results on the public leaderboard at beebots.tech. The board shows % gain/loss only. No keys, no exchange account details, no IP address. Paper trading only. Not financial advice. You can leave any time.
 
-- **What is shared:** your bees' names, taglines and styles, their trade counts, their paper equity and funding, and
+- **What is shared:** your bunnies' names, taglines and styles, their trade counts, their paper equity and funding, and
   each paper fill (coin, side, size, price, time, fee). The board shows the % gain or loss, not dollars; the equity and fills are
-  there so it can replay every trade against OKX's public prices and mark the bee **verified**. Also a random hive id
+  there so it can replay every trade against OKX's public prices and mark the bunny **verified**. Also a random warren id
   and key made when you join, so later reports can be matched to your install.
 - **Never shared:** your Jev, OpenAI or OKX keys, any exchange account data, your server's address, or anything else.
 - **Paper only.** The engine refuses to report in `MODE=live`, and the board rejects live reports.
-- **Join or leave:** tick it on Setup, or use **Join the Hive** in the dashboard header. Joining and leaving from the
+- **Join or leave:** tick it on Setup, or use **Join the Warren** in the dashboard header. Joining and leaving from the
   dashboard need your **owner password** (the one you picked on Setup; 8 wrong tries lock it for 15 minutes). Leaving
-  removes your bees and their history from the board. Running Setup
-  again and answering **Not now** also leaves the Hive, on the next engine start.
+  removes your bunnies and their history from the board. Running Setup
+  again and answering **Not now** also leaves the Warren, on the next engine start.
 
-The Hive is a game, not a signal service. **Not financial advice.**
+The Warren is a game, not a signal service. **Not financial advice.**
 
-## How your bees trade
+## How your bunnies trade
 
 Your sentence becomes two things the engine enforces, and one it passes on:
 
-- **Coins.** If your bee names coins, it only ever trades those. They must be crypto perpetuals listed on OKX EEA right
+- **Coins.** If your bunny names coins, it only ever trades those. They must be crypto perpetuals listed on OKX EEA right
   now (Setup checks the live list and asks you to rephrase if none match).
-- **The engine it runs on.** Every bee runs on one of three built-in trading styles below. A bee limited to BTC and/or
+- **The engine it runs on.** Every bunny runs on one of three built-in trading styles below. A bunny limited to BTC and/or
   ETH can run on Trend; one limited to BTC, ETH, SOL or HYPE can run on Breakout; everything else runs on Momentum,
   which works on any coin.
 - **Rules.** Its rules go to Jev with every decision, and Jev follows them when picking among the moves the style
   offers. They steer the choice; they can't invent moves the style doesn't have, and the risk layer below still applies.
 
-A coin still has to pass the same gates as any other (at least $1M of 24h volume, a tight spread). If your bee's coin
-doesn't, the bee just waits until it does.
+A coin still has to pass the same gates as any other (at least $1M of 24h volume, a tight spread). If your bunny's coin
+doesn't, the bunny just waits until it does.
 
 ## The three trading styles
 
-| style | the original bee | what it does |
+| style | the original bunny | what it does |
 |---|---|---|
 | **Breakout** | Bizzy, the grinder | One volatility breakout a day on BTC, ETH, SOL or HYPE, ridden to the daily close. |
 | **Trend** | Breezy, the calculated one | Trend following on BTC and ETH only. Few trades, rides winners, sized by volatility. |
 | **Momentum** | Boozy, the degen | Chases the strongest 7-day mover across every liquid coin, and adds to winners. |
 
-Bizzy, Breezy and Boozy are the official bees (they run on [beebots.tech](https://beebots.tech)), so their names and art
-are theirs; your bees get their own. Two of your bees can share a style. The full rules are in [`strategies/`](strategies/), and the rules every bee
+Bizzy, Breezy and Boozy are the official bunnies (they run on [beebots.tech](https://beebots.tech)), so their names and art
+are theirs; your bunnies get their own. Two of your bunnies can share a style. The full rules are in [`strategies/`](strategies/), and the rules every bunny
 shares (caps, stops, "never flat for long") are in [`strategies/DRAMA_RULES.md`](strategies/DRAMA_RULES.md).
 
 ## How a decision is made
 
-Every tick, for every bee:
+Every tick, for every bunny:
 
 1. **Look.** Live OKX market data: tickers, candles, RSI, MACD, ATR, Bollinger, Donchian, funding, open interest.
-2. **Summarise.** A small numeric snapshot of the market and the bee's own position.
+2. **Summarise.** A small numeric snapshot of the market and the bunny's own position.
 3. **Ask Jev.** Jev picks one move from a menu of moves that are actually valid right now, with probabilities.
 4. **Check.** Plain code can veto, shrink or force the move: max 2x leverage, per-bee stops, a daily loss stop,
    trade caps, a fee budget, cooldowns, and a hard daily cap on Jev spending.
 5. **Record, then act.** The decision is written to SQLite before anything happens.
 6. **Broadcast.** The dashboard streams it live.
 
-Jev is stateless and never sees an order endpoint. If Jev is down or slow, the bees hold and open nothing.
+Jev is stateless and never sees an order endpoint. If Jev is down or slow, the bunnies hold and open nothing.
 
-## Brains, the strategy lab and the hive mind
+## Brains, the strategy lab and the warren memory
 
-On top of Jev, each main bee can have its own **LLM brain**: ChatGPT (bee 1), Claude (bee 2) and Kimi (bee 3), each
+On top of Jev, each main bunny can have its own **LLM brain**: ChatGPT (bunny 1), Claude (bunny 2) and Kimi (bunny 3), each
 on its own API key. The brains are slow and strategic; they never place an order.
 
 - **Skills.** Trading rules (trend, breakout, momentum, mean reversion, hybrids), 17 built in and more importable as
   JSON from [`skills/`](skills/).
 - **The lab.** `pnpm lab fetch` downloads OKX history; `pnpm lab run` simulates every skill and parameter set with fees,
   slippage, funding and stops, using walk-forward so only out-of-sample results count, and ranks them.
-- **The council.** `pnpm lab council`: each brain reads the ranking and the hive mind, picks the skills its bee should
+- **The council.** `pnpm lab council`: each brain reads the ranking and the warren memory, picks the skills its bunny should
   lean on and the coins it should trade (its watchlist, from lab evidence, its record and liquidity, within the
-  owner's coins and its style), writes lessons and messages the other bees.
-- **The hive mind.** A knowledge graph (bees, brains, skills, coins, lessons, messages, real trade results) that every
+  owner's coins and its style), writes lessons and messages the other bunnies.
+- **The warren memory.** A knowledge graph (bunnies, brains, skills, coins, lessons, messages, real trade results) that every
   round starts from, exported as graphify-style `graph.json`.
-- **Live.** With `LAB_SIGNALS=true` Jev sees each bee's skill vote per coin as a tiebreaker; with `COACH_INTERVAL_MIN`
-  set the brains re-weight their skills from the bee's real results while it trades.
+- **Live.** With `LAB_SIGNALS=true` Jev sees each bunny's skill vote per coin as a tiebreaker; with `COACH_INTERVAL_MIN`
+  set the brains re-weight their skills from the bunny's real results while it trades.
 
-**Survival and rewards.** Every bee knows it can die at the retire line: in danger it trades smaller and several
-brains combine to rescue it, writing and backtesting new skills if they must. Profitable bees earn points and levels
+**Survival and rewards.** Every bunny knows it can die at the retire line: in danger it trades smaller and several
+brains combine to rescue it, writing and backtesting new skills if they must. Profitable bunnies earn points and levels
 that unlock prizes (more skills, skill writing, extra brains, bigger limits, never more leverage). The owner can add
-up to six more bees and edit what every bee trades, including a **macro squad** on gold, oil and stocks that trades
+up to six more bunnies and edit what every bunny trades, including a **macro squad** on gold, oil and stocks that trades
 only in trading hours the engine verifies from the market ([docs/MACRO_SQUAD.md](docs/MACRO_SQUAD.md)).
 
-On the dashboard, **Lab & hive mind** (`#/lab`) shows the ranking, each bee's playbook and the graph, and **Admin**
-(`#/admin`, owner password) configures keys, bees, brains, risk limits and style knobs, runs the lab and restarts
+On the dashboard, **Lab & warren memory** (`#/lab`) shows the ranking, each bunny's playbook and the graph, and **Admin**
+(`#/admin`, owner password) configures keys, bunnies, brains, risk limits and style knobs, runs the lab and restarts
 the engine. Trading mode and exchange keys stay in `.env`.
 
 Details, commands and settings: [docs/INTELLIGENCE.md](docs/INTELLIGENCE.md).
@@ -190,9 +190,9 @@ in [`.env.example`](.env.example). The common ones:
 | setting | default | what it does |
 |---|---|---|
 | `PUBLIC_DOMAIN` | blank | A domain pointed at your server. Caddy then gets an HTTPS certificate on its own. **Recommended**: without it, the Setup page and your keys travel over plain HTTP. |
-| `TICK_MS` | `10000` | How often each bee asks Jev. Faster is more exciting and costs more (see [docs/COSTS.md](docs/COSTS.md)). |
-| `JEV_DAILY_USD_CAP` | `2` | Hard daily cap on Jev spend. When it's hit, every bee holds until 00:00 UTC. |
-| `BEE_START_EQUITY_USD` | `333` | Paper money per bee. |
+| `TICK_MS` | `10000` | How often each bunny asks Jev. Faster is more exciting and costs more (see [docs/COSTS.md](docs/COSTS.md)). |
+| `JEV_DAILY_USD_CAP` | `2` | Hard daily cap on Jev spend. When it's hit, every bunny holds until 00:00 UTC. |
+| `BEE_START_EQUITY_USD` | `333` | Paper money per bunny. |
 
 **Run Setup again** (new names, new keys, or a forgotten owner password):
 
@@ -262,7 +262,7 @@ logger and the event stream redact anything that looks like a key, an IP address
 
 ## Credits
 
-Built by Mike on the Creator Magic YouTube channel, in the video "I gave three AI bees $1,000".
+Built by Mike on the Creator Magic YouTube channel, in the video "I gave three AI bunnies $1,000".
 Hosted on [Hostinger](https://www.hostg.xyz/aff_c?offer_id=815&aff_id=202403&url=https%3A%2F%2Fwww.hostinger.com%2Fdocker-hosting%3Fcompose_url%3Dhttps%3A%2F%2Fraw.githubusercontent.com%2Fimikerussell%2Fbeebots%2Fmain%2Fdocker-compose.yml%26utm_medium%3Daffiliate%26utm_source%3Daff%7Baffiliate_id%7D%26utm_campaign%3D%7Boffer_id%7D%26session%3D%7Btransaction_id%7D). Decisions by [Jev](https://typesafe.ai).
 
 MIT licence. No warranty. Not financial advice.

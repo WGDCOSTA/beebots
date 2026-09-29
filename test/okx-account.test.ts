@@ -34,7 +34,7 @@ describe("checkOkxAccount", () => {
   });
 
   it("blocks a balance below the wallet, withdraw rights, no trade, and the main account", async () => {
-    expect((await checkOkxAccount(fakeCli(sub, "250"), creds, "demo", 1000)).problems.join(" ")).toMatch(/holds \$250\.00 USDC, less than the bee's \$1000\.00 wallet/);
+    expect((await checkOkxAccount(fakeCli(sub, "250"), creds, "demo", 1000)).problems.join(" ")).toMatch(/holds \$250\.00 USDC, less than the bunny's \$1000\.00 wallet/);
     expect((await checkOkxAccount(fakeCli({ ...sub, perm: "read_only,trade,withdraw" }), creds, "demo", 10)).problems.join(" ")).toMatch(/Withdraw/);
     expect((await checkOkxAccount(fakeCli({ ...sub, perm: "read_only" }), creds, "demo", 10)).problems.join(" ")).toMatch(/no Trade permission/);
     expect((await checkOkxAccount(fakeCli({ ...sub, mainUid: "222" }), creds, "demo", 10)).problems.join(" ")).toMatch(/main account/);

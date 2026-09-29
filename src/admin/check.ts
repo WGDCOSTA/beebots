@@ -79,13 +79,13 @@ export function checkPlan(stages: readonly CheckStage[], o: CheckOpts): CheckSte
     steps.push({
       id: "council",
       stage: "council",
-      label: "Council: each bee's brain picks skills",
+      label: "Council: each bunny's brain picks skills",
       tool: "lab",
       argv: ["council"],
       ...(o.hasBrain ? {} : { skip: "no brain has a key yet (Admin → API keys)" }),
     });
   }
-  if (want.has("report")) steps.push({ id: "report", stage: "report", label: "Hive mind report", tool: "lab", argv: ["report"] });
+  if (want.has("report")) steps.push({ id: "report", stage: "report", label: "Warren memory report", tool: "lab", argv: ["report"] });
   return steps;
 }
 
@@ -106,7 +106,7 @@ export function preflight(a: { mode: string; keys: Record<string, { set: boolean
     { id: "brains", label: "A brain has a key", ok: brains.length > 0, required: false, note: brains.length ? brains.join(", ") : "The council will be skipped until a brain has a key." },
     { id: "cmc", label: "CoinMarketCap key", ok: !!a.keys.coinmarketcap?.set, required: false, note: a.keys.coinmarketcap?.set ? "Market context on." : "Optional: only the market context needs it." },
     { id: "alpaca", label: "Alpaca data keys", ok: !!a.hasAlpaca, required: false, note: a.hasAlpaca ? "Stock and ETF history for the lab (data only)." : "Optional: paper keys from alpaca.markets add US stocks and ETFs to the lab." },
-    { id: "bees", label: "Bees configured", ok: a.hasBees, required: false, note: a.hasBees ? "Their playbooks are what the council fills." : "Run Setup to create the bees first." },
+    { id: "bees", label: "Bunnies configured", ok: a.hasBees, required: false, note: a.hasBees ? "Their playbooks are what the council fills." : "Run Setup to create the bunnies first." },
     { id: "gold", label: "Gold data (MT5 export)", ok: csv.length > 0, required: false, note: csv.length ? csv.map((f) => f.split("/").pop()).join(", ") : `Optional: drop an XAUUSD bar CSV in ${join(a.labDir, "gold", "data")}` },
   ];
 }
@@ -216,6 +216,6 @@ export function verdicts(labDir: string, o: { now: number; maxAgeDays: number; g
     skillsVerdict(labDir, o.now, o.maxAgeDays),
     scalperVerdict(labDir, o.now, o.maxAgeDays),
     goldVerdict(labDir),
-    { stage: "hive", title: "Hive mind", status: nodes ? "pass" : "none", headline: nodes ? `${nodes} items in memory (${kinds.map(([k, v]) => `${v} ${k}`).join(", ")}; ${o.graph.edges ?? 0} links).` : "The hive mind is empty until the lab and the council run.", details: [], at: null },
+    { stage: "hive", title: "Warren memory", status: nodes ? "pass" : "none", headline: nodes ? `${nodes} items in memory (${kinds.map(([k, v]) => `${v} ${k}`).join(", ")}; ${o.graph.edges ?? 0} links).` : "The warren memory is empty until the lab and the council run.", details: [], at: null },
   ];
 }

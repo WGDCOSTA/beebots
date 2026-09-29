@@ -1,5 +1,5 @@
-// Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bee>,
-// /lab/ranking, /lab/playbook, /hive-mind (graph.json) and /hive-mind/<bee> (what a bee's brain knows).
+// Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bunny>,
+// /lab/ranking, /lab/playbook, /hive-mind (graph.json) and /hive-mind/<bunny> (what a bunny's brain knows).
 // POST /admin/* is the admin panel (admin/admin.ts); every call there needs the owner password.
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
 // POST /hive/join and /hive/leave, which need the owner password (gate.ts, hive.ts). GET /hive/status is public and holds no key.
@@ -24,13 +24,13 @@ export interface ServerDeps {
     visitors: Visitors;
     /** "Update available" (update.ts): null unless a newer GitHub Release exists. */
     update?: () => unknown;
-    /** The strategy lab and the hive mind (read-only): last ranking, the playbook, the knowledge graph. */
+    /** The strategy lab and the warren memory (read-only): last ranking, the playbook, the knowledge graph. */
     lab?: {
       ranking: () => unknown;
       playbook: () => unknown;
       graph: () => unknown;
       context: (bee: string) => unknown;
-      /** Graphify-style reads of the hive mind (graph/memory.ts): a question, a path, a node, the report. */
+      /** Graphify-style reads of the warren memory (graph/memory.ts): a question, a path, a node, the report. */
       query?: (q: string) => unknown;
       path?: (from: string, to: string) => unknown;
       explain?: (node: string) => unknown;
@@ -39,13 +39,13 @@ export interface ServerDeps {
   };
   /** Present only in setup mode. */
   setup?: Setup;
-  /** Present once trading: join/leave the Hive (owner password) and its public status. */
+  /** Present once trading: join/leave the Warren (owner password) and its public status. */
   hive?: Hive;
   /** The admin panel's API (owner password on every call). */
   admin?: { handle(req: import("node:http").IncomingMessage, res: ServerResponse, path: string): Promise<boolean> };
-  /** Names, styles and portraits of the bees, for the dashboard. No secrets. */
+  /** Names, styles and portraits of the bunnies, for the dashboard. No secrets. */
   profile: () => unknown;
-  /** File path of a bee's generated portrait, or null. */
+  /** File path of a bunny's generated portrait, or null. */
   beeImage: (bee: string) => string | null;
 }
 
@@ -79,7 +79,7 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         .then((handled) => {
           if (!handled) json(res, 404, { error: "not found" });
         })
-        .catch(() => json(res, 500, { error: "hive request failed" }));
+        .catch(() => json(res, 500, { error: "warren request failed" }));
       return;
     }
     if (deps.admin && url.pathname.startsWith("/admin/")) {

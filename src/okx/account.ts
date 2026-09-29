@@ -1,7 +1,7 @@
-// Read-only check of one bee's OKX account before it is created or its keys change (admin panel): the keys work,
-// they can trade and cannot withdraw, they belong to a sub-account, and it holds enough USDC for the bee's wallet.
+// Read-only check of one bunny's OKX account before it is created or its keys change (admin panel): the keys work,
+// they can trade and cannot withdraw, they belong to a sub-account, and it holds enough USDC for the bunny's wallet.
 // No orders, no transfers. Returns sanitised facts only: never a key, UID, label or IP (the UID leaves as a hash, so
-// two bees on the same account can be caught without storing it).
+// two bunnies on the same account can be caught without storing it).
 import { createHash } from "node:crypto";
 import type { OkxCreds } from "../config.js";
 import { safeError } from "../redact.js";
@@ -18,9 +18,9 @@ export interface AccountFacts {
   ipBound: boolean;
   /** USDC equity on the trading account (null when unreadable). */
   usdcUsd: number | null;
-  /** sha256 of the account UID, to spot two bees on one account. */
+  /** sha256 of the account UID, to spot two bunnies on one account. */
   uidHash: string | null;
-  /** What blocks creating the bee with these keys ([] = good to go). */
+  /** What blocks creating the bunny with these keys ([] = good to go). */
   problems: string[];
   /** Worth knowing, not blocking. */
   warnings: string[];
@@ -67,10 +67,10 @@ export async function checkOkxAccount(cli: OkxCli, creds: OkxCreds, kind: "demo"
     facts.problems.push(`The USDC balance could not be read (${safeError(err).code}).`);
   }
   if (facts.canWithdraw) facts.problems.push("The key has Withdraw permission: create a key with Read + Trade only.");
-  if (!facts.canTrade) facts.problems.push("The key has no Trade permission: the bee could not place orders.");
-  if (!facts.subAccount) facts.problems.push("These keys belong to the main account: give each bee its own sub-account.");
+  if (!facts.canTrade) facts.problems.push("The key has no Trade permission: the bunny could not place orders.");
+  if (!facts.subAccount) facts.problems.push("These keys belong to the main account: give each bunny its own sub-account.");
   if (facts.usdcUsd !== null && !(facts.usdcUsd >= walletUsd))
-    facts.problems.push(`The account holds $${facts.usdcUsd.toFixed(2)} USDC, less than the bee's $${walletUsd.toFixed(2)} wallet. Fund the sub-account first.`);
+    facts.problems.push(`The account holds $${facts.usdcUsd.toFixed(2)} USDC, less than the bunny's $${walletUsd.toFixed(2)} wallet. Fund the sub-account first.`);
   if (kind === "live" && !facts.ipBound) facts.warnings.push("The key is not IP-bound: OKX expires unbound Trade keys after 14 idle days. Bind it to the server's IP.");
   if (cfg.posMode && cfg.posMode !== "net_mode") facts.warnings.push(`Position mode is ${cfg.posMode}; the engine switches it to net_mode.`);
   return facts;

@@ -1,12 +1,12 @@
-// Survival and rewards: every bee knows it can die.
+// Survival and rewards: every bunny knows it can die.
 //
-// Health is equity as a % of the bee's start. Below SURVIVAL_DANGER_PCT a bee is in danger, below
+// Health is equity as a % of the bunny's start. Below SURVIVAL_DANGER_PCT a bunny is in danger, below
 // SURVIVAL_CRITICAL_PCT it is critical, and at BEE_RETIRE_AT_PCT it dies (the risk layer's "retired" cap: it trades
-// no more until the owner revives it). A bee in trouble trades smaller, is told in every Jev snapshot how close death
+// no more until the owner revives it). A bunny in trouble trades smaller, is told in every Jev snapshot how close death
 // is, and its tier change wakes a survival council (brains/survival.ts) where several LLM brains combine to rescue it,
 // and may write and backtest new skills.
 //
-// Profitable bees earn points (each UTC day's gain, a bonus for the day's best bee, a point for surviving the day).
+// Profitable bunnies earn points (each UTC day's gain, a bonus for the day's best bunny, a point for surviving the day).
 // Points make levels, and levels unlock prizes: more skills in the playbook, the right to write new skills, extra
 // brains in its councils, and a bounded boost of its trade and size limits. Leverage is never raised (hard rule), and
 // in live mode the limit boost is off unless REWARDS_IN_LIVE is set.
@@ -24,21 +24,21 @@ export interface EvolutionOpts {
   rewards: boolean;
   dangerPct: number;
   criticalPct: number;
-  /** BEE_RETIRE_AT_PCT: at or below it the bee dies. */
+  /** BEE_RETIRE_AT_PCT: at or below it the bunny dies. */
   deathPct: number;
-  /** Largest share a reward may add to a bee's max position (0.5 = +50%). */
+  /** Largest share a reward may add to a bunny's max position (0.5 = +50%). */
   maxLimitBoost: number;
   /** Limit boosts also apply with real money. */
   boostLimits: boolean;
   startEquityUsd: number;
-  /** A bee's own start (its wallet), when bees start with different money; default startEquityUsd. */
+  /** A bunny's own start (its wallet), when bunnies start with different money; default startEquityUsd. */
   startOf?: (id: BeeId) => number;
-  /** Most positions a bee may hold at once (MAX_POSITIONS_PER_BEE). */
+  /** Most positions a bunny may hold at once (MAX_POSITIONS_PER_BEE). */
   maxPositions?: number;
 }
 
 export interface Perks {
-  /** Skills the bee's playbook may hold. */
+  /** Skills the bunny's playbook may hold. */
   skillSlots: number;
   /** Its brain may write, backtest and adopt new skills (also granted in danger). */
   canAuthorSkills: boolean;
@@ -61,7 +61,7 @@ export interface BeeEvolution {
   peakEquityUsd: number;
   dayKey: string;
   dayStartEquityUsd: number;
-  /** Skills this bee wrote that passed their backtest. */
+  /** Skills this bunny wrote that passed their backtest. */
   skillsAuthored: number;
   /** Last days, newest first. */
   history: Array<{ day: string; pnlPct: number; points: number; bonus: string | null }>;
@@ -102,7 +102,7 @@ export function tierFor(health: number, retired: boolean, o: Pick<EvolutionOpts,
   return health >= 110 ? "thriving" : "healthy";
 }
 
-/** Position-size factor survival mode applies: a bee in trouble trades smaller. */
+/** Position-size factor survival mode applies: a bunny in trouble trades smaller. */
 export function survivalSizeFactor(tier: Tier): number {
   return tier === "critical" ? 0.35 : tier === "danger" ? 0.6 : 1;
 }
@@ -150,7 +150,7 @@ export class Evolution {
     return perksFor(this.bees[id]?.level ?? 0, this.o);
   }
 
-  /** Survival size factor for a bee (1 when survival mode is off). */
+  /** Survival size factor for a bunny (1 when survival mode is off). */
   sizeFactor(id: BeeId): number {
     return this.o.survival ? survivalSizeFactor(this.bees[id]?.tier ?? "healthy") : 1;
   }
@@ -163,8 +163,8 @@ export class Evolution {
   }
 
   /**
-   * Once per tick with every bee: health and tier, then (on a new UTC day) the day's points for each bee, the day's
-   * best bee bonus and level-ups. Returns true when something worth saving changed.
+   * Once per tick with every bunny: health and tier, then (on a new UTC day) the day's points for each bunny, the day's
+   * best bunny bonus and level-ups. Returns true when something worth saving changed.
    */
   tick(all: Array<[BeeId, BeeState]>, now: number): boolean {
     let changed = false;
@@ -199,7 +199,7 @@ export class Evolution {
         let bonus: string | null = null;
         if (best && r === best && r.pnlPct > 0 && rolled.length > 1) {
           pts += 5;
-          bonus = "best bee of the day";
+          bonus = "best bunny of the day";
         }
         r.e.points = Math.max(0, r.e.points + pts);
         r.e.history = [{ day: r.day, pnlPct: Math.round(r.pnlPct * 100) / 100, points: pts, bonus }, ...r.e.history].slice(0, 30);
@@ -215,7 +215,7 @@ export class Evolution {
     return changed || rolled.length > 0;
   }
 
-  /** The owner revived a dead bee: fresh money, half its points, its lessons kept (they live in the hive mind). */
+  /** The owner revived a dead bunny: fresh money, half its points, its lessons kept (they live in the warren memory). */
   revive(id: BeeId, equityUsd: number, now: number): void {
     const e = this.bees[id];
     if (!e) return;

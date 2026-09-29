@@ -1,4 +1,4 @@
-# beebots: three AI trading bees on one small VPS. Paper trading unless you deliberately change it.
+# beebots: three AI trading bunnies on one small VPS. Paper trading unless you deliberately change it.
 #
 #   docker compose up -d        then open http://<your-server-ip>/ and follow Setup
 #   docker compose logs engine  shows what the engine is doing (Setup is open for 2 hours after it starts)
@@ -28,7 +28,7 @@ services:
       # Optional here: Setup asks for them and stores them in the data volume.
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # How often each bee asks Jev, and the hard daily cap on Jev spend in USD (see docs/COSTS.md).
+      # How often each bunny asks Jev, and the hard daily cap on Jev spend in USD (see docs/COSTS.md).
       TICK_MS: ${TICK_MS:-10000}
       JEV_DAILY_USD_CAP: ${JEV_DAILY_USD_CAP:-2}
       BEE_START_EQUITY_USD: ${BEE_START_EQUITY_USD:-333}
@@ -36,11 +36,11 @@ services:
       # Setup stays open this many minutes after the engine starts; after that, restart the engine to open it again.
       SETUP_WINDOW_MIN: ${SETUP_WINDOW_MIN:-120}
       # Only if your Setup file has no owner password (older installs, or keys set only here): gates the dashboard's
-      # Join/Leave the Hive. At least 8 characters.
+      # Join/Leave the Warren. At least 8 characters.
       OWNER_PASSWORD: ${OWNER_PASSWORD:-}
       # "Update available" on the dashboard when a newer release is out (checks GitHub; never installs anything).
       UPDATE_CHECK: ${UPDATE_CHECK:-true}
-      # The Hive, the public paper-trading leaderboard. Only used if you join (Setup or the dashboard).
+      # The Warren, the public paper-trading leaderboard. Only used if you join (Setup or the dashboard).
       HIVE_URL: ${HIVE_URL:-https://beebots.tech}
       # Per-bee OKX keys, for demo or live only (letters: BEE1, BEE2, BEE3).
       BEE1_OKX_DEMO_API_KEY: ${BEE1_OKX_DEMO_API_KEY:-}
@@ -66,7 +66,7 @@ services:
       ENGINE_PORT: "8080"
       DB_PATH: /data/bees-{mode}.sqlite
       SETTINGS_PATH: /data/settings.json
-      # LLM brains, strategy lab and hive mind (docs/INTELLIGENCE.md). All optional.
+      # LLM brains, strategy lab and warren memory (docs/INTELLIGENCE.md). All optional.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}

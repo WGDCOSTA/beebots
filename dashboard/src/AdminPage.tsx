@@ -1,6 +1,6 @@
-// #/admin: everything the owner configures, behind the owner password (the same one as joining the Hive).
+// #/admin: everything the owner configures, behind the owner password (the same one as joining the Warren).
 // The password lives only in this page's memory; every call sends it and the engine checks it (with a lockout).
-// The trading mode and LIVE_ACK are not here on purpose: real money stays an .env decision. Each bee's wallet and OKX
+// The trading mode and LIVE_ACK are not here on purpose: real money stays an .env decision. Each bunny's wallet and OKX
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
@@ -11,7 +11,7 @@ import { TIER_INFO } from "./types";
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "keys", label: "API keys" },
-  { id: "bees", label: "Bees" },
+  { id: "bees", label: "Bunnies" },
   { id: "settings", label: "Settings" },
   { id: "lab", label: "Lab, skills & evolution" },
   { id: "security", label: "Security" },
@@ -20,7 +20,7 @@ type Tab = (typeof TABS)[number]["id"];
 
 const KEY_INFO: Record<KeyName, { label: string; help: string; placeholder: string; removable: boolean }> = {
   jev: { label: "Jev (TypeSafe AI)", help: "Makes every trading decision. console.typesafe.ai/keys", placeholder: "Jev API key", removable: false },
-  openai: { label: "OpenAI (ChatGPT)", help: "Bee designs and portraits on Setup, and the ChatGPT brain.", placeholder: "sk-…", removable: true },
+  openai: { label: "OpenAI (ChatGPT)", help: "Bunny designs and portraits on Setup, and the ChatGPT brain.", placeholder: "sk-…", removable: true },
   anthropic: { label: "Anthropic (Claude)", help: "The Claude brain. console.anthropic.com", placeholder: "sk-ant-…", removable: true },
   kimi: { label: "Moonshot (Kimi)", help: "The Kimi brain. platform.moonshot.ai", placeholder: "sk-…", removable: true },
   zai: { label: "Z.ai (GLM)", help: "The GLM brain. z.ai. Model and API address: Settings → Brains and models.", placeholder: "Z.ai API key", removable: true },
@@ -93,10 +93,10 @@ function Overview({ s, setTab }: { s: AdminState; setTab: (t: Tab) => void }) {
         <div className="ptile">
           <div className="eyebrow">Brains</div>
           <div className="ptile-value">{brains.map((b) => BRAIN_LABEL[String(b)] ?? "–").join(" · ")}</div>
-          <div className="dim ptile-sub">bee 1 · bee 2 · bee 3</div>
+          <div className="dim ptile-sub">bunny 1 · bunny 2 · bunny 3</div>
         </div>
         <div className="ptile">
-          <div className="eyebrow">Hive mind</div>
+          <div className="eyebrow">Warren memory</div>
           <div className="ptile-value num">{s.lab.graph.skill ?? 0} skills</div>
           <div className="dim ptile-sub">
             {s.lab.graph.lesson ?? 0} lessons · {s.lab.graph.message ?? 0} messages · {s.lab.graph.edges ?? 0} links
@@ -110,7 +110,7 @@ function Overview({ s, setTab }: { s: AdminState; setTab: (t: Tab) => void }) {
         <div className="ptile">
           <div className="eyebrow">Version</div>
           <div className="ptile-value mono">{s.version}</div>
-          <div className="dim ptile-sub">{s.hasSettingsFile ? "Setup file present" : "keys and bees from .env"}</div>
+          <div className="dim ptile-sub">{s.hasSettingsFile ? "Setup file present" : "keys and bunnies from .env"}</div>
         </div>
       </div>
       <div className="pcard">
@@ -299,7 +299,7 @@ function CustomBrains({ s, call, password }: { s: AdminState; call: (path: strin
     <div className="pcard">
       <h3>Custom brains</h3>
       <p className="dim">
-        Add any LLM with an OpenAI-compatible API (OpenRouter, DeepSeek, Together, Groq, a local Ollama or LM Studio, ...) and use it anywhere a brain is chosen: a bee's brain, the skill agent, research. There is no limit
+        Add any LLM with an OpenAI-compatible API (OpenRouter, DeepSeek, Together, Groq, a local Ollama or LM Studio, ...) and use it anywhere a brain is chosen: a bunny's brain, the skill agent, research. There is no limit
         beyond 50. The key is stored like the others, is never shown again, and is only ever sent to the address you give. Built in: ChatGPT, Claude, Kimi and GLM (Z.ai).
       </p>
       <ul className="checklist">
@@ -325,7 +325,7 @@ function CustomBrains({ s, call, password }: { s: AdminState; call: (path: strin
             >
               Edit
             </button>{" "}
-            <button className="pbtn ghost small" disabled={b.usedBy.length > 0} title={b.usedBy.length ? "Give its bees another brain first" : ""} onClick={() => confirm(`Remove ${b.label}?`) && void call("brains/delete", { id: b.id }, `${b.label} removed.`)}>
+            <button className="pbtn ghost small" disabled={b.usedBy.length > 0} title={b.usedBy.length ? "Give its bunnies another brain first" : ""} onClick={() => confirm(`Remove ${b.label}?`) && void call("brains/delete", { id: b.id }, `${b.label} removed.`)}>
               Remove
             </button>
           </li>
@@ -409,7 +409,7 @@ type BeeDraft = {
   flat: boolean;
   isNew?: boolean;
   walletUsd: number | "";
-  /** Keys typed for this bee (never loaded from the server), the last check, and what it was run on. */
+  /** Keys typed for this bunny (never loaded from the server), the last check, and what it was run on. */
   exchange: ExchangeDraft | null;
   check: ExchangeCheck | null;
   checkedFor: string | null;
@@ -418,7 +418,7 @@ type BeeDraft = {
 const exchangeFilled = (x: ExchangeDraft | null): x is ExchangeDraft => !!x && x.apiKey.trim().length >= 8 && x.secretKey.trim().length >= 8 && x.passphrase.length > 0;
 const checkSig = (b: BeeDraft) => (b.exchange ? `${b.exchange.kind}|${b.exchange.apiKey}|${b.exchange.secretKey}|${b.exchange.passphrase}|${b.walletUsd}` : "");
 
-/** Why a bee cannot be saved yet (null = ready): its wallet, and its exchange account when one is needed or typed. */
+/** Why a bunny cannot be saved yet (null = ready): its wallet, and its exchange account when one is needed or typed. */
 function beeBlocker(b: BeeDraft, s: AdminState): string | null {
   if (!b.name.trim()) return "Name it";
   if (b.extra && b.isNew && !(typeof b.walletUsd === "number" && b.walletUsd >= 10)) return "Set its wallet (at least $10)";
@@ -431,7 +431,7 @@ function beeBlocker(b: BeeDraft, s: AdminState): string | null {
 
 const usd0 = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
-/** Step 2 of creating a bee (and later, replacing its keys): its wallet and its OKX sub-account, checked live. */
+/** Step 2 of creating a bunny (and later, replacing its keys): its wallet and its OKX sub-account, checked live. */
 function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState; password: string; onChange: (patch: Partial<BeeDraft>) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -475,8 +475,8 @@ function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState
           {b.extra
             ? walletEditable
               ? "Its paper book, health and death line are measured from this. On OKX the sub-account must hold at least this much USDC."
-              : "Set when the bee was created. Revive keeps it."
-            : "The main three share the start equity (Settings → Risk) so the Hive can compare them."}
+              : "Set when the bunny was created. Revive keeps it."
+            : "The main three share the start equity (Settings → Risk) so the Warren can compare them."}
         </span>
       </label>
       <div className="xstatus">
@@ -518,13 +518,13 @@ function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState
             <input className="pinput mono" type="password" autoComplete="off" value={x.secretKey} disabled={envLocked} onChange={(e) => setX({ secretKey: e.target.value })} />
           </label>
           {envLocked ? (
-            <span className="dim small">This bee's {kind} keys are set in the environment (.env); change them there.</span>
+            <span className="dim small">This bunny's {kind} keys are set in the environment (.env); change them there.</span>
           ) : (
             <div className="row-actions compact">
               <button className="pbtn small" disabled={busy || !exchangeFilled(b.exchange) || !s.exchangeCheck} onClick={() => void test()}>
                 {busy ? "Checking…" : "Test connection & balance"}
               </button>
-              <span className="dim small">Read-only: no orders, no transfers. Use one OKX sub-account per bee, EEA site.</span>
+              <span className="dim small">Read-only: no orders, no transfers. Use one OKX sub-account per bunny, EEA site.</span>
             </div>
           )}
           {err && <div className="xcheck bad">✗ {err}</div>}
@@ -551,7 +551,7 @@ function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState
                   ⚠ {w}
                 </li>
               ))}
-              {fresh.ready && <li className="good strong">Ready: this bee can be created on this account.</li>}
+              {fresh.ready && <li className="good strong">Ready: this bunny can be created on this account.</li>}
             </ul>
           )}
         </>
@@ -560,7 +560,7 @@ function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState
   );
 }
 
-/** The macro squad preset: a gold bee, an energy bee and a stocks bee (its brains pick the stocks). */
+/** The macro squad preset: a gold bunny, an energy bunny and a stocks bunny (its brains pick the stocks). */
 const MACRO_SQUAD: Array<Pick<BeeDraft, "name" | "tagline" | "rules" | "coins" | "market">> = [
   { name: "Goldie", tagline: "the safe haven", rules: "Trade gold and silver. Follow the trend, stay patient, avoid chasing spikes around US data releases.", coins: ["XAU", "XAG"], market: "commodities" },
   { name: "Crude", tagline: "the oil driller", rules: "Trade WTI and Brent oil. Ride breakouts, cut fast when a move fails.", coins: ["CL", "BZ"], market: "commodities" },
@@ -620,7 +620,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         checkedFor: null,
       })) ?? null,
   );
-  if (!bees) return <div className="pcard">The original three bees run without a Setup file, so there is nothing to edit here. Design your own bees on Setup to customise them.</div>;
+  if (!bees) return <div className="pcard">The original three bunnies run without a Setup file, so there is nothing to edit here. Design your own bunnies on Setup to customise them.</div>;
   const evo = new Map((s.evolution?.board ?? []).map((r) => [r.bee, r]));
   const set = (i: number, patch: Partial<BeeDraft>) => setBees(bees.map((b, j) => (j === i ? { ...b, ...patch } : b)));
   const add = () =>
@@ -679,7 +679,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
           ...(exchangeFilled(b.exchange) ? { exchange: { ...b.exchange, apiKey: b.exchange.apiKey.trim(), secretKey: b.exchange.secretKey.trim() } } : {}),
         })),
       },
-      "Bees saved. Restart the engine to apply.",
+      "Bunnies saved. Restart the engine to apply.",
     );
   const last = bees.length - 1;
   const blockers = bees.map((b) => beeBlocker(b, s));
@@ -694,7 +694,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
             <div className="pcard" key={b.slot}>
               <div className="bee-card-head">
                 <h3>
-                  {b.name || "New bee"} <span className="dim mono small">{b.slot}</span>
+                  {b.name || "New bunny"} <span className="dim mono small">{b.slot}</span>
                 </h3>
                 {b.extra && <span className="badge">extra</span>}
                 {b.isNew || !b.running ? <span className="badge">starts after restart</span> : null}
@@ -719,7 +719,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
               {b.isNew && (
                 <div className="xstep-head">
                   <span className="xstep-num">1</span>
-                  <strong>Bee &amp; brain</strong>
+                  <strong>Bunny &amp; brain</strong>
                 </div>
               )}
               <label className="plabel">
@@ -778,7 +778,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
                 </label>
               )}
               {b.market === "crypto" && (
-                <span className="dim small">{s.styles.find((x) => x.id === b.style)?.blurb} Breakout needs coins within BTC/ETH/SOL/HYPE and Trend within BTC/ETH; otherwise the bee runs on Momentum.</span>
+                <span className="dim small">{s.styles.find((x) => x.id === b.style)?.blurb} Breakout needs coins within BTC/ETH/SOL/HYPE and Trend within BTC/ETH; otherwise the bunny runs on Momentum.</span>
               )}
               <div className="plabel">
                 Assets it may trade
@@ -803,9 +803,9 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
                   className="pbtn ghost small"
                   disabled={!b.flat}
                   title={b.flat ? "" : "It holds a position: it must be flat first"}
-                  onClick={() => confirm(`Remove ${b.name || "this bee"}? Its history stays in the database.`) && setBees(bees.slice(0, -1))}
+                  onClick={() => confirm(`Remove ${b.name || "this bunny"}? Its history stays in the database.`) && setBees(bees.slice(0, -1))}
                 >
-                  Remove this bee
+                  Remove this bunny
                 </button>
               )}
             </div>
@@ -821,7 +821,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         {bees.length < s.maxBees && (
           <button className="pcard add-bee" onClick={add}>
             <span className="add-plus">+</span>
-            <span>Add a bee</span>
+            <span>Add a bunny</span>
             <span className="dim small">
               {bees.length}/{s.maxBees} · starts with fresh paper money after a restart
             </span>
@@ -830,12 +830,12 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
       </div>
       <div className="row-actions">
         <button className="pbtn" disabled={firstBlock >= 0} title={firstBlock >= 0 ? `${bees[firstBlock]!.name || bees[firstBlock]!.slot}: ${blockers[firstBlock]}` : ""} onClick={() => void save()}>
-          {bees.some((b) => b.isNew) ? "Create & save bees" : "Save bees"}
+          {bees.some((b) => b.isNew) ? "Create & save bunnies" : "Save bunnies"}
         </button>
         <span className="dim small">
           {firstBlock >= 0
             ? `${bees[firstBlock]!.name || bees[firstBlock]!.slot}: ${blockers[firstBlock]}.`
-            : "Extra bees race here and in the lab; the Hive leaderboard shows the main three. A new bee is created only after its wallet is set and, outside paper trading, its OKX sub-account passes the check."}
+            : "Extra bunnies race here and in the lab; the Warren leaderboard shows the main three. A new bunny is created only after its wallet is set and, outside paper trading, its OKX sub-account passes the check."}
         </span>
       </div>
       {s.sessions && <SessionsCard sessions={s.sessions} />}
@@ -852,7 +852,7 @@ function SessionsCard({ sessions }: { sessions: NonNullable<AdminState["sessions
       <h3>Trading hours (macro squad)</h3>
       <p className="dim small">
         Learned from the market: every minute the engine checks which stock and commodity X-Perps are really quoting. Watched for {sessions.watchedHours} h
-        {sessions.watchedHours < 168 ? " (a full week is needed before every hour is verified)" : ""}. Macro bees only open in a verified open hour, at least {sessions.noOpenMin} min before the close
+        {sessions.watchedHours < 168 ? " (a full week is needed before every hour is verified)" : ""}. Macro bunnies only open in a verified open hour, at least {sessions.noOpenMin} min before the close
         {sessions.allowNonCrypto ? "." : ", and only once ALLOW_NON_CRYPTO=true (now off: they watch and learn only)."}
       </p>
       {sessions.coins.length === 0 ? (
@@ -1042,12 +1042,12 @@ function ImportSkill({ password }: { password: string }) {
 
 const DRAFT_BADGE: Record<DraftFull["status"], { text: string; cls: string }> = {
   draft: { text: "draft", cls: "" },
-  proposed: { text: "proposed by a bee", cls: "" },
+  proposed: { text: "proposed by a bunny", cls: "" },
   published: { text: "✓ live", cls: "ok" },
   discarded: { text: "discarded", cls: "err" },
 };
 
-/** Write, test and publish skills. A version is only ever live after a backtest; a bee's own drafts land here too. */
+/** Write, test and publish skills. A version is only ever live after a backtest; a bunny's own drafts land here too. */
 function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: string; refresh: () => Promise<void> }) {
   const w = s.lab.workshop;
   const [draft, setDraft] = useState<DraftFull | null>(null);
@@ -1160,7 +1160,7 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
     <div className="pcard">
       <h3>Skill workshop</h3>
       <p className="dim">
-        Write a skill in the JSON rule language, test it walk-forward on real history, keep every version, and publish it. Nothing reaches a bee until it is published, and even then it is one vote Jev may weigh. Skills the bees
+        Write a skill in the JSON rule language, test it walk-forward on real history, keep every version, and publish it. Nothing reaches a bunny until it is published, and even then it is one vote Jev may weigh. Skills the bunnies
         write themselves appear here too, so you can read, improve and re-test them.
       </p>
       <div className="agent-box">
@@ -1321,7 +1321,7 @@ function SkillWorkshop({ s, password, refresh }: { s: AdminState; password: stri
   );
 }
 
-/** What each bee has been studying: the owner's background, and notes its brain drafted that wait for a yes. */
+/** What each bunny has been studying: the owner's background, and notes its brain drafted that wait for a yes. */
 function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void> }) {
   const n = s.lab.notes;
   const bees = (s.bees ?? []).filter((b) => b.running);
@@ -1330,7 +1330,7 @@ function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: strin
   const [text, setText] = useState("");
   const [coins, setCoins] = useState("");
   const target = bee || bees[0]?.slot || "hive";
-  const label = (slot: string) => (slot === "hive" ? "Every bee" : (bees.find((b) => b.slot === slot)?.name ?? slot));
+  const label = (slot: string) => (slot === "hive" ? "Every bunny" : (bees.find((b) => b.slot === slot)?.name ?? slot));
   const shown = n.notes.filter((x) => x.bee === target || (target !== "hive" && x.bee === "hive"));
   const pending = n.notes.filter((x) => x.status === "pending");
   const why = n.blocked[target];
@@ -1347,17 +1347,17 @@ function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: strin
         Research &amp; background {pending.length > 0 && <span className="badge">{pending.length} to review</span>}
       </h3>
       <p className="dim">
-        What a bee has been studying. Write its <strong>background</strong> yourself (it applies at once), or ask its brain to <strong>research</strong>: it reads only what the app already holds (the lab ranking, the bee's trades,
+        What a bunny has been studying. Write its <strong>background</strong> yourself (it applies at once), or ask its brain to <strong>research</strong>: it reads only what the app already holds (the lab ranking, the bunny's trades,
         its peers, the market mood), cites that evidence, and its notes wait here until you approve them. Approved notes reach the brains as context and hypotheses, never as orders or facts, and show in the hive-mind graph.
       </p>
       <div className="row-actions">
-        <select className="pinput" value={target} onChange={(e) => setBee(e.target.value)} aria-label="Bee">
+        <select className="pinput" value={target} onChange={(e) => setBee(e.target.value)} aria-label="Bunny">
           {bees.map((b) => (
             <option key={b.slot} value={b.slot}>
               {b.name} ({b.slot}){n.notes.some((x) => x.bee === b.slot && x.status === "pending") ? " · to review" : ""}
             </option>
           ))}
-          <option value="hive">Every bee</option>
+          <option value="hive">Every bunny</option>
         </select>
         {target !== "hive" && (
           <button className="pbtn" disabled={!!why || busy} title={why ?? ""} onClick={() => void call("research", { bee: target }, "Research started: its notes appear here for your review in a minute or two.").then(() => setTimeout(() => void refresh(), 4000))}>
@@ -1375,7 +1375,7 @@ function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: strin
               <span className={`badge ${x.status === "approved" ? "ok" : ""}`}>{x.status === "pending" ? "● waiting for you" : x.kind === "background" ? "✓ background" : "✓ approved"}</span>{" "}
               <span className="dim small">
                 {x.author === "owner" ? "you" : `${x.brain ?? "brain"} (${x.author})`}
-                {x.bee === "hive" ? " · every bee" : ""} · {x.kind === "research" ? `confidence ${x.confidence}` : "your words"}
+                {x.bee === "hive" ? " · every bunny" : ""} · {x.kind === "research" ? `confidence ${x.confidence}` : "your words"}
                 {x.coins.length ? ` · ${x.coins.join(", ")}` : ""}
               </span>
             </div>
@@ -1443,7 +1443,7 @@ function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: strin
   );
 }
 
-/** Outside MCP servers for research. Read-only by rule: the owner grants named tools to named bees, nothing else is callable. */
+/** Outside MCP servers for research. Read-only by rule: the owner grants named tools to named bunnies, nothing else is callable. */
 function Connectors({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
   const v = s.lab.mcp;
   const blank = { id: "", label: "", url: "https://", transport: "http", authHeader: "Authorization", token: "", maxCallsDay: 50 };
@@ -1468,7 +1468,7 @@ function Connectors({ s, call }: { s: AdminState; call: (path: string, body: unk
     <div className="pcard">
       <h3>Connectors (MCP)</h3>
       <p className="dim">
-        Let the bees look things up on outside MCP servers while they research (news, data, documentation). Read-only by rule: a bee can call only the tools you grant it by name; a tool that the server does not declare read-only, or whose name reads
+        Let the bunnies look things up on outside MCP servers while they research (news, data, documentation). Read-only by rule: a bunny can call only the tools you grant it by name; a tool that the server does not declare read-only, or whose name reads
         like an action, needs your explicit confirmation before it can be granted; every call is capped per day, times out, is logged below, and its answer reaches the brain as untrusted data. Nothing here can place an order or change a
         setting. The token is stored like the other keys, never shown again and only sent to the server's address. Servers run elsewhere: beebots does not run plugins or local commands.
       </p>
@@ -1510,7 +1510,7 @@ function Connectors({ s, call }: { s: AdminState; call: (path: string, body: unk
               <input className="pinput mono" type="password" autoComplete="off" value={f.token} onChange={(e) => set("token", e.target.value)} />
             </label>
             <label className="plabel">
-              Calls per day (all bees)
+              Calls per day (all bunnies)
               <input className="pinput num" type="number" min={1} max={500} value={f.maxCallsDay} onChange={(e) => set("maxCallsDay", Number(e.target.value))} />
             </label>
           </div>
@@ -1602,7 +1602,7 @@ function McpServerCard({ m, bees, call, onEdit }: { m: McpServerView; bees: Arra
                   </div>
                   <div className="mcp-bees">
                     <label>
-                      <input type="checkbox" checked={!!on?.bees.includes("all")} onChange={() => toggleBee(t.name, "all")} /> all bees
+                      <input type="checkbox" checked={!!on?.bees.includes("all")} onChange={() => toggleBee(t.name, "all")} /> all bunnies
                     </label>
                     {bees.map((b) => (
                       <label key={b.slot}>
@@ -1675,7 +1675,7 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
       <div className="pcard">
         <h3>Run the lab</h3>
         <p className="dim">
-          <strong>cycle</strong> = fetch history if missing, rank every skill walk-forward, then the council (each bee's brain picks skills). Runs in the background;
+          <strong>cycle</strong> = fetch history if missing, rank every skill walk-forward, then the council (each bunny's brain picks skills). Runs in the background;
           the engine keeps trading.
         </p>
         <div className="form-grid">
@@ -1784,7 +1784,7 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
 
       <div className="pcard">
         <h3>Coach</h3>
-        <p className="dim">Each brain reviews its bee's last 24 h (closed trades, P&L, fees, risk vetoes) and re-weights the skills it already uses. It never adds a new one.</p>
+        <p className="dim">Each brain reviews its bunny's last 24 h (closed trades, P&L, fees, risk vetoes) and re-weights the skills it already uses. It never adds a new one.</p>
         <button className="pbtn ghost" disabled={!s.coachAvailable} onClick={() => void call("coach", {}, "Coach review started.")}>
           Run a coach review now
         </button>
@@ -1809,8 +1809,8 @@ const STAGE_LABEL: Record<string, string> = {
   skills: "Skills: hourly history, walk-forward ranking",
   scalper: "Scalper: 1-minute history, does it survive costs?",
   gold: "Gold breakout: walk-forward, Monte Carlo, stability (needs an MT5 export)",
-  council: "Council: each bee's brain picks skills",
-  report: "Hive mind report",
+  council: "Council: each bunny's brain picks skills",
+  report: "Warren memory report",
 };
 const VERDICT: Record<string, { text: string; cls: string }> = {
   pass: { text: "✓ passed", cls: "ok" },
@@ -1832,7 +1832,7 @@ function RealCheck({ s, call }: { s: AdminState; call: (path: string, body: unkn
     <div className="pcard">
       <h3>Real-data check</h3>
       <p className="dim">
-        Downloads real public candles from OKX (and stock and ETF history from Alpaca, when its keys are set) and runs the whole roteiro in the background: skill ranking, scalper cost test, gold validation, council and hive report. It places no orders and needs no exchange account; the engine keeps
+        Downloads real public candles from OKX (and stock and ETF history from Alpaca, when its keys are set) and runs the whole roteiro in the background: skill ranking, scalper cost test, gold validation, council and warren report. It places no orders and needs no exchange account; the engine keeps
         running. Each stage ends with a verdict. Nothing here turns a feature on.
       </p>
       <ul className="checklist">
@@ -1903,7 +1903,7 @@ function SecurityTab({ call }: { call: (path: string, body: unknown, ok: string)
   return (
     <div className="pcard">
       <h3>Owner password</h3>
-      <p className="dim">Guards this panel and joining or leaving the Hive. Stored only as a salted scrypt hash.</p>
+      <p className="dim">Guards this panel and joining or leaving the Warren. Stored only as a salted scrypt hash.</p>
       <input className="pinput" type="password" autoComplete="new-password" placeholder="New password (8+ characters)" value={a} onChange={(e) => setA(e.target.value)} />
       <input className="pinput" type="password" autoComplete="new-password" placeholder="Type it again" value={b} onChange={(e) => setB(e.target.value)} />
       {b && a !== b && <p className="bad small">The two don't match.</p>}
