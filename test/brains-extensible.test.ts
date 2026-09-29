@@ -78,7 +78,7 @@ describe("brains beyond the built-in three", () => {
 
   it("reads Z.ai's key from the environment or the Setup file, and hands custom brains through", () => {
     const e = { OPENAI_BRAIN_MODEL: "m", CLAUDE_MODEL: "c", CLAUDE_EFFORT: "medium" as const, KIMI_MODEL: "k", KIMI_BASE_URL: "https://k.example/v1" };
-    expect(brainCreds({ ...e, ZAI_API_KEY: "zk-12345678" }, null).zai).toEqual({ apiKey: "zk-12345678", model: "glm-4.6", baseUrl: ZAI_BASE_URL });
+    expect(brainCreds({ ...e, ZAI_API_KEY: "zk-12345678" }, null).zai).toEqual({ apiKey: "zk-12345678", model: "glm-5.3", baseUrl: ZAI_BASE_URL });
     const settings = SettingsSchema.parse({
       version: 1, jevKey: "jev-key-12345678", zaiKey: "zs-12345678", acceptedRiskAt: 1, createdAt: 1,
       bees: [1, 2, 3].map((i) => ({ name: `Bee${i}`, style: "bizzy", coins: [] })),

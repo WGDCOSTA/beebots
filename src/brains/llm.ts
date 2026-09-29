@@ -47,7 +47,7 @@ export const brainLabel = (id: string): string => brainInfo(id).label;
 
 /** Z.ai's OpenAI-compatible API (international). China: https://open.bigmodel.cn/api/paas/v4 */
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
-export const ZAI_DEFAULT_MODEL = "glm-4.6";
+export const ZAI_DEFAULT_MODEL = "glm-5.3";
 
 /**
  * How a compatible server is asked for JSON: "schema" = OpenAI's strict json_schema, "object" = JSON mode with the

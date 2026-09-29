@@ -62,7 +62,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   { key: "OPENAI_BRAIN_MODEL", group: "brains", label: "ChatGPT model", help: "OpenAI model for the ChatGPT brain.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "CLAUDE_MODEL", group: "brains", label: "Claude model", help: "Anthropic model id for the Claude brain.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "CLAUDE_EFFORT", group: "brains", label: "Claude effort", help: "How hard Claude thinks (more effort costs more tokens).", type: "enum", options: ["low", "medium", "high"] },
-  { key: "ZAI_MODEL", group: "brains", label: "GLM model (Z.ai)", help: "Z.ai model id for the GLM brain, for example glm-4.6. Use the id shown in your Z.ai console.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
+  { key: "ZAI_MODEL", group: "brains", label: "GLM model (Z.ai)", help: "Z.ai model id for the GLM brain, for example glm-5.3. Use the id shown in your Z.ai console.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "ZAI_BASE_URL", group: "brains", label: "Z.ai API base", help: "Z.ai's OpenAI-compatible API: https://api.z.ai/api/paas/v4 (international) or https://open.bigmodel.cn/api/paas/v4 (China).", type: "text", maxLen: 120, pattern: /^https:\/\/[A-Za-z0-9.-]+(\/[A-Za-z0-9._/-]*)?$/ },
   { key: "KIMI_MODEL", group: "brains", label: "Kimi model", help: "Moonshot model id for the Kimi brain.", type: "text", maxLen: 60, pattern: /^[A-Za-z0-9._:-]+$/ },
   { key: "KIMI_BASE_URL", group: "brains", label: "Kimi API base", help: "Moonshot's API (api.moonshot.ai for international, api.moonshot.cn for China).", type: "text", maxLen: 120, pattern: /^https:\/\/[A-Za-z0-9.-]+(\/[A-Za-z0-9._/-]*)?$/ },

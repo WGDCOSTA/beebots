@@ -35,7 +35,7 @@ Nothing here trades by itself, and nothing here can bypass a cap, a stop or the 
 | bee2 | Claude (Anthropic) | `ANTHROPIC_API_KEY`, or an Anthropic Console sign-in (below) | `CLAUDE_MODEL=claude-opus-5` |
 | bee3 | Kimi (Moonshot AI) | `KIMI_API_KEY` or `MOONSHOT_API_KEY` | `KIMI_MODEL=kimi-k2.5` |
 
-A fourth built-in brain, **GLM (Z.ai)**, uses `ZAI_API_KEY`, `ZAI_MODEL` (default `glm-4.6`; use the model id shown in
+A fourth built-in brain, **GLM (Z.ai)**, uses `ZAI_API_KEY`, `ZAI_MODEL` (default `glm-5.3`; use the model id shown in
 your Z.ai console) and `ZAI_BASE_URL` (international `https://api.z.ai/api/paas/v4`, China
 `https://open.bigmodel.cn/api/paas/v4`).
 
