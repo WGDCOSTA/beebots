@@ -101,9 +101,42 @@ export interface AdminField {
   set?: boolean;
 }
 
+export interface StepStatus {
+  id: string;
+  stage: string;
+  label: string;
+  state: "pending" | "running" | "done" | "failed" | "skipped";
+  note: string;
+  startedAt: number | null;
+  endedAt: number | null;
+}
+export interface PreflightItem {
+  id: string;
+  label: string;
+  ok: boolean;
+  required: boolean;
+  note: string;
+}
+export interface StageVerdict {
+  stage: "skills" | "scalper" | "gold" | "hive";
+  title: string;
+  status: "pass" | "fail" | "none" | "stale" | "incomplete";
+  headline: string;
+  details: string[];
+  at: number | null;
+}
+export interface CheckState {
+  stages: string[];
+  preflight: PreflightItem[];
+  verdicts: StageVerdict[];
+  goldDir: string;
+  goldFiles: string[];
+}
+
 export interface JobStatus {
   id: number;
   command: string;
+  steps?: StepStatus[];
   args: string[];
   state: "running" | "done" | "failed";
   startedAt: number;
@@ -192,7 +225,7 @@ export interface AdminState {
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];
-  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null };
+  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState };
   coachAvailable: boolean;
 }
 

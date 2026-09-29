@@ -407,7 +407,13 @@ Settings (Admin → Settings → Survival & rewards, or `.env`): `SURVIVAL_MODE`
     see its health and level, revive a dead bee, or convene its brains now;
   - **Settings**: brains and models, Jev's cap, every risk limit, the per-style knobs, cadence and alerts. Saved as
     overrides in `admin.json`; a variable set in the environment always wins and shows as "set in .env";
-  - **Lab, skills & evolution**: start fetch / run / council / cycle (a child process, so the engine keeps trading),
+  - **Lab, skills & evolution**: the **Real-data check** card runs the whole testing roteiro as one background job
+    (1H history and skill ranking, 1m history and the scalper cost test, gold walk-forward / Monte Carlo / stability,
+    council, hive report). It uses public candles only, places no orders and turns nothing on. A preflight lists what
+    is ready, each step shows its status, and every stage ends with a verdict read back from the reports: skills must
+    beat buy-and-hold out of sample on real data, the scalper needs an edge after costs (synthetic data never counts),
+    gold needs its validation gates (a gate that did not run is not passed). Gold needs your own XAUUSD bar export
+    from MT5 in `<LAB_DIR>/gold/data/`; without it those steps are skipped. Below it: start fetch / run / council / cycle (a child process, so the engine keeps trading),
     watch its log, run a coach review, **import a skill** (compiled and backtested on the spot), and set learning,
     survival and rewards;
   - **Security**: change the owner password.

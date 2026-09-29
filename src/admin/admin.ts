@@ -24,6 +24,7 @@ import { anthropicLoginCommand } from "../brains/llm.js";
 import { BeeSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import type { AccountFacts } from "../okx/account.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
+import { CHECK_STAGES, goldCsvs, preflight, verdicts } from "./check.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
 
 const MAX_BODY = 32 * 1024;
@@ -131,6 +132,7 @@ const BeesBody = z.object({ bees: z.array(BeeEdit).min(BEES.length).max(MAX_BEES
 const SlotBody = z.object({ bee: z.string() });
 const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
 const PasswordBody = z.object({ next: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD) });
+const RealCheckBody = z.object({ stages: z.array(z.enum(CHECK_STAGES)).min(1).max(CHECK_STAGES.length) });
 const LabBody = z.object({
   command: z.enum(LAB_COMMANDS),
   args: z
@@ -155,6 +157,10 @@ export class Admin {
 
   constructor(private o: AdminOpts) {
     this.now = o.now ?? Date.now;
+  }
+
+  private labDir(): string {
+    return this.o.labDir ?? "./data/lab";
   }
 
   private keySet(k: KeyName): boolean {
@@ -268,7 +274,18 @@ export class Admin {
           ...(f.secret ? { set: lockedByEnv || f.key in overrides } : { value: effective[f.key] ?? null, default: defaults[f.key] ?? null }),
         };
       }),
-      lab: { job: this.o.jobs.status(), graph: this.o.graphStats(), playbook: this.o.playbook() },
+      lab: {
+        job: this.o.jobs.status(),
+        graph: this.o.graphStats(),
+        playbook: this.o.playbook(),
+        check: {
+          stages: CHECK_STAGES,
+          preflight: preflight({ mode: this.o.mode, keys, hasBees: !!settings, labDir: this.labDir() }),
+          verdicts: verdicts(this.labDir(), { now: this.now(), maxAgeDays: Number(effective.SCALP_LAB_MAX_AGE_DAYS ?? 14) || 14, graph: this.o.graphStats() }),
+          goldDir: join(this.labDir(), "gold", "data"),
+          goldFiles: goldCsvs(this.labDir()).map((f) => f.split("/").pop()),
+        },
+      },
       coachAvailable: !!this.o.coachNow,
     };
   }
@@ -536,6 +553,19 @@ export class Admin {
           return send(res, 409, { error: (err as Error).message });
         }
         log.info("admin: lab job started", { command: p.data.command });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/check": {
+        const p = RealCheckBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: `stages: any of ${CHECK_STAGES.join(", ")}` });
+        const keys = this.state().keys as Record<string, { set: boolean }>;
+        try {
+          this.o.jobs.startCheck(p.data.stages, { labDir: this.labDir(), hasBrain: ["jev", "openai", "anthropic", "kimi"].some((k) => keys[k]?.set) });
+        } catch (err) {
+          return send(res, 409, { error: (err as Error).message });
+        }
+        log.info("admin: real-data check started", { stages: p.data.stages });
         return send(res, 200, this.state());
       }
 

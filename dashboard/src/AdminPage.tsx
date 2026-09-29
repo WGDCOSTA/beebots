@@ -900,6 +900,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
 
   return (
     <>
+      <RealCheck s={s} call={call} />
+
       <div className="pcard">
         <h3>Run the lab</h3>
         <p className="dim">
@@ -1013,6 +1015,98 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
 
       <SettingsTab s={s} call={call} only={["learning", "evolution"]} />
     </>
+  );
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  skills: "Skills: hourly history, walk-forward ranking",
+  scalper: "Scalper: 1-minute history, does it survive costs?",
+  gold: "Gold breakout: walk-forward, Monte Carlo, stability (needs an MT5 export)",
+  council: "Council: each bee's brain picks skills",
+  report: "Hive mind report",
+};
+const VERDICT: Record<string, { text: string; cls: string }> = {
+  pass: { text: "✓ passed", cls: "ok" },
+  fail: { text: "✗ no edge", cls: "err" },
+  stale: { text: "● out of date", cls: "" },
+  incomplete: { text: "● incomplete", cls: "" },
+  none: { text: "○ not run", cls: "" },
+};
+const STEP_MARK: Record<string, string> = { pending: "○", running: "●", done: "✓", failed: "✗", skipped: "–" };
+
+/** The roteiro as one button: public data, no orders, a verdict per stage. */
+function RealCheck({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  const c = s.lab.check;
+  const [picked, setPicked] = useState<string[]>(() => c.stages.filter((x) => x !== "gold" || c.goldFiles.length > 0));
+  const job = s.lab.job?.command === "check" ? s.lab.job : null;
+  const running = s.lab.job?.state === "running";
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  return (
+    <div className="pcard">
+      <h3>Real-data check</h3>
+      <p className="dim">
+        Downloads real public candles from OKX and runs the whole roteiro in the background: skill ranking, scalper cost test, gold validation, council and hive report. It places no orders and needs no exchange account; the engine keeps
+        running. Each stage ends with a verdict. Nothing here turns a feature on.
+      </p>
+      <ul className="checklist">
+        {c.preflight.map((i) => (
+          <li key={i.id}>
+            <span className={i.ok ? "good" : "dim"}>{i.ok ? "✓" : "○"}</span> <strong>{i.label}</strong> <span className="dim small">{i.note}</span>
+          </li>
+        ))}
+      </ul>
+      <ul className="checklist stages">
+        {c.stages.map((id) => (
+          <li key={id}>
+            <label>
+              <input type="checkbox" checked={picked.includes(id)} disabled={running} onChange={() => toggle(id)} /> {STAGE_LABEL[id] ?? id}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="row-actions">
+        <button className="pbtn" disabled={running || !picked.length} onClick={() => void call("check", { stages: picked }, "Real-data check started.")}>
+          {running ? "Running…" : "Run the real-data check"}
+        </button>
+        {running && job && (
+          <button className="pbtn ghost" onClick={() => void call("lab/stop", {}, "Stopping the check.")}>
+            Stop
+          </button>
+        )}
+      </div>
+      {job?.steps && (
+        <ul className="checklist">
+          {job.steps.map((st) => (
+            <li key={st.id} className={st.state === "failed" ? "bad" : ""}>
+              <span>{STEP_MARK[st.state]}</span> {st.label} {st.note && <span className="dim small">· {st.note}</span>}
+              {st.startedAt && st.endedAt ? <span className="dim small num"> · {Math.max(1, Math.round((st.endedAt - st.startedAt) / 1000))}s</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <h4>Verdicts</h4>
+      <div className="verdicts">
+        {c.verdicts.map((v) => (
+          <div className="verdict" key={v.stage}>
+            <div className="verdict-head">
+              <strong>{v.title}</strong> <span className={`badge ${VERDICT[v.status]!.cls}`}>{VERDICT[v.status]!.text}</span>
+              {v.at ? <span className="dim small num"> {new Date(v.at).toISOString().slice(0, 16).replace("T", " ")}</span> : null}
+            </div>
+            <p className="small">{v.headline}</p>
+            {v.details.length > 0 && (
+              <ul className="dim small">
+                {v.details.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="dim small">
+        Gold needs your own XAUUSD bar export from MT5: put the CSV in <code>{c.goldDir}</code> {c.goldFiles.length ? `(found: ${c.goldFiles.join(", ")})` : "(none there yet)"}. A test that did not run counts as not passed.
+      </p>
+    </div>
   );
 }
 

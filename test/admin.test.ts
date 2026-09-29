@@ -43,7 +43,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
   let hash = HASH;
   let restarted = 0;
   const started: Array<[string, unknown]> = [];
-  const jobs = { start: (c: string, a: unknown) => started.push([c, a]), stop: () => {}, status: () => null } as unknown as LabJobs;
+  const jobs = { start: (c: string, a: unknown) => started.push([c, a]), startCheck: (st: unknown) => started.push(["check", st]), stop: () => {}, status: () => null } as unknown as LabJobs;
   const admin = new Admin({
     settingsPath,
     env: opts.env ?? {},
@@ -192,7 +192,16 @@ describe("admin API", () => {
     const h = harness();
     expect((await h.call("/admin/lab", { command: "rm -rf" })).status).toBe(400);
     expect((await h.call("/admin/lab", { command: "run", args: { synthetic: 2 } })).status).toBe(200);
-    expect(h.started).toEqual([["run", { synthetic: 2 }]]);
+    expect((await h.call("/admin/check", { stages: ["rm -rf"] })).status).toBe(400);
+    expect((await h.call("/admin/check", { stages: [] })).status).toBe(400);
+    const ck = await h.call("/admin/check", { stages: ["skills", "report"] });
+    expect(ck.status).toBe(200);
+    expect(h.started.at(-1)).toEqual(["check", ["skills", "report"]]);
+    const lab = (ck.body as { lab: { check: { stages: string[]; preflight: Array<{ id: string }>; verdicts: Array<{ stage: string }> } } }).lab.check;
+    expect(lab.stages).toContain("gold");
+    expect(lab.preflight.map((i) => i.id)).toContain("brains");
+    expect(lab.verdicts.map((v) => v.stage)).toEqual(["skills", "scalper", "gold", "hive"]);
+    expect(h.started).toEqual([["run", { synthetic: 2 }], ["check", ["skills", "report"]]]);
     expect((await h.call("/admin/coach")).status).toBe(409);
     await h.call("/admin/restart");
     await new Promise((r) => setTimeout(r, 600));
@@ -276,6 +285,7 @@ describe("lab jobs", () => {
     expect(() => jobs.start("council", {})).toThrow(/already running/);
     (children[0] as unknown as { stdout: EventEmitter }).stdout.emit("data", Buffer.from("line one\nkey sk-abcdefghijklmnopqrstu\n"));
     children[0]!.emit("close", 0);
+    await new Promise((r) => setImmediate(r));
     expect(j).toMatchObject({ state: "done", exitCode: 0 });
     expect(j.log).toEqual(["line one", "key [redacted]"]);
     expect(done).toBe(1);
