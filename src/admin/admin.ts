@@ -19,13 +19,14 @@ import { skillFromSpec, type Skill } from "../lab/skills/index.js";
 import { NoteError, type NoteBook } from "../brains/notes.js";
 import type { Researcher } from "../brains/research.js";
 import { AgentError, MAX_PROMPT, type SkillAgent } from "../lab/skillAgent.js";
+import { looksLikeAction, needsConfirmation, type McpGateway, type McpServerDef } from "../mcp/gateway.js";
 import { KEY_RE, TEMPLATES, validateSkill, Workspace, WorkspaceError } from "../lab/workspace.js";
 import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import { anthropicLoginCommand, BRAINS, brainInfo, checkBaseUrl, registerBrain, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "../brains/llm.js";
-import { BeeSchema, CustomBrainSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
+import { BeeSchema, CustomBrainSchema, McpGrantSchema, McpServerSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import type { AccountFacts } from "../okx/account.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { CHECK_STAGES, goldCsvs, preflight, verdicts } from "./check.js";
@@ -101,6 +102,8 @@ export interface AdminOpts {
   research?: Researcher;
   /** Drafts skills from a description, with any brain that can answer (lab/skillAgent.ts). */
   skillAgent?: SkillAgent;
+  /** The gate to outside MCP servers (mcp/gateway.ts): discovery here, grants enforced when a bee researches. */
+  mcp?: McpGateway;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
   /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
@@ -165,6 +168,19 @@ const CustomBrainBody = z.object({
 const CustomBrainTest = z.object({ id: z.string().optional(), baseUrl: z.string().trim().max(200), model: z.string().trim().min(1).max(80), apiKey: z.string().trim().max(400).optional(), vendor: z.string().trim().max(30).optional() });
 const BrainRef = z.object({ id: CustomBrainSchema.shape.id });
 const AskAgent = z.object({ prompt: z.string().trim().min(8).max(MAX_PROMPT), brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/).optional(), key: z.string().trim().regex(KEY_RE).optional() });
+const McpSave = z.object({
+  id: McpServerSchema.shape.id,
+  label: McpServerSchema.shape.label,
+  url: z.string().trim().max(300),
+  transport: McpServerSchema.shape.transport.optional(),
+  authHeader: McpServerSchema.shape.authHeader.optional(),
+  token: z.string().trim().max(600).optional(),
+  maxCallsDay: McpServerSchema.shape.maxCallsDay.optional(),
+  /** Save even though discovery failed (a server that is down right now). */
+  force: z.boolean().optional(),
+});
+const McpRef = z.object({ id: McpServerSchema.shape.id });
+const McpGrants = z.object({ id: McpServerSchema.shape.id, grants: z.array(McpGrantSchema).max(100) });
 const DraftKey = z.string().trim().regex(KEY_RE, "id: lowercase letters, digits and _ only (2 to 40)");
 const DraftSave = z.object({ key: DraftKey.optional(), json: z.string().min(2).max(30_000), note: Str(200).optional() });
 const DraftRef = z.object({ key: DraftKey });
@@ -272,6 +288,29 @@ export class Admin {
     return [...v.builtin.filter((b) => b.ready).map((b) => b.id), ...v.custom.map((b) => b.id)];
   }
 
+  /** The connectors as the panel may see them: never a token, the tools the server offers, and who may call which. */
+  private mcpView() {
+    const settings = loadSettings(this.o.settingsPath);
+    const used = this.o.mcp?.usedToday() ?? {};
+    return {
+      available: !!this.o.mcp,
+      canEdit: !!settings,
+      servers: (settings?.mcpServers ?? []).map((m) => ({
+        id: m.id,
+        label: m.label,
+        url: m.url,
+        transport: m.transport,
+        authHeader: m.authHeader,
+        tokenSet: !!m.token,
+        maxCallsDay: m.maxCallsDay,
+        usedToday: used[m.id] ?? 0,
+        tools: m.tools.map((t) => ({ name: t.name, description: t.description, readOnly: t.readOnly, needsConfirm: needsConfirmation(t), looksLikeAction: looksLikeAction(t.name) })),
+        grants: m.grants,
+      })),
+      log: this.o.mcp?.recent(30) ?? [],
+    };
+  }
+
   /** Everything the panel shows. No secret ever leaves here. */
   state() {
     const settings = loadSettings(this.o.settingsPath);
@@ -362,6 +401,7 @@ export class Admin {
           goldFiles: goldCsvs(this.labDir()).map((f) => f.split("/").pop()),
         },
         workshop: { drafts: this.workspace().list(), templates: TEMPLATES, agent: this.o.skillAgent?.available() ?? [] },
+        mcp: this.mcpView(),
         notes: {
           available: !!this.o.notes,
           notes: this.o.notes?.all().filter((n) => n.status !== "rejected").slice(0, 200) ?? [],
@@ -617,6 +657,98 @@ export class Admin {
           backtest: { score: result.score, returnPct: result.oos.returnPct, stabilityPct: result.stabilityPct, trades: result.oos.trades, maxDrawdownPct: result.oos.maxDrawdownPct },
           note: "Saved. It joins every lab run from now on; a council can adopt it.",
         });
+      }
+
+      case "/admin/mcp/save": {
+        const p = McpSave.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues.map((i) => `${i.path.join(".") || "server"}: ${i.message}`).join("; ") });
+        const s = loadSettings(this.o.settingsPath);
+        if (!s) return send(res, 409, { error: "This server has no Setup file, so connectors cannot be saved here. Run Setup first." });
+        if (!this.o.mcp) return send(res, 503, { error: "Connectors are not available here." });
+        const list = [...(s.mcpServers ?? [])];
+        const at = list.findIndex((m) => m.id === p.data.id);
+        if (at < 0 && list.length >= 20) return send(res, 400, { error: "That is 20 connectors already." });
+        const old = list[at];
+        const base = McpServerSchema.safeParse({
+          id: p.data.id,
+          label: p.data.label,
+          url: p.data.url,
+          transport: p.data.transport ?? old?.transport ?? "http",
+          authHeader: p.data.authHeader ?? old?.authHeader ?? "Authorization",
+          ...((p.data.token || old?.token) ? { token: p.data.token || old?.token } : {}),
+          maxCallsDay: p.data.maxCallsDay ?? old?.maxCallsDay ?? 50,
+          tools: old?.tools ?? [],
+          grants: old?.grants ?? [],
+        });
+        if (!base.success) return send(res, 400, { error: base.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
+        const next = base.data;
+        if (!p.data.force) {
+          try {
+            const tools = await this.o.mcp.discover(next as McpServerDef);
+            next.tools = tools;
+            next.grants = next.grants.filter((g) => tools.some((t) => t.name === g.tool));
+          } catch (err) {
+            return send(res, 400, { error: `Could not read its tools: ${safeError(err).message}. Not saved. If the server is only down right now, save it anyway with "Save without testing".` });
+          }
+        }
+        if (at >= 0) list[at] = next;
+        else list.push(next);
+        saveSettings(this.o.settingsPath, { ...s, mcpServers: list });
+        log.info("admin: connector saved", { id: next.id, host: new URL(next.url).host, tools: next.tools.length });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/mcp/discover": {
+        const p = McpRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "id" });
+        const s = loadSettings(this.o.settingsPath);
+        const m = s?.mcpServers?.find((x) => x.id === p.data.id);
+        if (!s || !m) return send(res, 404, { error: "No such connector." });
+        if (!this.o.mcp) return send(res, 503, { error: "Connectors are not available here." });
+        try {
+          const tools = await this.o.mcp.discover(m as McpServerDef);
+          m.tools = tools;
+          // A grant for a tool the server no longer offers goes away with it.
+          m.grants = m.grants.filter((g) => tools.some((t) => t.name === g.tool));
+        } catch (err) {
+          return send(res, 502, { error: `Could not read its tools: ${safeError(err).message}` });
+        }
+        saveSettings(this.o.settingsPath, s);
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/mcp/grant": {
+        const p = McpGrants.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues.map((i) => `${i.path.join(".") || "grants"}: ${i.message}`).join("; ") });
+        const s = loadSettings(this.o.settingsPath);
+        const m = s?.mcpServers?.find((x) => x.id === p.data.id);
+        if (!s || !m) return send(res, 404, { error: "No such connector." });
+        const seen = new Set<string>();
+        const grants: typeof m.grants = [];
+        for (const g of p.data.grants) {
+          const t = m.tools.find((x) => x.name === g.tool);
+          if (!t) return send(res, 400, { error: `${g.tool}: this server does not offer that tool (refresh its tools first).` });
+          if (seen.has(g.tool)) return send(res, 400, { error: `${g.tool}: listed twice.` });
+          seen.add(g.tool);
+          if (needsConfirmation(t) && !g.confirmed) {
+            return send(res, 400, { error: `${g.tool}: ${t.readOnly === true ? "its name reads like an action" : "the server does not say it is read-only"}. Confirm you checked that it only reads, or leave it off.` });
+          }
+          grants.push({ tool: g.tool, bees: [...new Set(g.bees)], ...(needsConfirmation(t) ? { confirmed: true } : {}) });
+        }
+        m.grants = grants;
+        saveSettings(this.o.settingsPath, s);
+        log.info("admin: connector grants saved", { id: m.id, tools: grants.length });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/mcp/delete": {
+        const p = McpRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "id" });
+        const s = loadSettings(this.o.settingsPath);
+        if (!s?.mcpServers?.some((m) => m.id === p.data.id)) return send(res, 404, { error: "No such connector." });
+        saveSettings(this.o.settingsPath, { ...s, mcpServers: s.mcpServers.filter((m) => m.id !== p.data.id) });
+        log.info("admin: connector removed", { id: p.data.id });
+        return send(res, 200, this.state());
       }
 
       case "/admin/brains/test": {

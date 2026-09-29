@@ -4,7 +4,7 @@
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
-import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
+import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
@@ -1344,7 +1344,9 @@ function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: strin
             {x.evidence.length > 0 && (
               <ul className="dim small">
                 {x.evidence.map((e, i) => (
-                  <li key={i}>{e}</li>
+                  <li key={i}>
+                    {e.startsWith("external:") && <span className="badge">outside source, unverified</span>} {e}
+                  </li>
                 ))}
               </ul>
             )}
@@ -1398,6 +1400,194 @@ function ResearchNotes({ s, call, refresh }: { s: AdminState; call: (path: strin
       >
         Save background note
       </button>
+    </div>
+  );
+}
+
+/** Outside MCP servers for research. Read-only by rule: the owner grants named tools to named bees, nothing else is callable. */
+function Connectors({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  const v = s.lab.mcp;
+  const blank = { id: "", label: "", url: "https://", transport: "http", authHeader: "Authorization", token: "", maxCallsDay: 50 };
+  const [f, setF] = useState(blank);
+  const [editing, setEditing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30);
+  const set = (k: keyof typeof blank, val: string | number) => setF((p) => ({ ...p, [k]: val, ...(k === "label" && !editing ? { id: slug(String(val)) } : {}) }));
+  const bees = (s.bees ?? []).filter((b) => b.running);
+  if (!v.available) return null;
+  const ready = f.id.length >= 2 && f.label.trim() && /^https?:\/\//.test(f.url);
+  const save = (force: boolean) =>
+    void call("mcp/save", { ...f, token: f.token || undefined, maxCallsDay: Number(f.maxCallsDay) || 50, force }, `${f.label} saved.`).then(
+      () => {
+        setF(blank);
+        setEditing(false);
+        setFailed(false);
+      },
+      () => setFailed(true),
+    );
+  return (
+    <div className="pcard">
+      <h3>Connectors (MCP)</h3>
+      <p className="dim">
+        Let the bees look things up on outside MCP servers while they research (news, data, documentation). Read-only by rule: a bee can call only the tools you grant it by name; a tool that the server does not declare read-only, or whose name reads
+        like an action, needs your explicit confirmation before it can be granted; every call is capped per day, times out, is logged below, and its answer reaches the brain as untrusted data. Nothing here can place an order or change a
+        setting. The token is stored like the other keys, never shown again and only sent to the server's address. Servers run elsewhere: beebots does not run plugins or local commands.
+      </p>
+      {v.servers.length === 0 && <p className="dim small">No connectors yet.</p>}
+      {v.servers.map((m) => (
+        <McpServerCard key={m.id} m={m} bees={bees} call={call} onEdit={() => (setF({ id: m.id, label: m.label, url: m.url, transport: m.transport, authHeader: m.authHeader, token: "", maxCallsDay: m.maxCallsDay }), setEditing(true), setFailed(false))} />
+      ))}
+      {!v.canEdit ? (
+        <p className="dim small">No Setup file on this server, so connectors cannot be saved here.</p>
+      ) : (
+        <>
+          <h4>{editing ? `Edit ${f.label}` : "Connect a server"}</h4>
+          <div className="form-grid">
+            <label className="plabel">
+              Name
+              <input className="pinput" maxLength={30} value={f.label} onChange={(e) => set("label", e.target.value)} placeholder="News feed" />
+            </label>
+            <label className="plabel">
+              Id (fixed once saved)
+              <input className="pinput mono" maxLength={30} disabled={editing} value={f.id} onChange={(e) => set("id", slug(e.target.value))} placeholder="news_feed" />
+            </label>
+            <label className="plabel wide">
+              Server address (MCP URL)
+              <input className="pinput mono" value={f.url} onChange={(e) => (setFailed(false), set("url", e.target.value))} placeholder="https://mcp.example.com/mcp" />
+            </label>
+            <label className="plabel">
+              Transport
+              <select className="pinput" value={f.transport} onChange={(e) => set("transport", e.target.value)}>
+                <option value="http">Streamable HTTP (current)</option>
+                <option value="sse">SSE (older servers)</option>
+              </select>
+            </label>
+            <label className="plabel">
+              Token header
+              <input className="pinput mono" value={f.authHeader} onChange={(e) => set("authHeader", e.target.value)} placeholder="Authorization" />
+            </label>
+            <label className="plabel">
+              Token {editing ? "(empty keeps the saved one)" : "(if it needs one)"}
+              <input className="pinput mono" type="password" autoComplete="off" value={f.token} onChange={(e) => set("token", e.target.value)} />
+            </label>
+            <label className="plabel">
+              Calls per day (all bees)
+              <input className="pinput num" type="number" min={1} max={500} value={f.maxCallsDay} onChange={(e) => set("maxCallsDay", Number(e.target.value))} />
+            </label>
+          </div>
+          <div className="row-actions">
+            <button className="pbtn" disabled={!ready} onClick={() => save(false)}>
+              {editing ? "Test & save changes" : "Test & connect"}
+            </button>
+            {failed && (
+              <button className="pbtn ghost" disabled={!ready} onClick={() => save(true)}>
+                Save without testing
+              </button>
+            )}
+            {editing && (
+              <button className="pbtn ghost" onClick={() => (setF(blank), setEditing(false), setFailed(false))}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {v.log.length > 0 && (
+        <details>
+          <summary>Recent calls ({v.log.length})</summary>
+          <ul className="checklist">
+            {v.log.map((l, i) => (
+              <li key={i} className={l.ok ? "" : "bad"}>
+                <span>{l.ok ? "✓" : "✗"}</span> <span className="num dim small">{new Date(l.at).toISOString().slice(0, 16).replace("T", " ")}</span> {l.bee} → <strong>{l.server}/{l.tool}</strong>{" "}
+                <span className="dim small mono">{l.args}</span> <span className="dim small">· {l.bytes} bytes · {l.ms} ms{l.note ? ` · ${l.note}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function McpServerCard({ m, bees, call, onEdit }: { m: McpServerView; bees: Array<{ slot: string; name: string }>; call: (path: string, body: unknown, ok: string) => Promise<void>; onEdit: () => void }) {
+  const init = () => Object.fromEntries(m.grants.map((g) => [g.tool, { bees: g.bees, confirmed: !!g.confirmed }]));
+  const [g, setG] = useState<Record<string, { bees: string[]; confirmed: boolean }>>(init);
+  const [open, setOpen] = useState(false);
+  const key = JSON.stringify(m.grants);
+  useEffect(() => setG(init()), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleBee = (tool: string, bee: string) =>
+    setG((p) => {
+      const cur = p[tool]?.bees ?? [];
+      const next = bee === "all" ? (cur.includes("all") ? [] : ["all"]) : cur.includes(bee) ? cur.filter((x) => x !== bee) : [...cur.filter((x) => x !== "all"), bee];
+      const out = { ...p };
+      if (next.length) out[tool] = { bees: next, confirmed: p[tool]?.confirmed ?? false };
+      else delete out[tool];
+      return out;
+    });
+  const body: McpGrant[] = Object.entries(g).map(([tool, x]) => ({ tool, bees: x.bees, ...(x.confirmed ? { confirmed: true } : {}) }));
+  const blocked = m.tools.filter((t) => t.needsConfirm && g[t.name] && !g[t.name]!.confirmed);
+  return (
+    <div className="verdict mcp-server">
+      <div className="verdict-head">
+        <strong>{m.label}</strong> <span className="dim small mono">{m.url.replace(/^https?:\/\//, "")}</span> <span className="badge">{m.tokenSet ? "token saved" : "no token"}</span>{" "}
+        <span className="dim small num">
+          {m.usedToday}/{m.maxCallsDay} calls today · {m.tools.length} tools · {m.grants.length} granted
+        </span>
+      </div>
+      <div className="row-actions">
+        <button className="pbtn ghost small" onClick={() => setOpen((x) => !x)}>
+          {open ? "Hide tools" : "Tools & grants"}
+        </button>
+        <button className="pbtn ghost small" onClick={() => void call("mcp/discover", { id: m.id }, "Tools refreshed.")}>
+          Refresh tools
+        </button>
+        <button className="pbtn ghost small" onClick={onEdit}>
+          Edit
+        </button>
+        <button className="pbtn ghost small" onClick={() => confirm(`Remove ${m.label}?`) && void call("mcp/delete", { id: m.id }, `${m.label} removed.`)}>
+          Remove
+        </button>
+      </div>
+      {open && (
+        <>
+          {m.tools.length === 0 && <p className="dim small">The server offers no tools (or its tools were never read: Refresh tools).</p>}
+          <ul className="mcp-tools">
+            {m.tools.map((t) => {
+              const on = g[t.name];
+              return (
+                <li key={t.name}>
+                  <div>
+                    <strong className="mono">{t.name}</strong>{" "}
+                    <span className={`badge ${t.readOnly === true && !t.looksLikeAction ? "ok" : ""}`}>{t.looksLikeAction ? "reads like an action" : t.readOnly === true ? "declared read-only" : t.readOnly === false ? "declared NOT read-only" : "read-only not declared"}</span>
+                    <div className="dim small">{t.description || "No description."}</div>
+                  </div>
+                  <div className="mcp-bees">
+                    <label>
+                      <input type="checkbox" checked={!!on?.bees.includes("all")} onChange={() => toggleBee(t.name, "all")} /> all bees
+                    </label>
+                    {bees.map((b) => (
+                      <label key={b.slot}>
+                        <input type="checkbox" checked={!!on?.bees.includes(b.slot) || !!on?.bees.includes("all")} disabled={!!on?.bees.includes("all")} onChange={() => toggleBee(t.name, b.slot)} /> {b.name}
+                      </label>
+                    ))}
+                    {on && t.needsConfirm && (
+                      <label className="warn">
+                        <input type="checkbox" checked={on.confirmed} onChange={(e) => setG((p) => ({ ...p, [t.name]: { ...p[t.name]!, confirmed: e.target.checked } }))} /> I checked that this tool only reads
+                      </label>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="row-actions">
+            <button className="pbtn" disabled={blocked.length > 0} title={blocked.length ? `Confirm: ${blocked.map((t) => t.name).join(", ")}` : ""} onClick={() => void call("mcp/grant", { id: m.id, grants: body }, "Grants saved.")}>
+              Save grants
+            </button>
+            {blocked.length > 0 && <span className="dim small">Confirm or untick: {blocked.map((t) => t.name).join(", ")}</span>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1555,6 +1745,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
       <SkillWorkshop s={s} password={password} refresh={refresh} />
 
       <ResearchNotes s={s} call={call} refresh={refresh} />
+
+      <Connectors s={s} call={call} />
 
       <ImportSkill password={password} />
 

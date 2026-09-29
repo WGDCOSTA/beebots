@@ -35,7 +35,7 @@ function settingsFile(): string {
 
 const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, compat: async () => null, coinmarketcap: async () => null };
 
-function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"] } = {}) {
+function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"] } = {}) {
   const settingsPath = settingsFile();
   const forgotten: string[] = [];
   const revived: string[] = [];
@@ -74,6 +74,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     labDir,
     notes: new NoteBook(join(labDir, "notes.json")),
     ...(opts.skillAgent ? { skillAgent: opts.skillAgent } : {}),
+    ...(opts.mcp ? { mcp: opts.mcp } : {}),
     research: { busy: () => [], blocked: (id: string) => (id === "bee2" ? "Claude has no key (Admin → API keys)" : null), research: async (id: string) => void researched.push(id) } as never,
     okxCheck: opts.okxCheck,
   });
@@ -289,6 +290,59 @@ describe("adding and removing bees", () => {
     expect(k.status).toBe(200);
     expect((k.body as { keys: Record<string, { set: boolean }> }).keys.zai!.set).toBe(true);
     expect(loadSettings(h.settingsPath)!.zaiKey).toBe("zai-key-12345678");
+  });
+
+  it("connectors: save, discover, grant only what is confirmed read-only, and never show a token", async () => {
+    let offered = [
+      { name: "get_price", description: "Latest price", readOnly: true, inputSchema: { type: "object" } },
+      { name: "send_alert", description: "Send a message", readOnly: false, inputSchema: {} },
+      { name: "search_news", description: "Headlines", readOnly: null, inputSchema: {} },
+      { name: "delete_thing", description: "Claims read-only, reads like an action", readOnly: true, inputSchema: {} },
+    ];
+    let fail = false;
+    const mcp = { discover: async () => (fail ? Promise.reject(new Error("connection refused")) : offered), usedToday: () => ({ data: 3 }), recent: () => [] };
+    const h = harness({ mcp: mcp as never });
+    const server = { id: "data", label: "Data feed", url: "https://mcp.example.com/mcp", token: "tok-secret-987654321", authHeader: "X-Api-Key" };
+    expect((await h.call("/admin/mcp/save", { ...server, url: "http://public.example/mcp" })).status).toBe(400);
+    expect((await h.call("/admin/mcp/save", { ...server, id: "Bad Id" })).status).toBe(400);
+    fail = true;
+    const down = await h.call("/admin/mcp/save", server);
+    expect(down.status).toBe(400);
+    expect(down.body.error).toMatch(/Not saved/);
+    fail = false;
+    const saved = await h.call("/admin/mcp/save", server);
+    expect(saved.status).toBe(200);
+    expect(JSON.stringify(saved.body)).not.toContain("tok-secret-987654321");
+    const view = (saved.body as { lab: { mcp: { available: boolean; canEdit: boolean; servers: Array<{ id: string; tokenSet: boolean; usedToday: number; authHeader: string; tools: Array<{ name: string; needsConfirm: boolean; looksLikeAction: boolean }>; grants: unknown[] }> } } }).lab.mcp;
+    expect(view).toMatchObject({ available: true, canEdit: true });
+    expect(view.servers[0]).toMatchObject({ id: "data", tokenSet: true, usedToday: 3, authHeader: "X-Api-Key", grants: [] });
+    expect(view.servers[0]!.tools.map((t) => [t.name, t.needsConfirm, t.looksLikeAction])).toEqual([["get_price", false, false], ["send_alert", true, true], ["search_news", true, false], ["delete_thing", true, true]]);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.token).toBe("tok-secret-987654321");
+    // Grants: a proven read-only tool goes through; the rest need the owner's confirmation; unknown and repeated tools are refused.
+    const grant = (grants: unknown[]) => h.call("/admin/mcp/grant", { id: "data", grants });
+    expect((await grant([{ tool: "get_price", bees: ["bee1"] }])).status).toBe(200);
+    expect((await grant([{ tool: "send_alert", bees: ["all"] }])).body.error).toMatch(/does not say it is read-only/);
+    expect((await grant([{ tool: "delete_thing", bees: ["all"] }])).body.error).toMatch(/reads like an action/);
+    expect((await grant([{ tool: "nope", bees: ["all"] }])).status).toBe(400);
+    expect((await grant([{ tool: "get_price", bees: ["bee1"] }, { tool: "get_price", bees: ["bee2"] }])).body.error).toMatch(/listed twice/);
+    expect((await grant([{ tool: "get_price", bees: ["bee99"] }])).status).toBe(400);
+    expect((await grant([{ tool: "get_price", bees: ["bee1", "bee1"] }, { tool: "search_news", bees: ["all"], confirmed: true }])).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.grants).toEqual([{ tool: "get_price", bees: ["bee1"] }, { tool: "search_news", bees: ["all"], confirmed: true }]);
+    // Editing without retyping the token keeps it and the grants; refreshing drops grants for tools that vanished.
+    expect((await h.call("/admin/mcp/save", { id: "data", label: "Data feed 2", url: server.url, maxCallsDay: 10 })).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]).toMatchObject({ label: "Data feed 2", token: "tok-secret-987654321", maxCallsDay: 10, transport: "http", authHeader: "X-Api-Key" });
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.grants).toHaveLength(2);
+    offered = offered.filter((t) => t.name !== "search_news");
+    expect((await h.call("/admin/mcp/discover", { id: "data" })).status).toBe(200);
+    expect(loadSettings(h.settingsPath)!.mcpServers![0]!.grants).toEqual([{ tool: "get_price", bees: ["bee1"] }]);
+    fail = true;
+    expect((await h.call("/admin/mcp/discover", { id: "data" })).status).toBe(502);
+    expect((await h.call("/admin/mcp/discover", { id: "nope_x" })).status).toBe(404);
+    // Saving while it is down, on purpose, keeps what was known.
+    expect((await h.call("/admin/mcp/save", { ...server, force: true })).status).toBe(200);
+    expect((await h.call("/admin/mcp/delete", { id: "data" })).status).toBe(200);
+    expect((await h.call("/admin/mcp/delete", { id: "data" })).status).toBe(404);
+    expect(loadSettings(h.settingsPath)!.mcpServers).toEqual([]);
   });
 
   it("skill agent: drafts a skill from a prompt into the workshop, never publishing it", async () => {

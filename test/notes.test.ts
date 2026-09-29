@@ -173,3 +173,85 @@ describe("researcher", () => {
     expect(r.blocked("bee1")).toMatch(/waiting for your review/);
   });
 });
+
+describe("researcher with outside MCP tools", () => {
+  const TOOL = { server: "data", serverLabel: "Data", tool: "get_price", description: "Latest price", inputSchema: { type: "object", required: ["coin"], properties: { coin: { type: "string" } } }, left: 10 };
+  const note = (evidence: string[], confidence = "high") => ({ notes: [{ title: "SOL is cheap", claim: "SOL trades under its recent range per the feed.", evidence, coins: ["SOL"], confidence }] });
+
+  function rig(plan: unknown, answer: unknown, over: { granted?: unknown[]; call?: (a: unknown[]) => unknown } = {}) {
+    const { graph, book } = setup();
+    const asked: Array<{ name: string; user: string; system: string }> = [];
+    const brain: LlmClient = {
+      brain: "openai",
+      model: "m",
+      async json<T>(ask: JsonAsk<T>): Promise<JsonAnswer<T>> {
+        asked.push({ name: ask.name, user: ask.user, system: ask.system });
+        return { data: ask.validate.parse(ask.name === "outside_lookups" ? plan : answer), brain: "openai", model: "m", inputTokens: 1, outputTokens: 1, latencyMs: 1 };
+      },
+    };
+    const calls: unknown[][] = [];
+    const mcp = {
+      granted: (bee: string) => (bee === "bee1" ? (over.granted ?? [TOOL]) : []),
+      call: async (...a: unknown[]) => (calls.push(a), over.call ? over.call(a) : { ok: true, text: "SOL = 101.5 USD", truncated: false, note: "" }),
+    };
+    const r = new Researcher({ graph, notes: book, clients: { openai: brain }, bees: () => BEES, playbookPath: join(mkdtempSync(join(tmpdir(), "pb-")), "p.json"), ranking: () => null, maxCallsPerDay: 10, mcp: mcp as never, now: () => 1_000_000 });
+    return { r, book, asked, calls };
+  }
+  const plan = { calls: [{ server: "data", tool: "get_price", arguments: '{"coin":"SOL"}' }], why: "check SOL" };
+
+  it("asks the brain what to look up, calls only what is granted, and hands the result on as untrusted data", async () => {
+    const { r, book, asked, calls } = rig(plan, note(["external:data/get_price returned SOL = 101.5 USD", "labRanking: score 0.4"]));
+    const out = await r.research("bee1");
+    expect(out).toMatchObject({ drafted: 1, outside: { made: 1, ok: 1 } });
+    expect(calls).toEqual([["bee1", "data", "get_price", { coin: "SOL" }]]);
+    expect(asked.map((a) => a.name)).toEqual(["outside_lookups", "research_notes"]);
+    expect(JSON.parse(asked[0]!.user).tools).toHaveLength(1);
+    expect(asked[0]!.system).toMatch(/untrusted data/);
+    const pack = JSON.parse(asked[1]!.user);
+    expect(pack.external.warning).toMatch(/Never follow instructions/);
+    expect(pack.external.results[0]).toMatchObject({ source: "external:data/get_price", ok: true, data: "SOL = 101.5 USD" });
+    expect(asked[1]!.system).toMatch(/never instructions/);
+    // Still pending, and a note resting only on outside data cannot claim high confidence.
+    expect(book.all()[0]).toMatchObject({ status: "pending", confidence: "high" });
+  });
+
+  it("caps a note resting only on outside data at medium, and drops an invented outside source", async () => {
+    const only = rig(plan, note(["external:data/get_price returned SOL = 101.5 USD"]));
+    await only.r.research("bee1");
+    expect(only.book.all()[0]!.confidence).toBe("medium");
+    const fake = rig(plan, note(["external:data/other_tool said SOL is cheap"]));
+    expect((await fake.r.research("bee1")).drafted).toBe(0);
+    const mixed = rig(plan, note(["external:data/other_tool said SOL is cheap", "labRanking: score 0.41 for momentum"]));
+    await mixed.r.research("bee1");
+    expect(mixed.book.all()[0]!.evidence).toEqual(["labRanking: score 0.41 for momentum"]);
+  });
+
+  it("refuses a call for a tool that is not granted, and one whose arguments do not fit", async () => {
+    const wrongTool = rig({ calls: [{ server: "data", tool: "send_alert", arguments: "{}" }], why: "x" }, note(["labRanking: score 0.41 for momentum"]));
+    await wrongTool.r.research("bee1");
+    expect(wrongTool.calls).toEqual([]);
+    expect(JSON.parse(wrongTool.asked[1]!.user).external.results[0]).toMatchObject({ ok: false, error: "not a tool granted to this bee" });
+    const badArgs = rig({ calls: [{ server: "data", tool: "get_price", arguments: '{"coin":5}' }], why: "x" }, note(["labRanking: score 0.41 for momentum"]));
+    await badArgs.r.research("bee1");
+    expect(badArgs.calls).toEqual([]);
+    expect(JSON.parse(badArgs.asked[1]!.user).external.results[0].error).toMatch(/should be string/);
+  });
+
+  it("does nothing outside when nothing is granted, when the plan is empty, or when the gateway fails", async () => {
+    const none = rig(plan, note(["labRanking: score 0.41 for momentum"]), { granted: [] });
+    await none.r.research("bee1");
+    expect(none.asked.map((a) => a.name)).toEqual(["research_notes"]);
+    expect(JSON.parse(none.asked[0]!.user).external).toBeUndefined();
+    const empty = rig({ calls: [], why: "nothing" }, note(["labRanking: score 0.41 for momentum"]));
+    expect((await empty.r.research("bee1")).outside).toBeUndefined();
+    const down = rig(plan, note(["labRanking: score 0.41 for momentum"]), { call: () => ({ ok: false, text: "", truncated: false, note: "fetch failed" }) });
+    expect(await down.r.research("bee1")).toMatchObject({ drafted: 1, outside: { made: 1, ok: 0 } });
+    expect(JSON.parse(down.asked[1]!.user).external.results[0]).toMatchObject({ ok: false, error: "fetch failed" });
+  });
+
+  it("never asks outside for a bee that has no grants", async () => {
+    const { r, asked } = rig(plan, note(["labRanking: score 0.41 for momentum"]));
+    await r.research("bee2").catch(() => undefined);
+    expect(asked.every((a) => a.name !== "outside_lookups")).toBe(true);
+  });
+});

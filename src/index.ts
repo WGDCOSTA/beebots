@@ -34,6 +34,7 @@ import { Workspace } from "./lab/workspace.js";
 import { SkillAgent } from "./lab/skillAgent.js";
 import { NoteBook } from "./brains/notes.js";
 import { Researcher } from "./brains/research.js";
+import { McpGateway } from "./mcp/gateway.js";
 import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
@@ -317,8 +318,10 @@ async function main() {
   });
   coach.start();
   const notes = new NoteBook(join(cfg.lab.dir, "notes.json"), graph);
+  // Outside MCP servers the owner connected: read from the Setup file on every call, so changes apply at once.
+  const mcp = new McpGateway({ servers: () => loadSettings(SETTINGS_PATH)?.mcpServers ?? [], path: join(cfg.lab.dir, "mcp.json") });
   const research = new Researcher({
-    graph, notes, clients, bees: () => councilBees, playbookPath: cfg.lab.playbookPath, ranking: readRanking, market: mood,
+    mcp, graph, notes, clients, bees: () => councilBees, playbookPath: cfg.lab.playbookPath, ranking: readRanking, market: mood,
     universe: () => coinInfos(feed.view(), 40, cmcState()), maxCallsPerDay: cfg.lab.coachMaxCallsDay,
   });
   let rankingCache: { at: number; body: unknown } = { at: 0, body: null };
@@ -451,6 +454,7 @@ async function main() {
     labDir: cfg.lab.dir,
     notes,
     research,
+    mcp,
     skillAgent: new SkillAgent({ clients: () => clients, maxCallsPerDay: Math.max(cfg.lab.coachMaxCallsDay, 20) }),
   });
 

@@ -1284,3 +1284,43 @@
   padding-left: 10px;
   margin: 0;
 }
+
+/* connectors */
+.mcp-server {
+  margin: 8px 0;
+}
+.mcp-tools {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.mcp-tools li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 320px);
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+@media (max-width: 800px) {
+  .mcp-tools li {
+    grid-template-columns: 1fr;
+  }
+}
+.mcp-bees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-content: flex-start;
+  font-size: 13px;
+}
+.mcp-bees label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.mcp-bees .warn {
+  color: var(--warning);
+  flex-basis: 100%;
+}

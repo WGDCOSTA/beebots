@@ -134,6 +134,35 @@ export const CustomBrainSchema = z.object({
   jsonMode: z.enum(["schema", "object", "prompt"]).default("object"),
 });
 
+/** A tool an outside MCP server offers, as last discovered. `readOnly` is the server's own claim (annotations.readOnlyHint), which is never trusted on its own. */
+export const McpToolSchema = z.object({
+  name: z.string().min(1).max(80),
+  description: z.string().max(600).default(""),
+  readOnly: z.boolean().nullable().default(null),
+  inputSchema: z.record(z.unknown()).default({}),
+});
+
+/** Which bees may call which tool of a server. A tool that is not proven read-only needs the owner's explicit confirmation. */
+export const McpGrantSchema = z.object({
+  tool: z.string().min(1).max(80),
+  /** Bee slots ("bee1"..), or "all". */
+  bees: z.array(z.string().regex(/^(bee[1-9]|all)$/)).min(1).max(10),
+  confirmed: z.boolean().optional(),
+});
+
+export const McpServerSchema = z.object({
+  id: z.string().regex(BRAIN_ID_RE, "id: lowercase letters, digits, - and _ (2 to 30)"),
+  label: z.string().trim().min(1).max(30),
+  url: z.string().trim().max(300).refine((v) => checkBaseUrl(v) === null, "use https://… (http only for localhost)"),
+  /** "http" = MCP streamable HTTP (current), "sse" = the older server-sent-events transport. */
+  transport: z.enum(["http", "sse"]).default("http"),
+  authHeader: z.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,39}$/, "a header name like Authorization or X-API-Key").default("Authorization"),
+  token: z.string().trim().min(1).max(600).optional(),
+  maxCallsDay: z.number().int().min(1).max(500).default(50),
+  tools: z.array(McpToolSchema).max(100).default([]),
+  grants: z.array(McpGrantSchema).max(100).default([]),
+});
+
 export const SettingsSchema = z.object({
   version: z.literal(1),
   jevKey: z.string().trim().min(8),
@@ -146,6 +175,8 @@ export const SettingsSchema = z.object({
   zaiKey: z.string().trim().min(8).optional(),
   /** Brains the owner added from the admin panel: any OpenAI-compatible chat API. Keys are stored here, like the others. */
   customBrains: z.array(CustomBrainSchema).max(50).optional(),
+  /** Outside MCP servers the owner connected for research (mcp/gateway.ts). Tokens are stored here like the other keys. */
+  mcpServers: z.array(McpServerSchema).max(20).optional(),
   /** CoinMarketCap Pro API key: market-wide context (market/cmc.ts). Optional. */
   cmcKey: z.string().trim().min(8).optional(),
   /** The owner password, as a salted scrypt hash (gate.ts). Absent in files saved before it existed. */

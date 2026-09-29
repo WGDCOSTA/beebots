@@ -203,6 +203,48 @@ export interface ResearchNote {
   createdAt: number;
   decidedAt: number | null;
 }
+export interface McpTool {
+  name: string;
+  description: string;
+  readOnly: boolean | null;
+  needsConfirm: boolean;
+  looksLikeAction: boolean;
+}
+export interface McpGrant {
+  tool: string;
+  bees: string[];
+  confirmed?: boolean;
+}
+export interface McpServerView {
+  id: string;
+  label: string;
+  url: string;
+  transport: "http" | "sse";
+  authHeader: string;
+  tokenSet: boolean;
+  maxCallsDay: number;
+  usedToday: number;
+  tools: McpTool[];
+  grants: McpGrant[];
+}
+export interface McpCallLog {
+  at: number;
+  bee: string;
+  server: string;
+  tool: string;
+  args: string;
+  ok: boolean;
+  bytes: number;
+  ms: number;
+  note: string;
+}
+export interface McpView {
+  available: boolean;
+  canEdit: boolean;
+  servers: McpServerView[];
+  log: McpCallLog[];
+}
+
 export interface NotesState {
   available: boolean;
   notes: ResearchNote[];
@@ -311,7 +353,7 @@ export interface AdminState {
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];
-  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState; notes: NotesState };
+  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState; notes: NotesState; mcp: McpView };
   coachAvailable: boolean;
 }
 
