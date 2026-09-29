@@ -299,6 +299,8 @@ export interface BrainsView {
 
 export interface AdminState {
   brains: BrainsView;
+  /** Alpaca market-data keys for the lab: set?, from where, the feed. Never a key. */
+  alpaca: { set: boolean; source: "env" | "settings" | null; feed: "iex" | "sip"; canEdit: boolean };
   mode: "dry" | "demo" | "live";
   version: string;
   hasSettingsFile: boolean;

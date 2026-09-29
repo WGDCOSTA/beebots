@@ -171,6 +171,9 @@ export const SettingsSchema = z.object({
   anthropicKey: z.string().trim().min(8).optional(),
   /** Kimi's brain (Moonshot AI API key). Optional, as above for bee3. */
   kimiKey: z.string().trim().min(8).optional(),
+  /** Alpaca market-data keys for the lab (a key ID and its secret; paper keys are enough). Optional. */
+  alpacaKeyId: z.string().trim().min(8).max(100).optional(),
+  alpacaSecret: z.string().trim().min(8).max(200).optional(),
   /** Z.ai's GLM brain (API key). Optional. */
   zaiKey: z.string().trim().min(8).optional(),
   /** Brains the owner added from the admin panel: any OpenAI-compatible chat API. Keys are stored here, like the others. */

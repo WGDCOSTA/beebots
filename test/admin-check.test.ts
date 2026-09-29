@@ -28,12 +28,24 @@ describe("real-data check plan", () => {
     expect(checkPlan(["council"], { labDir: d, hasBrain: true })[0]!.skip).toBeUndefined();
   });
 
+  it("puts the Alpaca stocks download before the ranking, and skips it without keys", () => {
+    const d = dir();
+    const off = checkPlan(["skills", "stocks"], { labDir: d, hasBrain: false });
+    expect(off.map((p) => p.id)).toEqual(["stocks-fetch", "skills-fetch", "skills-run"]);
+    expect(off[0]!.skip).toMatch(/no Alpaca keys/);
+    const on = checkPlan(["stocks"], { labDir: d, hasBrain: false, hasAlpaca: true });
+    expect(on[0]).toMatchObject({ tool: "lab", argv: ["fetch", "--source", "alpaca", "--bar", "1H", "--days", "365"] });
+    expect(on[0]!.skip).toBeUndefined();
+  });
+
   it("reports what is ready, never a key", () => {
     const p = preflight({ mode: "dry", keys: { jev: { set: true }, coinmarketcap: { set: false } }, hasBees: true, labDir: dir() });
     expect(p.find((i) => i.id === "brains")).toMatchObject({ ok: true, note: "jev" });
     expect(p.find((i) => i.id === "cmc")!.ok).toBe(false);
     expect(p.find((i) => i.id === "gold")!.ok).toBe(false);
     expect(p.find((i) => i.id === "paper")!.ok).toBe(true);
+    expect(p.find((i) => i.id === "alpaca")!.ok).toBe(false);
+    expect(preflight({ mode: "dry", keys: {}, hasBees: true, labDir: dir(), hasAlpaca: true }).find((i) => i.id === "alpaca")!.ok).toBe(true);
   });
 });
 
@@ -50,6 +62,9 @@ describe("real-data verdicts", () => {
     writeFileSync(join(d, "ranking.json"), JSON.stringify({ createdAt: NOW - 86_400_000, datasets: [{ source: "okx" }], results: [res("a", 12, 5, 75), res("b", 4, 5, 90), res("c", 9, 1, 40), res("buy_hold", 5, 5, 100, "benchmark")] }));
     const s = verdicts(d, { now: NOW, maxAgeDays: 14, graph })[0]!;
     expect(s.status).toBe("pass");
+    writeFileSync(join(d, "ranking.json"), JSON.stringify({ createdAt: NOW - 86_400_000, datasets: [{ source: "okx" }, { source: "alpaca" }], results: [res("a", 12, 5, 75)] }));
+    expect(verdicts(d, { now: NOW, maxAgeDays: 14, graph })[0]!.headline).toMatch(/on 2 real datasets \(1 from Alpaca\)/);
+    writeFileSync(join(d, "ranking.json"), JSON.stringify({ createdAt: NOW - 86_400_000, datasets: [{ source: "okx" }, { source: "okx" }], results: [res("a", 12, 5, 75), res("b", 4, 5, 90), res("c", 9, 1, 40), res("buy_hold", 5, 5, 100, "benchmark")] }));
     expect(s.headline).toMatch(/^1 of 3 skills beat buy-and-hold/);
     writeFileSync(join(d, "ranking.json"), JSON.stringify({ createdAt: NOW - 86_400_000, datasets: [{ source: "okx" }], results: [res("b", 4, 5, 90)] }));
     expect(verdicts(d, { now: NOW, maxAgeDays: 14, graph })[0]!.status).toBe("fail");

@@ -35,6 +35,7 @@ import { SkillAgent } from "./lab/skillAgent.js";
 import { NoteBook } from "./brains/notes.js";
 import { Researcher } from "./brains/research.js";
 import { McpGateway } from "./mcp/gateway.js";
+import { checkAlpacaKey } from "./lab/alpaca.js";
 import { checkOpenAiKey } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
@@ -396,6 +397,7 @@ async function main() {
       anthropic: (k) => checkClaudeKey(k),
       coinmarketcap: (k) => checkCmcKey(k),
       kimi: (k) => checkKimiKey(k, cfg.brains.creds.kimi?.baseUrl ?? process.env.KIMI_BASE_URL?.trim() ?? undefined),
+      alpaca: (keyId, secret, feed) => checkAlpacaKey({ keyId, secret, feed, baseUrl: process.env.ALPACA_DATA_URL?.trim() || undefined }),
       zai: (k) => checkCompatKey(cfg.brains.creds.zai?.baseUrl ?? process.env.ZAI_BASE_URL?.trim() ?? ZAI_BASE_URL, k, cfg.brains.creds.zai?.model ?? process.env.ZAI_MODEL?.trim() ?? ZAI_DEFAULT_MODEL, "Z.ai"),
       compat: (url, key, model, vendor) => checkCompatKey(url, key, model, vendor),
     },

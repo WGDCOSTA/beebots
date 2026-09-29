@@ -3,6 +3,7 @@
 //   pnpm lab fetch   [--inst BTC-USDT-SWAP,ETH-USDT-SWAP] [--bar 1H] [--days 365] [--base https://www.okx.com]
 //   pnpm lab fetch   --exchange binance --symbol BTC/USDT,ETH/USDT [--bar 1H] [--days 365]   any of CCXT's 100+ exchanges
 //   pnpm lab import  <file.csv|file.json> --inst NAME [--bar 1H] CSV, or a Freqtrade data file (BTC_USDT-1h.json)
+//   pnpm lab fetch   --source alpaca [--symbol SPY,QQQ,GLD,BTC/USD] [--bar 1H] [--days 365]   stocks, ETFs and crypto from Alpaca (data only; keys in Admin)
 //   pnpm lab fetch   --bar 1m --days 14                          1-minute history for the scalper (5m: --days 60)
 //   pnpm lab scalp   [--inst BTC-USDT-SWAP,ETH-USDT-SWAP] [--synthetic 2] [--maker-fee 0.0002] [--taker-fee 0.0005]
 //                    [--slippage 1] [--half-spread 0.5] [--through 0.5] [--folds 4]   does a 1m scalp survive its costs?
@@ -29,7 +30,8 @@ import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
 import { consolidate, explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "../graph/memory.js";
 import { buildScalpReport, loadScalpReport, saveScalpReport, scalpGate, scalpReportMarkdown, type CostModel } from "../lab/scalp.js";
-import { BAR_MS, ccxtExchange, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
+import { alpacaCacheName, ALPACA_DEFAULT_SYMBOLS, fetchAlpaca } from "../lab/alpaca.js";
+import { BAR_MS, ccxtExchange, datasetSource, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
 import { skillRegistry, type Skill } from "../lab/skills/index.js";
 import { rankingTable, runTournament, type Ranking } from "../lab/tournament.js";
 import { checkOpenAiKey } from "../openai.js";
@@ -80,7 +82,7 @@ function councilBees(): CouncilBee[] {
     const slot = slotId(i);
     const b = settings?.bees[i];
     const style = b?.style ?? (["bizzy", "breezy", "boozy"] as const)[i] ?? "boozy";
-    const brain = env.slots[slot] ?? b?.brain ?? BRAINS[i % BRAINS.length]!;
+    const brain = env.slots[slot] ?? b?.brain ?? (["openai", "claude", "kimi"] as const)[i % 3]!;
     return {
       slot,
       name: b?.name ?? STYLE_INFO[style].name,
@@ -113,7 +115,28 @@ async function cmdFetchCcxt(f: Record<string, string>) {
   }
 }
 
+async function cmdFetchAlpaca(f: Record<string, string>) {
+  if (!env.alpaca) throw new Error("No Alpaca keys. Add the key ID and secret in Admin → API keys (or ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY). Paper keys are enough: the lab only reads data.");
+  const days = defaultDays(f);
+  const symbols = (f.symbol ?? ALPACA_DEFAULT_SYMBOLS.join(",")).split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
+  if (bar(f) === "1m") console.log("note: 1-minute stock bars from the free IEX feed are sparse (one exchange); use them to exercise the scalper, not to judge it.");
+  for (const symbol of symbols) {
+    process.stdout.write(`fetching ${symbol} on Alpaca (${env.alpaca.feed}) ${bar(f)} (${days} days)... `);
+    try {
+      const c = await fetchAlpaca(env.alpaca, symbol, bar(f), days);
+      if (!c.length) {
+        console.log("no data");
+        continue;
+      }
+      console.log(`${c.length} candles -> ${writeCache(historyDir, alpacaCacheName(symbol), bar(f), c)}`);
+    } catch (err) {
+      console.log(`failed: ${(err as Error).message}`);
+    }
+  }
+}
+
 async function cmdFetch(f: Record<string, string>) {
+  if (f.source === "alpaca") return cmdFetchAlpaca(f);
   if (f.exchange) return cmdFetchCcxt(f);
   const rest = createOkxPublicRest({ apiBase: (f.base ?? "https://www.okx.com").replace(/\/+$/, ""), timeoutMs: 15_000 });
   const days = defaultDays(f);
@@ -154,7 +177,7 @@ function loadDatasets(f: Record<string, string>): Dataset[] {
     const instId = name.slice(0, -`_${b}.json`.length);
     if (wanted && !wanted.includes(instId)) continue;
     const c = readCache(historyDir, instId, b);
-    if (c && c.length > 300) out.push({ id: `${instId} ${b}`, instId, bar: b, candles: c, source: /^[a-z0-9]+-/.test(instId) ? "ccxt" : "okx" });
+    if (c && c.length > 300) out.push({ id: `${instId} ${b}`, instId, bar: b, candles: c, source: datasetSource(instId) });
   }
   return out;
 }

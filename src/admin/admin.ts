@@ -51,6 +51,8 @@ export interface KeyChecks {
   anthropic(key: string): Promise<string | null>;
   kimi(key: string): Promise<string | null>;
   zai(key: string): Promise<string | null>;
+  /** One read with an Alpaca key pair: are they valid, and does the plan serve the feed? */
+  alpaca?(keyId: string, secret: string, feed: "iex" | "sip"): Promise<string | null>;
   /** One tiny chat call to any OpenAI-compatible API: is the address, key and model right? */
   compat?(baseUrl: string, apiKey: string | undefined, model: string, vendor: string): Promise<string | null>;
   coinmarketcap(key: string): Promise<string | null>;
@@ -181,6 +183,7 @@ const McpSave = z.object({
 });
 const McpRef = z.object({ id: McpServerSchema.shape.id });
 const McpGrants = z.object({ id: McpServerSchema.shape.id, grants: z.array(McpGrantSchema).max(100) });
+const AlpacaBody = z.object({ keyId: z.string().trim().min(8).max(100).optional(), secret: z.string().trim().min(8).max(200).optional(), remove: z.boolean().optional() });
 const DraftKey = z.string().trim().regex(KEY_RE, "id: lowercase letters, digits and _ only (2 to 40)");
 const DraftSave = z.object({ key: DraftKey.optional(), json: z.string().min(2).max(30_000), note: Str(200).optional() });
 const DraftRef = z.object({ key: DraftKey });
@@ -190,7 +193,7 @@ const LabBody = z.object({
   command: z.enum(LAB_COMMANDS),
   args: z
     .object({
-      source: z.enum(["okx", "ccxt", "synthetic"]).optional(),
+      source: z.enum(["okx", "ccxt", "alpaca", "synthetic"]).optional(),
       symbols: Str(900).optional(),
       exchange: Str(30).optional(),
       bar: z.enum(["15m", "1H", "4H", "1D"]).optional(),
@@ -311,6 +314,14 @@ export class Admin {
     };
   }
 
+  /** Alpaca data keys as the panel may see them: set?, from where, and the feed. Never a key. */
+  private alpacaView(feed: unknown) {
+    const env = this.envSet("ALPACA_API_KEY_ID") && this.envSet("ALPACA_API_SECRET_KEY");
+    const s = loadSettings(this.o.settingsPath);
+    const file = !!(s?.alpacaKeyId && s.alpacaSecret);
+    return { set: env || file, source: env ? ("env" as const) : file ? ("settings" as const) : null, feed: feed === "sip" ? "sip" : "iex", canEdit: !!s };
+  }
+
   /** Everything the panel shows. No secret ever leaves here. */
   state() {
     const settings = loadSettings(this.o.settingsPath);
@@ -368,6 +379,7 @@ export class Admin {
         ? { profile: this.o.anthropicLogin.profile, active: this.o.anthropicLogin.active(), command: anthropicLoginCommand(this.o.anthropicLogin.profile) }
         : null,
       brains: this.brainsView(keys),
+      alpaca: this.alpacaView(effective.ALPACA_FEED),
       evolution: this.o.evolution?.() ?? null,
       styles: STYLES.map((s) => ({ id: s, label: STYLE_INFO[s].label, blurb: STYLE_INFO[s].blurb })),
       groups: FIELD_GROUPS.map((g) => ({ id: g, ...GROUP_INFO[g] })),
@@ -395,7 +407,7 @@ export class Admin {
         playbook: this.o.playbook(),
         check: {
           stages: CHECK_STAGES,
-          preflight: preflight({ mode: this.o.mode, keys, hasBees: !!settings, labDir: this.labDir(), customBrains: (settings?.customBrains ?? []).map((b) => b.label) }),
+          preflight: preflight({ mode: this.o.mode, keys, hasBees: !!settings, labDir: this.labDir(), hasAlpaca: this.alpacaView(effective.ALPACA_FEED).set, customBrains: (settings?.customBrains ?? []).map((b) => b.label) }),
           verdicts: verdicts(this.labDir(), { now: this.now(), maxAgeDays: Number(effective.SCALP_LAB_MAX_AGE_DAYS ?? 14) || 14, graph: this.o.graphStats() }),
           goldDir: join(this.labDir(), "gold", "data"),
           goldFiles: goldCsvs(this.labDir()).map((f) => f.split("/").pop()),
@@ -657,6 +669,34 @@ export class Admin {
           backtest: { score: result.score, returnPct: result.oos.returnPct, stabilityPct: result.stabilityPct, trades: result.oos.trades, maxDrawdownPct: result.oos.maxDrawdownPct },
           note: "Saved. It joins every lab run from now on; a council can adopt it.",
         });
+      }
+
+      case "/admin/alpaca": {
+        const p = AlpacaBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "keyId and secret (8+ characters each), or remove: true" });
+        const s = loadSettings(this.o.settingsPath);
+        if (!s) return send(res, 409, { error: "This server takes its keys from the environment (.env), so they are changed there." });
+        if (this.envSet("ALPACA_API_KEY_ID") || this.envSet("ALPACA_API_SECRET_KEY")) return send(res, 409, { error: "The Alpaca keys are set in the environment; change them there." });
+        if (p.data.remove) {
+          const next: Settings = { ...s };
+          delete next.alpacaKeyId;
+          delete next.alpacaSecret;
+          saveSettings(this.o.settingsPath, next);
+          log.info("admin: alpaca keys removed");
+          return send(res, 200, this.state());
+        }
+        if (!p.data.keyId || !p.data.secret) return send(res, 400, { error: "Send the key ID and the secret together." });
+        let feed: "iex" | "sip" = "iex";
+        try {
+          feed = parseEnv(withOverrides(this.o.env, loadOverrides(this.o.settingsPath))).ALPACA_FEED === "sip" ? "sip" : "iex";
+        } catch {
+          /* keep iex */
+        }
+        const err = this.o.checks.alpaca ? await this.o.checks.alpaca(p.data.keyId, p.data.secret, feed) : null;
+        if (err) return send(res, 400, { error: err });
+        saveSettings(this.o.settingsPath, { ...s, alpacaKeyId: p.data.keyId, alpacaSecret: p.data.secret });
+        log.info("admin: alpaca keys saved", { feed });
+        return send(res, 200, this.state());
       }
 
       case "/admin/mcp/save": {
@@ -981,7 +1021,7 @@ export class Admin {
         if (!p.success) return send(res, 400, { error: `stages: any of ${CHECK_STAGES.join(", ")}` });
         const keys = this.state().keys as Record<string, { set: boolean }>;
         try {
-          this.o.jobs.startCheck(p.data.stages, { labDir: this.labDir(), hasBrain: this.readyBrains(keys).length > 0 });
+          this.o.jobs.startCheck(p.data.stages, { labDir: this.labDir(), hasBrain: this.readyBrains(keys).length > 0, hasAlpaca: this.alpacaView(undefined).set });
         } catch (err) {
           return send(res, 409, { error: (err as Error).message });
         }
