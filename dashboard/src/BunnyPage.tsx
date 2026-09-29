@@ -1,7 +1,7 @@
 // A bunny's own page (#/bunny/<slot>): who it is, how it is doing right now, and everything behind that: its equity,
 // trades and coins, the calls it made, what it learned, what it told the Warren and heard back, the skills it leans on.
 // Live numbers come from the event stream (useFeed); history from GET /bunny/<slot> (engine bunnyProfile.ts).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { money, signed } from "./BeeColumn";
 import { EquityChart } from "./EquityChart";
 import { PageNav } from "./LabPage";
@@ -102,6 +102,7 @@ export function BunnyPage() {
   const [missing, setMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const feed = useFeed(false);
+  const page = useRef<HTMLDivElement>(null);
   const { slot, tab } = route;
 
   useEffect(() => {
@@ -134,7 +135,7 @@ export function BunnyPage() {
   }, [slot, days]);
 
   useEffect(() => {
-    window.scrollTo({ top: 0 });
+    page.current?.scrollTo({ top: 0 });
   }, [slot]);
 
   const openTab = (t: TabId) => {
@@ -168,7 +169,7 @@ export function BunnyPage() {
     );
 
   return (
-    <div className="bp" style={{ ["--bee" as string]: meta.color, ["--bee-glow" as string]: meta.glow }}>
+    <div className="bp" ref={page} style={{ ["--bee" as string]: meta.color, ["--bee-glow" as string]: meta.glow }}>
       <PageNav current="bunny" />
       <div className="bp-wrap">
         <BunnySwitcher current={slot} />

@@ -1352,8 +1352,11 @@
 }
 
 /* ---------- Bunny profile page (#/bunny/<slot>) ---------- */
+/* The body never scrolls (the live board fits the screen), so the page is its own scroll container, like .page. */
 .bp {
-  min-height: 100vh;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background:
     radial-gradient(60rem 30rem at 15% -10%, color-mix(in srgb, var(--bee) 18%, transparent), transparent 70%),
     var(--page);
