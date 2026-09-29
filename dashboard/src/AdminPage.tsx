@@ -402,6 +402,8 @@ type BeeDraft = {
   rules: string;
   coins: string[];
   style: string;
+  /** What it looks like, for its portrait. */
+  look: string;
   brain: string;
   market: string;
   extra: boolean;
@@ -567,6 +569,87 @@ const MACRO_SQUAD: Array<Pick<BeeDraft, "name" | "tagline" | "rules" | "coins" |
   { name: "Stonks", tagline: "the tape reader", rules: "Trade liquid stocks and ETFs during the session. Never hold a weak position into the close.", coins: [], market: "stocks" },
 ];
 
+type BeeDesignView = { name: string; tagline: string; rules: string; coins: string[]; baseStyle: string; look: string; styleNote?: string; styleLabel: string };
+
+/**
+ * The bunny's portrait: repaint it from its look (OpenAI, saved at once), or redesign the whole bunny from one sentence
+ * (fills the form; nothing is saved until Save bunnies).
+ */
+function PortraitStep({ b, password, onChange, onPainted }: { b: BeeDraft; password: string; onChange: (patch: Partial<BeeDraft>) => void; onPainted: () => void }) {
+  const [busy, setBusy] = useState<"paint" | "design" | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [ask, setAsk] = useState("");
+  const [stamp] = useState(() => Date.now());
+  const paint = async () => {
+    if (!confirm(`Paint a new portrait for ${b.name}? It costs a few cents on your OpenAI key and replaces the current one.`)) return;
+    setBusy("paint");
+    setErr(null);
+    try {
+      const r = await adminCall<{ portrait: string }>("paint", password, { bee: b.slot, ...(b.look.trim() ? { look: b.look.trim() } : {}) });
+      setPreview(r.portrait);
+      onPainted();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const design = async () => {
+    setBusy("design");
+    setErr(null);
+    setNote(null);
+    try {
+      const { design: d } = await adminCall<{ design: BeeDesignView }>("design", password, { description: ask.trim() });
+      onChange({ name: d.name, tagline: d.tagline, rules: d.rules, coins: d.coins, style: d.baseStyle, look: d.look });
+      setNote(`Redesigned as ${d.name} (${d.styleLabel}).${d.styleNote ? ` ${d.styleNote}` : ""} Check it, press Save bunnies, then paint its new look.`);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const src = preview ?? (!failed && !b.isNew ? `/bee-image/${b.slot}?v=${stamp}` : null);
+  return (
+    <div className="xstep">
+      <div className="xstep-head">
+        <span className="xstep-num">✎</span>
+        <strong>Portrait &amp; redesign</strong>
+      </div>
+      <div className="portrait-row">
+        {src ? <img className="portrait-img" src={src} alt={`${b.name}'s portrait`} onError={() => setFailed(true)} /> : <div className="portrait-img empty dim small">No portrait yet</div>}
+        <label className="plabel">
+          What it looks like
+          <textarea className="pinput" rows={3} maxLength={400} value={b.look} placeholder="e.g. a sleepy grey bunny in a hoodie, clutching a bitcoin" onChange={(e) => onChange({ look: e.target.value })} />
+          <span className="dim small">
+            {b.isNew ? "Create the bunny first, then paint it." : "Painting saves at once. A bunny painted for the first time shows its portrait after a restart."}
+          </span>
+        </label>
+      </div>
+      <div className="row-actions compact">
+        <button className="pbtn small" disabled={!!busy || !!b.isNew || !b.name.trim()} onClick={() => void paint()}>
+          {busy === "paint" ? "Painting… (up to a minute)" : "🎨 Regenerate portrait"}
+        </button>
+      </div>
+      {b.market === "crypto" && (
+        <label className="plabel">
+          Redesign with AI
+          <textarea className="pinput" rows={2} maxLength={400} value={ask} placeholder="How should this bunny trade? e.g. a patient bunny that only buys SOL dips" onChange={(e) => setAsk(e.target.value)} />
+          <span className="row-actions compact">
+            <button className="pbtn ghost small" disabled={!!busy || ask.trim().length < 3} onClick={() => void design()}>
+              {busy === "design" ? "Designing…" : "✨ Redesign"}
+            </button>
+          </span>
+        </label>
+      )}
+      {note && <div className="dim small">{note}</div>}
+      {err && <div className="warn">{err}</div>}
+    </div>
+  );
+}
+
 /** Asset picker: chips for the coins tradable right now, plus free text when the market is not loaded. */
 function CoinPicker({ all, value, onChange }: { all: string[]; value: string[]; onChange: (c: string[]) => void }) {
   const [q, setQ] = useState("");
@@ -609,6 +692,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         rules: b.rules,
         coins: b.coins,
         style: b.style,
+        look: b.look ?? "",
         brain: b.brain ?? "openai",
         market: b.market ?? "crypto",
         extra: b.extra,
@@ -633,6 +717,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         rules: "",
         coins: [],
         style: "boozy",
+        look: "",
         brain: ["openai", "claude", "kimi"][bees.length % 3]!,
         market: "crypto",
         extra: true,
@@ -653,6 +738,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         ...m,
         slot: `bee${bees.length + k + 1}`,
         style: "boozy",
+        look: "",
         brain: ["claude", "openai", "kimi"][k % 3]!,
         extra: true,
         running: false,
@@ -675,6 +761,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
           rules: b.rules,
           style: b.style,
           coins: b.coins,
+          look: b.look.trim(),
           ...(b.extra ? { brain: b.brain, market: b.market, ...(typeof b.walletUsd === "number" ? { walletUsd: b.walletUsd } : {}) } : {}),
           ...(exchangeFilled(b.exchange) ? { exchange: { ...b.exchange, apiKey: b.exchange.apiKey.trim(), secretKey: b.exchange.secretKey.trim() } } : {}),
         })),
@@ -796,6 +883,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
                 <textarea className="pinput" rows={4} maxLength={500} value={b.rules} onChange={(ev) => set(i, { rules: ev.target.value })} />
                 <span className="dim small num">{b.rules.length}/500</span>
               </label>
+              <PortraitStep b={b} password={password} onChange={(patch) => set(i, patch)} onPainted={() => void call("state", {}, `New portrait for ${b.name}.`).catch(() => undefined)} />
               <ExchangeStep b={b} s={s} password={password} onChange={(patch) => set(i, patch)} />
               {b.isNew && <div className={`xready ${blockers[i] ? "" : "ok"}`}>{blockers[i] ? `Before it is created: ${blockers[i]}.` : "✓ Ready to create"}</div>}
               {b.extra && i === last && (

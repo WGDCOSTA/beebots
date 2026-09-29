@@ -316,6 +316,8 @@ export interface AdminState {
     coins: string[];
     style: string;
     image: boolean;
+    /** What it looks like (its portrait's brief). */
+    look: string;
     brain: string | null;
     market?: string;
     extra: boolean;

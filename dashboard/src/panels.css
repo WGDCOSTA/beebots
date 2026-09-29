@@ -1324,3 +1324,29 @@
   color: var(--warning);
   flex-basis: 100%;
 }
+
+/* Portrait & redesign step on a bunny card. */
+.portrait-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.portrait-img {
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+.portrait-img.empty {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 6px;
+}
+@media (max-width: 480px) {
+  .portrait-row {
+    grid-template-columns: 1fr;
+  }
+}

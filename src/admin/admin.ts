@@ -28,6 +28,8 @@ import { safeError } from "../redact.js";
 import { anthropicLoginCommand, BRAINS, brainInfo, checkBaseUrl, registerBrain, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "../brains/llm.js";
 import { BeeSchema, CustomBrainSchema, McpGrantSchema, McpServerSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import type { AccountFacts } from "../okx/account.js";
+import { OpenAiError, type BeeDesign } from "../openai.js";
+import { DesignError, finishDesign, imageDir } from "../setup.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { CHECK_STAGES, goldCsvs, preflight, verdicts } from "./check.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
@@ -110,8 +112,17 @@ export interface AdminOpts {
   labDir?: string;
   /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
   okxCheck?: (creds: { apiKey: string; secretKey: string; passphrase: string }, kind: "demo" | "live", walletUsd: number) => Promise<AccountFacts>;
+  /** Repainting a bunny and redesigning it from one sentence (OpenAI), as Setup does. The key is passed per call. */
+  portraits?: {
+    design: (key: string, description: string, coins: string[]) => Promise<BeeDesign>;
+    paint: (key: string, name: string, look: string) => Promise<Buffer>;
+  };
   now?: () => number;
 }
+
+/** Caps on the calls that cost money, per engine run (a restart resets them). */
+const MAX_PAINTS = 30;
+const MAX_DESIGNS = 60;
 
 const Str = (max: number) => z.string().trim().max(max);
 const KINDS = ["demo", "live"] as const;
@@ -142,12 +153,16 @@ const BeeEdit = z.object({
   walletUsd: Wallet.optional(),
   /** OKX sub-account keys to check and save for this bunny (new keys, or a replacement while it is flat). */
   exchange: Exchange.optional(),
+  /** What it looks like, for its portrait (an AI redesign fills it in). */
+  look: Str(400).optional(),
 });
 /** bee4 -> 3 */
 const ALL_INDEX = (id: BeeId) => Number(id.slice(3)) - 1;
 const CheckBody = Exchange.extend({ walletUsd: Wallet, bee: z.string().optional() });
 const BeesBody = z.object({ bees: z.array(BeeEdit).min(BEES.length).max(MAX_BEES) });
 const SlotBody = z.object({ bee: z.string() });
+const PaintBody = z.object({ bee: z.string(), look: Str(400).optional() });
+const DesignBody = z.object({ description: Str(400).min(3, "Tell it how this bunny should trade first.") });
 const ImportBody = z.object({ json: z.string().min(2).max(20_000) });
 const PasswordBody = z.object({ next: z.string().min(MIN_PASSWORD).max(MAX_PASSWORD) });
 const RealCheckBody = z.object({ stages: z.array(z.enum(CHECK_STAGES)).min(1).max(CHECK_STAGES.length) });
@@ -209,6 +224,8 @@ const LabBody = z.object({
 export class Admin {
   /** Something was saved that only a restart applies. */
   private pending = false;
+  private paints = 0;
+  private designs = 0;
   private now: () => number;
 
   constructor(private o: AdminOpts) {
@@ -249,6 +266,11 @@ export class Admin {
   private envExchange(slot: BeeId, kind: Kind): boolean {
     const infix = kind === "demo" ? "OKX_DEMO_API" : "OKX_API";
     return ["KEY", "SECRET", "PASSPHRASE"].some((x) => this.envSet(`${slot.toUpperCase()}_${infix}_${x}`));
+  }
+
+  /** The OpenAI key as saved now (environment first), so a key added under Keys paints without a restart. */
+  private openaiKey(): string | undefined {
+    return this.o.env.OPENAI_API_KEY?.trim() || loadSettings(this.o.settingsPath)?.openaiKey || undefined;
   }
 
   /** BEE_START_EQUITY_USD as the engine would load it now (environment plus saved overrides). */
@@ -357,6 +379,7 @@ export class Admin {
             coins: b.coins,
             style: b.style,
             image: b.image,
+            look: b.look ?? "",
             brain: b.brain ?? null,
             market: i >= BEES.length ? (b.market ?? "crypto") : "crypto",
             extra: i >= BEES.length,
@@ -583,6 +606,10 @@ export class Admin {
           const next: Settings["bees"][number] = { ...(old ?? { image: false }), name: b.name, tagline: b.tagline, rules: b.rules, coins, style: deriveStyle(b.style, coins), ...(brain ? { brain } : {}) };
           if (market && market !== "crypto") next.market = market;
           else delete next.market;
+          if (b.look !== undefined) {
+            if (b.look) next.look = b.look;
+            else delete next.look;
+          }
           const wallet = i >= BEES.length ? (b.walletUsd ?? old?.walletUsd) : undefined;
           if (wallet) next.walletUsd = wallet;
           else delete next.walletUsd;
@@ -597,6 +624,60 @@ export class Admin {
         this.pending = true;
         log.info("admin: bunnies saved", { bees: bees.map((b) => `${b.name} (${STYLE_INFO[b.style].label})`) });
         return send(res, 200, this.state());
+      }
+
+      case "/admin/paint": {
+        const p = PaintBody.safeParse(body);
+        if (!p.success || !isBeeId(p.data.bee)) return send(res, 400, { error: "bad bunny" });
+        const s = loadSettings(this.o.settingsPath);
+        const i = ALL_INDEX(p.data.bee);
+        const old = s?.bees[i];
+        if (!s || !old) return send(res, 409, { error: "Save this bunny first, then paint it." });
+        const look = p.data.look || old.look || [old.name, old.tagline, old.rules].filter(Boolean).join(". ").slice(0, 400);
+        if (look.length < 3) return send(res, 400, { error: "Describe how this bunny looks first." });
+        const key = this.openaiKey();
+        if (!key) return send(res, 400, { error: "Portraits need an OpenAI key (Keys)." });
+        if (!this.o.portraits) return send(res, 503, { error: "Portraits are not available on this server." });
+        if (this.paints >= MAX_PAINTS) return send(res, 429, { error: "That is a lot of portraits. Restart the engine to paint more." });
+        this.paints++;
+        let jpg: Buffer;
+        try {
+          jpg = await this.o.portraits.paint(key, old.name, look);
+        } catch (err) {
+          log.warn("admin: portrait failed", { bee: p.data.bee, err: safeError(err) });
+          return send(res, 502, { error: err instanceof OpenAiError ? `OpenAI said: ${err.message}` : safeError(err).message });
+        }
+        const dir = imageDir(this.o.settingsPath);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, `${p.data.bee}.jpg`), jpg);
+        // Re-read: the paint call takes a while and the owner may have saved something meanwhile.
+        const now = loadSettings(this.o.settingsPath) ?? s;
+        const bees = now.bees.map((b, j) => (j === i ? { ...b, image: true, look } : b));
+        saveSettings(this.o.settingsPath, { ...now, bees });
+        // The engine serves a portrait only for bunnies that had one when it started.
+        if (!old.image) this.pending = true;
+        log.info("admin: portrait painted", { bee: p.data.bee });
+        return send(res, 200, { ...this.state(), portrait: `data:image/jpeg;base64,${jpg.toString("base64")}` });
+      }
+
+      case "/admin/design": {
+        const p = DesignBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: p.error.issues[0]?.message ?? "bad request" });
+        const key = this.openaiKey();
+        if (!key) return send(res, 400, { error: "Designing a bunny needs an OpenAI key (Keys)." });
+        if (!this.o.portraits) return send(res, 503, { error: "Designing is not available on this server." });
+        const known = this.o.coins?.() ?? [];
+        if (!known.length) return send(res, 503, { error: "The market is still loading. Try again in a minute." });
+        if (this.designs >= MAX_DESIGNS) return send(res, 429, { error: "That is a lot of designs. Restart the engine to design more." });
+        this.designs++;
+        try {
+          const d = finishDesign(await this.o.portraits.design(key, p.data.description, known), known);
+          return send(res, 200, { design: { ...d, styleLabel: STYLE_INFO[d.baseStyle].label } });
+        } catch (err) {
+          if (err instanceof DesignError) return send(res, 422, { error: err.message });
+          log.warn("admin: design failed", { err: safeError(err) });
+          return send(res, 502, { error: err instanceof OpenAiError ? `OpenAI said: ${err.message}` : safeError(err).message });
+        }
       }
 
       case "/admin/exchange/check": {

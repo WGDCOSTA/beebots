@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { checkCmcKey, CmcSource, marketMood, saveMood } from "./market/cmc.js";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
@@ -36,7 +36,7 @@ import { NoteBook } from "./brains/notes.js";
 import { Researcher } from "./brains/research.js";
 import { McpGateway } from "./mcp/gateway.js";
 import { checkAlpacaKey } from "./lab/alpaca.js";
-import { checkOpenAiKey } from "./openai.js";
+import { checkOpenAiKey, designBee, paintBee } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
 import { SurvivalCouncil } from "./brains/survival.js";
@@ -76,11 +76,17 @@ function profile(cfg: Config | null) {
             squad: s.squad,
             // A Setup-made bunny only ever shows its own portrait (null = the dashboard's placeholder mark), never the
             // original bunnies' art, which belongs to the three official bunnies.
-            img: s.customImage && imagePath(cfg.settingsPath, id) ? `/bee-image/${id}` : s.fromSetup ? null : `/bees/${s.style}.jpg`,
+            img: portraitUrl(cfg.settingsPath, id, s) ?? (s.fromSetup ? null : `/bees/${s.style}.jpg`),
           };
         })
       : [],
   };
+}
+
+/** A bunny's own portrait, versioned by the file's time so a repaint from the admin panel shows up at once. */
+function portraitUrl(settingsPath: string, id: string, s: { customImage: boolean }): string | null {
+  const p = s.customImage ? imagePath(settingsPath, id) : null;
+  return p ? `/bee-image/${id}?v=${Math.floor(statSync(p).mtimeMs)}` : null;
 }
 
 /** No Jev key in the environment and no Setup file yet: serve only the Setup page until the owner fills it in. */
@@ -457,6 +463,10 @@ async function main() {
     notes,
     research,
     mcp,
+    portraits: {
+      design: (key, description, coins) => designBee(key, cfg.openai.textModel, description, coins),
+      paint: (key, name, look) => paintBee(key, cfg.openai.imageModel, REF_DIR, name, look),
+    },
     skillAgent: new SkillAgent({ clients: () => clients, maxCallsPerDay: Math.max(cfg.lab.coachMaxCallsDay, 20) }),
   });
 
