@@ -12,7 +12,7 @@ import type { BeeId } from "../config.js";
 import type { Evolution, Tier } from "../evolution.js";
 import { beeNode, brainNode, contextFor, skillNode } from "../graph/hive-mind.js";
 import type { KnowledgeGraph } from "../graph/graph.js";
-import { readCache, syntheticCandles, type Bar, type Dataset } from "../lab/history.js";
+import { readCache, syntheticCandles, type Bar, type Dataset, datasetSource } from "../lab/history.js";
 import { skillFromSpec, type Skill } from "../lab/skills/index.js";
 import { evaluateSkill, DEFAULT_TOURNAMENT, type Ranking, type SkillResult } from "../lab/tournament.js";
 import { log } from "../log.js";
@@ -131,7 +131,7 @@ export function backtestData(historyDir: string, bar: Bar = "1H"): Dataset[] {
     for (const f of readdirSync(historyDir).filter((x) => x.endsWith(`_${bar}.json`)).slice(0, 4)) {
       const instId = f.slice(0, -`_${bar}.json`.length);
       const c = readCache(historyDir, instId, bar);
-      if (c && c.length > 400) out.push({ id: `${instId} ${bar}`, instId, bar, candles: c.slice(-3000), source: "okx" });
+      if (c && c.length > 400) out.push({ id: `${instId} ${bar}`, instId, bar, candles: c.slice(-3000), source: datasetSource(instId) });
     }
   }
   if (!out.length) for (let i = 0; i < 2; i++) out.push({ id: `SYN${i + 1} ${bar}`, instId: `SYN${i + 1}`, bar, candles: syntheticCandles(4242 + i, 2500), source: "synthetic" });

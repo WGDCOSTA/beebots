@@ -182,9 +182,17 @@ export function supertrend(c: Candle[], n = 10, mult = 3): Series {
   return out;
 }
 
-/** Candle bars per year, for annualising (bar length taken from the median gap). */
+/**
+ * Candle bars per year, for annualising. A 24/7 market has a bar every bar-length, so the median gap says it all; a market
+ * with sessions (stocks: no bars overnight or at weekends) has far fewer bars than that, so with enough history the real
+ * density (bars over the time they span) is used instead. The two agree on complete data.
+ */
 export function barsPerYear(c: Candle[]): number {
   if (c.length < 3) return 365 * 24;
+  if (c.length >= 50) {
+    const span = c[c.length - 1]!.ts - c[0]!.ts;
+    if (span > 0) return ((c.length - 1) * 365 * 86_400_000) / span;
+  }
   const gaps: number[] = [];
   for (let i = 1; i < Math.min(c.length, 200); i++) gaps.push(c[i]!.ts - c[i - 1]!.ts);
   gaps.sort((a, b) => a - b);

@@ -17,8 +17,11 @@ export interface Dataset {
   instId: string;
   bar: Bar;
   candles: Candle[];
-  source: "okx" | "ccxt" | "csv" | "synthetic";
+  source: "okx" | "ccxt" | "alpaca" | "csv" | "synthetic";
 }
+
+/** Where a cached history file came from, by its name: "alpaca-SPY" is Alpaca, "binance-BTC-USDT" a CCXT exchange, the rest OKX. */
+export const datasetSource = (instId: string): "okx" | "ccxt" | "alpaca" => (instId.startsWith("alpaca-") ? "alpaca" : /^[a-z0-9]+-/.test(instId) ? "ccxt" : "okx");
 
 /** OKX serves at most 100 rows per history page (older than `after`). */
 const PAGE = 100;

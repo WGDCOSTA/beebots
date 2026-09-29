@@ -69,6 +69,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   { key: "JEV_MODEL", group: "brains", label: "Jev model", help: "TypeSafe AI decision model.", type: "text", maxLen: 40, pattern: /^[A-Za-z0-9._-]+$/ },
   { key: "JEV_DAILY_USD_CAP", group: "brains", label: "Jev daily cap (USD)", help: "Hard daily Jev spend. When hit, every bee holds until 00:00 UTC.", type: "number", min: 0, max: 100, step: 0.1 },
   // learning
+  { key: "ALPACA_FEED", group: "learning", label: "Alpaca data feed", help: "iex is free (one exchange: fine for daily and hourly bars). sip covers every US exchange and needs a paid Alpaca plan.", type: "enum", options: ["iex", "sip"] },
   { key: "LAB_SIGNALS", group: "learning", label: "Show Jev the lab vote", help: "Adds each bee's playbook skill vote per coin to Jev's state, as a tiebreaker. The risk layer is unchanged.", type: "bool" },
   { key: "SPECIALIZATION", group: "learning", label: "Free specialisation", help: "The brains choose each bee's method: any style, or any backtested lab skill (even one a bee wrote). Switches only when flat.", type: "bool" },
   num("SPECIALIZE_MIN_HOURS", "learning", "Min hours between switches", "A bee keeps a new method at least this long (it also switches only when flat).", 0, 720),

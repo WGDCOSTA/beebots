@@ -145,6 +145,29 @@ too few trades, then weighted by **stability** (share of folds that made money).
 Output: `data/lab/ranking.json`, a readable `data/lab/report.md`, and the hive mind updated. `--synthetic N` adds
 seeded synthetic markets for offline runs; they exercise the machinery and prove nothing about real markets.
 
+## Alpaca as a data source (stocks, ETFs, crypto)
+
+The lab can also learn from US equities. With Alpaca **market data** keys (`ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, or
+Admin → API keys, tested with one read before they are saved) it downloads candles from Alpaca's Market Data API:
+
+```
+pnpm lab fetch --source alpaca [--symbol SPY,QQQ,GLD,BTC/USD] [--bar 1H] [--days 365]
+```
+
+Defaults are `SPY,QQQ,GLD,USO,NVDA,AAPL` (broad US equity, gold and oil ETFs, three big stocks). The files are cached as
+`alpaca-<SYMBOL>` next to the OKX ones, so `pnpm lab run` ranks every skill on them too, and the ranking labels them
+`alpaca`. The Admin lab form has a "Data → Alpaca" choice, and the real-data check a **Stocks** stage that runs before the
+skill ranking (skipped, with the reason, without keys).
+
+- **Data only.** beebots never sends Alpaca an order. Use **paper** keys, or any keys that only see data.
+- **Feed.** `ALPACA_FEED=iex` (default, free) is prices from one exchange, a few percent of US volume: fine for daily and
+  hourly bars, thin for the 1-minute scalper. `sip` covers every exchange and needs a paid plan; its newest 15 minutes are
+  never requested. Prices are adjusted for splits and dividends.
+- **Sessions.** Stocks have no bars overnight or at weekends. The lab annualises by real bar density (bars over the time
+  they span), which equals the old median-gap rule on 24/7 data and stops hourly stock bars from being counted as 8,760 a year.
+- Crypto pairs (`BTC/USD`) use Alpaca's crypto endpoint. These datasets are for testing skills; they say nothing about the
+  prices the bees trade on OKX.
+
 ## The hive mind
 
 A SQLite knowledge graph (`GRAPH_PATH`). Node types: `bee`, `brain`, `skill`, `family`, `coin`, `lesson`, `message`,

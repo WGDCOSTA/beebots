@@ -181,6 +181,11 @@ const EnvSchema = z.object({
   KIMI_MODEL: str("kimi-k2.5"),
   KIMI_BASE_URL: str("https://api.moonshot.ai/v1"),
   // Z.ai (GLM models): ZAI_API_KEY. International https://api.z.ai/api/paas/v4, China https://open.bigmodel.cn/api/paas/v4.
+  // Alpaca (alpaca.markets) market data for the lab: stocks, ETFs, crypto history. Data only; paper keys are enough.
+  ALPACA_API_KEY_ID: opt,
+  ALPACA_API_SECRET_KEY: opt,
+  ALPACA_FEED: oneOf(["iex", "sip"] as const, "iex"),
+  ALPACA_DATA_URL: str("https://data.alpaca.markets"),
   ZAI_API_KEY: opt,
   ZAI_MODEL: str(ZAI_DEFAULT_MODEL),
   ZAI_BASE_URL: str(ZAI_BASE_URL),
@@ -631,11 +636,19 @@ export function brainCreds(
   };
 }
 
+/** Alpaca data keys from the environment first, then the Setup file; null without both halves of the pair. */
+export function alpacaCreds(e: { ALPACA_API_KEY_ID?: string; ALPACA_API_SECRET_KEY?: string; ALPACA_FEED?: "iex" | "sip"; ALPACA_DATA_URL?: string }, settings: Settings | null): { keyId: string; secret: string; feed: "iex" | "sip"; baseUrl: string } | null {
+  const keyId = e.ALPACA_API_KEY_ID ?? settings?.alpacaKeyId;
+  const secret = e.ALPACA_API_SECRET_KEY ?? settings?.alpacaSecret;
+  return keyId && secret ? { keyId, secret, feed: e.ALPACA_FEED ?? "iex", baseUrl: (e.ALPACA_DATA_URL ?? "https://data.alpaca.markets").replace(/\/+$/, "") } : null;
+}
+
 /** The same env parsing as loadConfig, for tools that need only the brain and lab settings (no Jev key required). */
 export function labEnv(env: NodeJS.ProcessEnv = process.env, settings: Settings | null = null) {
   const e = EnvSchema.parse(env) as z.infer<typeof EnvSchema>;
   return {
     creds: brainCreds(e, settings),
+    alpaca: alpacaCreds(e, settings),
     slots: { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN } as Record<BeeId, BrainId>,
     dir: e.LAB_DIR,
     graphPath: e.GRAPH_PATH,

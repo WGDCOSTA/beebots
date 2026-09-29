@@ -33,7 +33,7 @@ function settingsFile(): string {
   return path;
 }
 
-const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, compat: async () => null, coinmarketcap: async () => null };
+const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, alpaca: async (id: string) => (id.includes("bad") ? "Alpaca rejected that key pair." : null), compat: async () => null, coinmarketcap: async () => null };
 
 function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"] } = {}) {
   const settingsPath = settingsFile();
@@ -255,6 +255,33 @@ describe("adding and removing bees", () => {
     expect((await h.call("/admin/revive", { bee: "../etc" })).status).toBe(400);
   });
 
+  it("alpaca data keys: checked before saving, never shown, removable, and not changeable when the environment owns them", async () => {
+    const h = harness();
+    expect((await h.call("/admin/alpaca", { keyId: "x" })).status).toBe(400);
+    expect((await h.call("/admin/alpaca", { keyId: "PKONLYKEYID123" })).status).toBe(400);
+    const bad = await h.call("/admin/alpaca", { keyId: "PKbadbadbad123", secret: "s".repeat(40) });
+    expect(bad).toMatchObject({ status: 400, body: { error: "Alpaca rejected that key pair." } });
+    expect(loadSettings(h.settingsPath)!.alpacaKeyId).toBeUndefined();
+    const ok = await h.call("/admin/alpaca", { keyId: "PKGOODKEY123456", secret: "secret-value-abcdef-0123456789" });
+    expect(ok.status).toBe(200);
+    expect((ok.body as { alpaca: unknown }).alpaca).toEqual({ set: true, source: "settings", feed: "iex", canEdit: true });
+    expect(JSON.stringify(ok.body)).not.toContain("secret-value-abcdef");
+    expect(JSON.stringify(ok.body)).not.toContain("PKGOODKEY123456");
+    expect(loadSettings(h.settingsPath)).toMatchObject({ alpacaKeyId: "PKGOODKEY123456", alpacaSecret: "secret-value-abcdef-0123456789" });
+    const pf = (ok.body as { lab: { check: { preflight: Array<{ id: string; ok: boolean }> } } }).lab.check.preflight;
+    expect(pf.find((i) => i.id === "alpaca")!.ok).toBe(true);
+    const gone = await h.call("/admin/alpaca", { remove: true });
+    expect((gone.body as { alpaca: { set: boolean } }).alpaca.set).toBe(false);
+    expect(loadSettings(h.settingsPath)!.alpacaSecret).toBeUndefined();
+    const env = harness({ env: { ALPACA_API_KEY_ID: "PKENVKEY1234567", ALPACA_API_SECRET_KEY: "env-secret-1234567890", ALPACA_FEED: "sip" } });
+    expect((await env.call("/admin/alpaca", { keyId: "PKGOODKEY123456", secret: "secret-value-abcdef" })).status).toBe(409);
+    const st = (await env.call("/admin/state")).body as { alpaca: unknown };
+    expect(st.alpaca).toEqual({ set: true, source: "env", feed: "sip", canEdit: true });
+    expect((await h.call("/admin/lab", { command: "fetch", args: { source: "alpaca", symbols: "SPY,QQQ" } })).status).toBe(200);
+    expect(h.started.at(-1)).toEqual(["fetch", { source: "alpaca", symbols: "SPY,QQQ" }]);
+    expect((await h.call("/admin/check", { stages: ["stocks"] })).status).toBe(200);
+  });
+
   it("custom brains: test, save, use, and no removal while a bee uses one; Z.ai has its own key", async () => {
     const h = harness({ checks: { compat: async (url: string) => (url.includes("down") ? "Could not reach My LLM." : null) } });
     const brain = { id: "my_llm", label: "My LLM", vendor: "Acme", baseUrl: "https://api.acme.example/v1", model: "acme-1", apiKey: "acme-secret-key-1234", jsonMode: "object" };
@@ -444,6 +471,9 @@ describe("lab jobs", () => {
     expect(labArgv("run", { synthetic: 3, folds: 4, leverage: 1.5, longOnly: true })).toEqual(["run", "--bar", "1H", "--folds", "4", "--leverage", "1.5", "--synthetic", "3", "--long-only"]);
     expect(labArgv("fetch", { source: "ccxt", exchange: "binance", symbols: "BTC/USDT,ETH/USDT", days: 90 })).toEqual(["fetch", "--bar", "1H", "--days", "90", "--exchange", "binance", "--symbol", "BTC/USDT,ETH/USDT"]);
     expect(labArgv("council", {})).toEqual(["council"]);
+    expect(labArgv("fetch", { source: "alpaca", symbols: "SPY,QQQ,BTC/USD", days: 200 })).toEqual(["fetch", "--bar", "1H", "--days", "200", "--source", "alpaca", "--symbol", "SPY,QQQ,BTC/USD"]);
+    expect(labArgv("fetch", { source: "alpaca" })).toEqual(["fetch", "--bar", "1H", "--days", "365", "--source", "alpaca"]);
+    expect(() => labArgv("fetch", { source: "alpaca", symbols: "SPY --feed sip" })).toThrow(/symbols/);
     expect(() => labArgv("fetch", { source: "ccxt", exchange: "binance; rm -rf /" })).toThrow(/exchange/);
     expect(() => labArgv("fetch", { symbols: "BTC --base http://evil" })).toThrow(/instruments/);
     expect(() => labArgv("run", { leverage: 3 })).toThrow(/leverage/);

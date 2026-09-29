@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { loadScalpReport, scalpGate } from "../lab/scalp.js";
 import { validationGates, type Gate } from "../lab/gold/research/report.js";
 
-export const CHECK_STAGES = ["skills", "scalper", "gold", "council", "report"] as const;
+export const CHECK_STAGES = ["stocks", "skills", "scalper", "gold", "council", "report"] as const;
 export type CheckStage = (typeof CHECK_STAGES)[number];
 
 export interface CheckStep {
@@ -23,6 +23,8 @@ export interface CheckOpts {
   labDir: string;
   /** A brain has a key: the council needs one. */
   hasBrain: boolean;
+  /** Alpaca data keys are set: the stocks stage needs them. */
+  hasAlpaca?: boolean;
   /** Research balance for the gold engine (small accounts cannot size the slow strategies). */
   goldBalance?: number;
   goldBase?: "M1" | "M5" | "M15" | "M30" | "H1";
@@ -44,6 +46,17 @@ export function goldCsvs(labDir: string): string[] {
 export function checkPlan(stages: readonly CheckStage[], o: CheckOpts): CheckStep[] {
   const want = new Set(stages);
   const steps: CheckStep[] = [];
+  // Stocks first, so the skill ranking below sees their history too.
+  if (want.has("stocks")) {
+    steps.push({
+      id: "stocks-fetch",
+      stage: "stocks",
+      label: "Download stock and ETF history from Alpaca (1H, 365 days)",
+      tool: "lab",
+      argv: ["fetch", "--source", "alpaca", "--bar", "1H", "--days", "365"],
+      ...(o.hasAlpaca ? {} : { skip: "no Alpaca keys yet (Admin → API keys)" }),
+    });
+  }
   if (want.has("skills")) {
     steps.push({ id: "skills-fetch", stage: "skills", label: "Download 1H history (365 days)", tool: "lab", argv: ["fetch", "--bar", "1H", "--days", "365"] });
     steps.push({ id: "skills-run", stage: "skills", label: "Rank every skill, walk-forward", tool: "lab", argv: ["run", "--bar", "1H", "--folds", "3"] });
@@ -85,13 +98,14 @@ export interface PreflightItem {
   note: string;
 }
 
-export function preflight(a: { mode: string; keys: Record<string, { set: boolean }>; hasBees: boolean; labDir: string; customBrains?: string[] }): PreflightItem[] {
+export function preflight(a: { mode: string; keys: Record<string, { set: boolean }>; hasBees: boolean; labDir: string; customBrains?: string[]; hasAlpaca?: boolean }): PreflightItem[] {
   const brains = [...["jev", "openai", "anthropic", "kimi", "zai"].filter((k) => a.keys[k]?.set), ...(a.customBrains ?? [])];
   const csv = goldCsvs(a.labDir);
   return [
     { id: "paper", label: "Paper mode", ok: a.mode === "dry", required: false, note: a.mode === "dry" ? "No real orders anywhere. The check places none in any mode." : `The engine runs in ${a.mode} mode. The check itself still places no orders.` },
     { id: "brains", label: "A brain has a key", ok: brains.length > 0, required: false, note: brains.length ? brains.join(", ") : "The council will be skipped until a brain has a key." },
     { id: "cmc", label: "CoinMarketCap key", ok: !!a.keys.coinmarketcap?.set, required: false, note: a.keys.coinmarketcap?.set ? "Market context on." : "Optional: only the market context needs it." },
+    { id: "alpaca", label: "Alpaca data keys", ok: !!a.hasAlpaca, required: false, note: a.hasAlpaca ? "Stock and ETF history for the lab (data only)." : "Optional: paper keys from alpaca.markets add US stocks and ETFs to the lab." },
     { id: "bees", label: "Bees configured", ok: a.hasBees, required: false, note: a.hasBees ? "Their playbooks are what the council fills." : "Run Setup to create the bees first." },
     { id: "gold", label: "Gold data (MT5 export)", ok: csv.length > 0, required: false, note: csv.length ? csv.map((f) => f.split("/").pop()).join(", ") : `Optional: drop an XAUUSD bar CSV in ${join(a.labDir, "gold", "data")}` },
   ];
@@ -127,6 +141,7 @@ function skillsVerdict(labDir: string, now: number, maxAgeDays: number): StageVe
   const r = readJson<RankingLite>(join(labDir, "ranking.json"));
   if (!r) return { ...base, status: "none", headline: "No ranking yet.", details: [], at: null };
   const real = r.datasets.filter((d) => d.source !== "synthetic").length;
+  const stocks = r.datasets.filter((d) => d.source === "alpaca").length;
   if (!real) return { ...base, status: "none", headline: "The last ranking used only synthetic data, which says nothing about markets.", details: [], at: r.createdAt };
   const cands = r.results.filter((x) => x.family !== "benchmark" && x.oos.trades > 0);
   const beat = cands.filter((x) => x.oos.returnPct > 0 && x.oos.returnPct > x.oos.benchmarkPct && x.stabilityPct >= 60).sort((a, b) => b.oos.returnPct - a.oos.returnPct);
@@ -134,8 +149,8 @@ function skillsVerdict(labDir: string, now: number, maxAgeDays: number): StageVe
   const age = (now - r.createdAt) / DAY;
   if (age > maxAgeDays) return { ...base, status: "stale", headline: `The ranking is ${age.toFixed(0)} days old. Run the check again.`, details, at: r.createdAt };
   return beat.length
-    ? { ...base, status: "pass", headline: `${beat.length} of ${cands.length} skills beat buy-and-hold out of sample, positive in at least 60% of folds, on ${real} real dataset${real > 1 ? "s" : ""}.`, details, at: r.createdAt }
-    : { ...base, status: "fail", headline: `None of ${cands.length} skills beat buy-and-hold out of sample on ${real} real dataset${real > 1 ? "s" : ""}. That is an answer: do not expect these skills to add value.`, details, at: r.createdAt };
+    ? { ...base, status: "pass", headline: `${beat.length} of ${cands.length} skills beat buy-and-hold out of sample, positive in at least 60% of folds, on ${real} real dataset${real > 1 ? "s" : ""}${stocks ? ` (${stocks} from Alpaca)` : ""}.`, details, at: r.createdAt }
+    : { ...base, status: "fail", headline: `None of ${cands.length} skills beat buy-and-hold out of sample on ${real} real dataset${real > 1 ? "s" : ""}${stocks ? ` (${stocks} from Alpaca)` : ""}. That is an answer: do not expect these skills to add value.`, details, at: r.createdAt };
 }
 
 function scalperVerdict(labDir: string, now: number, maxAgeDays: number): StageVerdict {

@@ -12,7 +12,7 @@ export const LAB_COMMANDS = ["fetch", "run", "council", "cycle"] as const;
 export type LabCommand = (typeof LAB_COMMANDS)[number];
 
 export interface LabArgs {
-  source?: "okx" | "ccxt" | "synthetic";
+  source?: "okx" | "ccxt" | "alpaca" | "synthetic";
   /** OKX instIds or CCXT symbols, comma separated. */
   symbols?: string;
   exchange?: string;
@@ -67,6 +67,12 @@ export function labArgv(command: LabCommand, a: LabArgs): string[] {
       out.push("--exchange", a.exchange);
       if (a.symbols) {
         if (!SYMBOLS.test(a.symbols)) throw new Error("symbols: like BTC/USDT,ETH/USDT");
+        out.push("--symbol", a.symbols);
+      }
+    } else if (a.source === "alpaca") {
+      out.push("--source", "alpaca");
+      if (a.symbols) {
+        if (!SYMBOLS.test(a.symbols)) throw new Error("symbols: like SPY,QQQ,BTC/USD");
         out.push("--symbol", a.symbols);
       }
     } else if (a.symbols && a.source !== "synthetic") {

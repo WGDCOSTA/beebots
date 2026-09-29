@@ -214,8 +214,47 @@ function KeysTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         );
       })}
     </div>
+    <AlpacaKeys s={s} call={call} />
     <CustomBrains s={s} call={call} password={password} />
     </>
+  );
+}
+
+/** Alpaca market-data keys (a key ID and a secret): US stocks, ETFs and crypto history for the lab. Data only. */
+function AlpacaKeys({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  const a = s.alpaca;
+  const [id, setId] = useState("");
+  const [secret, setSecret] = useState("");
+  const env = a.source === "env";
+  return (
+    <div className="pcard">
+      <h3>
+        Alpaca (market data) <span className={`badge ${a.set ? "ok" : ""}`}>{a.set ? (env ? "✓ set in .env" : "✓ set") : "not set"}</span>
+      </h3>
+      <p className="dim">
+        Adds US stocks, ETFs and crypto history to the lab (Data → Alpaca in the lab form, or the Stocks stage of the real-data check), so skills can be tested on equities and on gold and oil ETFs. It only reads data: use your Alpaca{" "}
+        <strong>paper</strong> keys, never the real account's. Feed: <strong>{a.feed}</strong> ({a.feed === "iex" ? "free, one exchange: fine for daily and hourly bars, thin for scalping" : "every US exchange, paid plan"}); change it in Settings → Learning. Keys are write-only and tested with one
+        read before they are saved.
+      </p>
+      {env ? (
+        <p className="dim small">Set in the environment (.env): change them there, then restart.</p>
+      ) : !a.canEdit ? (
+        <p className="dim small">No Setup file: keys come from .env (ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY).</p>
+      ) : (
+        <div className="key-edit">
+          <input className="pinput mono" autoComplete="off" placeholder={a.set ? "Replace key ID…" : "Key ID (PK…)"} value={id} onChange={(e) => setId(e.target.value)} />
+          <input className="pinput mono" type="password" autoComplete="off" placeholder="Secret" value={secret} onChange={(e) => setSecret(e.target.value)} />
+          <button className="pbtn" disabled={id.trim().length < 8 || secret.trim().length < 8} onClick={() => void call("alpaca", { keyId: id.trim(), secret: secret.trim() }, "Alpaca keys checked and saved.").then(() => (setId(""), setSecret("")))}>
+            Test & save
+          </button>
+          {a.set && (
+            <button className="pbtn ghost" onClick={() => confirm("Remove the Alpaca keys?") && void call("alpaca", { remove: true }, "Alpaca keys removed.")}>
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1594,7 +1633,7 @@ function McpServerCard({ m, bees, call, onEdit }: { m: McpServerView; bees: Arra
 
 function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void>; password: string }) {
   const [cmd, setCmd] = useState<"cycle" | "fetch" | "run" | "council">("cycle");
-  const [source, setSource] = useState<"okx" | "ccxt" | "synthetic">("okx");
+  const [source, setSource] = useState<"okx" | "ccxt" | "alpaca" | "synthetic">("okx");
   const [symbols, setSymbols] = useState("BTC-USDT-SWAP,ETH-USDT-SWAP,SOL-USDT-SWAP");
   const [exchange, setExchange] = useState("binance");
   const [bar, setBar] = useState("1H");
@@ -1652,9 +1691,19 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
           {cmd !== "council" && (
             <label className="plabel">
               Data
-              <select className="pinput" value={source} onChange={(e) => setSource(e.target.value as typeof source)}>
+              <select
+                className="pinput"
+                value={source}
+                onChange={(e) => {
+                  const next = e.target.value as typeof source;
+                  setSource(next);
+                  // Each source has its own symbol style: start from that source's default rather than another's list.
+                  setSymbols(next === "okx" ? "BTC-USDT-SWAP,ETH-USDT-SWAP,SOL-USDT-SWAP" : next === "ccxt" ? "BTC/USDT,ETH/USDT,SOL/USDT" : "");
+                }}
+              >
                 <option value="okx">OKX history (public)</option>
                 <option value="ccxt">Another exchange (CCXT)</option>
+                <option value="alpaca">Alpaca (US stocks, ETFs, crypto)</option>
                 <option value="synthetic">Synthetic markets (offline test)</option>
               </select>
             </label>
@@ -1678,8 +1727,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
           {fetches && source !== "synthetic" && (
             <>
               <label className="plabel wide">
-                {source === "ccxt" ? "Symbols" : "OKX instruments"}
-                <input className="pinput mono" value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder={source === "ccxt" ? "BTC/USDT,ETH/USDT" : "BTC-USDT-SWAP,ETH-USDT-SWAP"} />
+                {source === "ccxt" || source === "alpaca" ? "Symbols" : "OKX instruments"}
+                <input className="pinput mono" value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder={source === "ccxt" ? "BTC/USDT,ETH/USDT" : source === "alpaca" ? "SPY,QQQ,GLD,USO,NVDA (empty = these)" : "BTC-USDT-SWAP,ETH-USDT-SWAP"} />
               </label>
               <label className="plabel">
                 Days of history
@@ -1756,6 +1805,7 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
 }
 
 const STAGE_LABEL: Record<string, string> = {
+  stocks: "Stocks & ETFs: download hourly history from Alpaca (needs Alpaca keys)",
   skills: "Skills: hourly history, walk-forward ranking",
   scalper: "Scalper: 1-minute history, does it survive costs?",
   gold: "Gold breakout: walk-forward, Monte Carlo, stability (needs an MT5 export)",
@@ -1774,7 +1824,7 @@ const STEP_MARK: Record<string, string> = { pending: "○", running: "●", done
 /** The roteiro as one button: public data, no orders, a verdict per stage. */
 function RealCheck({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
   const c = s.lab.check;
-  const [picked, setPicked] = useState<string[]>(() => c.stages.filter((x) => x !== "gold" || c.goldFiles.length > 0));
+  const [picked, setPicked] = useState<string[]>(() => c.stages.filter((x) => (x !== "gold" || c.goldFiles.length > 0) && (x !== "stocks" || s.alpaca.set)));
   const job = s.lab.job?.command === "check" ? s.lab.job : null;
   const running = s.lab.job?.state === "running";
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -1782,7 +1832,7 @@ function RealCheck({ s, call }: { s: AdminState; call: (path: string, body: unkn
     <div className="pcard">
       <h3>Real-data check</h3>
       <p className="dim">
-        Downloads real public candles from OKX and runs the whole roteiro in the background: skill ranking, scalper cost test, gold validation, council and hive report. It places no orders and needs no exchange account; the engine keeps
+        Downloads real public candles from OKX (and stock and ETF history from Alpaca, when its keys are set) and runs the whole roteiro in the background: skill ranking, scalper cost test, gold validation, council and hive report. It places no orders and needs no exchange account; the engine keeps
         running. Each stage ends with a verdict. Nothing here turns a feature on.
       </p>
       <ul className="checklist">
