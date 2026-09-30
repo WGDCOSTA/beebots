@@ -4,14 +4,14 @@ Status: review and design, 30 Sep 2026. Nothing drawn here is built. The visual 
 
 ## 1. What was checked
 
-Every function in `docs/ARENA_PLAN.md` and in the later conversations was listed and matched to a screen: 47 functions.
+Every function in `docs/ARENA_PLAN.md` and in the later conversations was listed and matched to a screen: 48 functions (updated after step 1 was built).
 
 | Status | Count | Meaning |
 |---|---|---|
-| Built | 2 | Works as it is: e-mail sign-in, theme and avatar picker |
+| Built | 6 | Works as it is: e-mail sign-in, theme and avatar picker, and, since step 1, the Arena's own frame, the landing page, the consent screen and six languages |
 | Built, needs redesign | 8 | Exists, but the screen is wrong for what it has to do |
-| Drawn | 34 | A mockup shows it, with its rules |
-| Needs a decision | 3 | A choice from the owner blocks the design |
+| Drawn | 32 | A mockup shows it, with its rules |
+| Not in v1 | 2 | Decided: follow and comments; live trading opt-in |
 
 The full table, with the screen number of each function, is in the HTML file.
 
@@ -65,7 +65,23 @@ Each step is a normal slice with tests, and each can ship on its own.
 8. **Affiliates, badges, season recap.** Needs the attribution ledger and the badge engine.
 9. **Platform console.** Needs the build check that fails when a console route touches member data.
 
-## 6. Decisions needed
+## 6. Decisions (resolved 30 Sep 2026)
+
+| # | Decision |
+|---|---|
+| 1 | English is the base, plus five languages (pt-BR, es, fr, de, it). Always English by default; no browser detection. |
+| 2 | "Agent" is the noun in the chrome (autonomous, with a brain connected to one or more LLMs). The theme is a look, not the noun. |
+| 3 | Pause keeps positions under their stops; Stop closes them. |
+| 4 | Downgrade: extra agents go into 10-day quarantine, then are deleted (to confirm). |
+| 5 | Reviews and star ratings: dropped. |
+| 6 | Follow and comments: not in v1. |
+| 7 | Templates: three, written by us, labelled as examples. Still to write. |
+| 8 | Legal texts stay drafts until counsel signs them off; the operator is in Ireland (see `ARENA_LEGAL_OUTLINE.md`). |
+| 9 | Payments on the operator's own Stripe account; launch from Ireland into the EU. Price still open. |
+
+Step 1 of the build order (shell, landing, consent) is built; see the plan's build status.
+
+## 7. Decisions that were needed (kept for the record)
 
 1. **Language.** Recommended: Portuguese (Brasil) first, English second, settled before copy is final.
 2. **Nouns.** Recommended: "bot" in the chrome, the theme's noun on the card ("Cat · Trend"), "Arena" for the place.

@@ -60,6 +60,7 @@ section > .head p { color: var(--text-2); max-width: 72ch; }
 .st.redesign { color: var(--warning); }
 .st.drawn { color: var(--violet); }
 .st.decide { color: var(--magenta); }
+.st.later { color: var(--muted); }
 
 /* coverage */
 .counts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 14px; }
@@ -223,13 +224,13 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 </svg>
 <div class="wrap">
 <div class="bar"><nav aria-label="Sections">
-  <a href="#coverage">Coverage</a><a href="#review">Review</a><a href="#map">Site map</a><a href="#s1">Shell</a><a href="#s2">Landing</a><a href="#s4">Home</a><a href="#s5">Create</a><a href="#s6">Bot detail</a><a href="#s8">Leaderboard</a><a href="#s10">Plans</a><a href="#s11">Keys</a><a href="#s12">Market</a><a href="#s14">Affiliates</a><a href="#s16">Ops</a><a href="#s17">States</a><a href="#decide">Decisions</a>
+  <a href="#coverage">Coverage</a><a href="#review">Review</a><a href="#map">Site map</a><a href="#s1">Shell</a><a href="#s2">Landing</a><a href="#s4">Home</a><a href="#s5">Create</a><a href="#s6">Agent detail</a><a href="#s8">Leaderboard</a><a href="#s10">Plans</a><a href="#s11">Keys</a><a href="#s12">Market</a><a href="#s14">Affiliates</a><a href="#s16">Ops</a><a href="#s17">States</a><a href="#decide">Decisions</a>
 </nav></div>
 
 <header class="hero">
   <span class="eyebrow">Arena · UX review · 30 Sep 2026</span>
   <h1>Every screen the plan promises, and whether it is drawn</h1>
-  <p class="lead">The plan and the conversations so far add up to 47 functions. Two are built and work as they are, eight are built and need a redesign, 34 are drawn on this page, and three wait on a decision from you. This page checks each function against a screen, reviews what is live today on a phone, and draws the rest in the product's own look. Sample data is marked as such. Nothing drawn here is built.</p>
+  <p class="lead">The plan and the conversations so far add up to 48 functions. 6 are built and work as they are, 8 are built and need a redesign, 32 are drawn on this page, and 2 are deliberately not in v1. Step 1 of the build order (the Arena's own frame, the landing page and the consent screen) is now built. This page checks each function against a screen, reviews what was live before step 1, and draws the rest in the product's own look. Sample data is marked as such. Nothing drawn here is built.</p>
 </header>
 
 <section id="coverage">
@@ -239,15 +240,15 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 </section>
 
 <section id="review">
-  <div class="head"><span class="eyebrow">2 · Review of what is live</span><h2>Fourteen findings on the screens that exist, and what already works</h2><p>Measured on a 390 px phone against the running Arena, not guessed. Severity reflects what stops a new member from reaching or understanding something.</p></div>
+  <div class="head"><span class="eyebrow">2 · Review of what is live</span><h2>Fourteen findings on the screens as they were, and what already worked</h2><p>Measured on a 390 px phone against the running Arena, not guessed. Severity reflects what stops a new member from reaching or understanding something.</p></div>
   <div class="finds">
     <article class="find"><span class="sev high">HIGH</span><h3>The Arena sits inside the owner's navigation</h3><div class="ev">nav at 390 px: Live, Bunnies, Lab &amp; warren memory, Arena (x 430–476), Admin. Screen is 390 wide.</div><p class="fix">Members see operator links, and the Arena tab is off screen with no hint that the bar scrolls. <b>Fix:</b> a separate Arena shell with its own brand and a bottom tab bar (S1).</p></article>
-    <article class="find"><span class="sev high">HIGH</span><h3>Locked options lead nowhere</h3><div class="ev">Zombies, Gods, Momentum, extra bots: all say "Pro", none is tappable.</div><p class="fix">A member who wants more hits a dead end, and there is no plan page at all. <b>Fix:</b> a paywall sheet that explains the pack or limit and links to plans (S10).</p></article>
+    <article class="find"><span class="sev high">HIGH</span><h3>Locked options lead nowhere</h3><div class="ev">Zombies, Gods, Momentum, extra agents: all say "Pro", none is tappable.</div><p class="fix">A member who wants more hits a dead end, and there is no plan page at all. <b>Fix:</b> a paywall sheet that explains the pack or limit and links to plans (S10).</p></article>
     <article class="find"><span class="sev high">HIGH</span><h3>New members land on an empty card</h3><div class="ev">First screen after the link: "You have no bunny yet". The free AI design is one tap deeper, inside the form.</div><p class="fix">The best feature is hidden at the moment it matters. <b>Fix:</b> landing, consent, then a three-step first run that starts with the AI (S2, S3).</p></article>
     <article class="find"><span class="sev high">HIGH</span><h3>No consent or legal entry points</h3><div class="ev">Sign-in has a "paper trading only" line. No terms, privacy notice or age and risk acknowledgement.</div><p class="fix">Needed before public launch, and before the leaderboard shows other people's names. <b>Fix:</b> consent asked once after the first link, so the form still cannot reveal who has an account (S2). Text needs a lawyer.</p></article>
-    <article class="find"><span class="sev med">MED</span><h3>Creating a bot is one very long page</h3><div class="ev">form height 1,927 px at 390 px wide: nine groups, about 2.4 screens.</div><p class="fix">People lose their place and cannot see what they are building. <b>Fix:</b> a five-step flow with a live preview card, and options a plan cannot use greyed with the reason, not an error afterwards (S5).</p></article>
-    <article class="find"><span class="sev med">MED</span><h3>A bot card is a dead end</h3><div class="ev">No detail view. Version history exists in the API with no screen. Rules clip at three lines. No pause.</div><p class="fix"><b>Fix:</b> a bot page with performance, decisions, versions and settings (S6), and Pause and Stop in reach (S4, S17).</p></article>
-    <article class="find"><span class="sev med">MED</span><h3>One product, four names, wrong nouns</h3><div class="ev">"Create a bunny" appears for Cats, Robots and Zombies. The same thing is called bunny, bot, Warren, race track, Arena and beebots.</div><p class="fix"><b>Fix:</b> "bot" in the product's chrome, the theme's own noun on the card ("Cat · Trend"), one name for the place. Needs your call (see Decisions).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>Creating an agent is one very long page</h3><div class="ev">form height 1,927 px at 390 px wide: nine groups, about 2.4 screens.</div><p class="fix">People lose their place and cannot see what they are building. <b>Fix:</b> a five-step flow with a live preview card, and options a plan cannot use greyed with the reason, not an error afterwards (S5).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>An agent card is a dead end</h3><div class="ev">No detail view. Version history exists in the API with no screen. Rules clip at three lines. No pause.</div><p class="fix"><b>Fix:</b> an agent page with performance, decisions, versions and settings (S6), and Pause and Stop in reach (S4, S17).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>One product, four names, wrong nouns</h3><div class="ev">"Create a bunny" appears for Cats, Robots and Zombies. The same thing is called bunny, agent, Warren, race track, Arena and beebots.</div><p class="fix"><b>Fix:</b> "agent" in the product's chrome, the theme's own noun on the card ("Cat · Trend"), one name for the place. Needs your call (see Decisions).</p></article>
     <article class="find"><span class="sev med">MED</span><h3>Leaderboard rows go nowhere</h3><div class="ev">Rows are not tappable. League chips show a bare count with no label. No search. The member's own row can be far down the page.</div><p class="fix"><b>Fix:</b> tappable rows to public profiles, a pinned "You" row, labelled leagues, handle search, season archive (S7, S8).</p></article>
     <article class="find"><span class="sev med">MED</span><h3>Touch targets below a comfortable size</h3><div class="ev">primary button 41 px, chips 37, tabs 37, Edit and Delete 30 px tall and side by side. (WCAG 2.2 minimum is 24 px, so these pass it; 44 px is the usual phone guideline.)</div><p class="fix"><b>Fix:</b> 44 px minimum everywhere, destructive actions moved away from edit (S6, S15).</p></article>
     <article class="find"><span class="sev med">MED</span><h3>The product speaks English only</h3><div class="ev">The owner and likely first members write Portuguese. No language setting exists.</div><p class="fix">A decision before copy is final, since every string in these mockups would be translated. <b>Fix:</b> language setting in S15; pt-BR first is the likely call.</p></article>
@@ -263,29 +264,29 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
   <div class="head"><span class="eyebrow">3 · Site map</span><h2>One shell, four tabs and a create button</h2><p>Public pages work without signing in. The owner's Warren and admin stay in their own app; the platform console is a third, separate service that cannot open member data.</p></div>
   <div class="tree">
     <div class="col"><h3>Public</h3><ul>
-      <li><span>Landing</span><span class="st drawn"><i>◆</i>S2</span></li>
+      <li><span>Landing</span><span class="st built"><i>✓</i>built</span></li>
       <li><span>Sign-in and consent</span><span class="st built"><i>✓</i>built</span></li>
       <li><span>Leaderboard and seasons</span><span class="st redesign"><i>◐</i>S8</span></li>
-      <li><span>Public bot profile</span><span class="st drawn"><i>◆</i>S7</span></li>
+      <li><span>Public agent profile</span><span class="st drawn"><i>◆</i>S7</span></li>
       <li><span>Public member profile</span><span class="st drawn"><i>◆</i>S7</span></li>
       <li><span>Marketplace browse</span><span class="st drawn"><i>◆</i>S12</span></li>
-      <li><span>Terms, privacy, risk notice</span><span class="st decide"><i>?</i>text</span></li>
+      <li><span>Terms, privacy, risk notice</span><span class="st built"><i>✓</i>drafts</span></li>
     </ul></div>
     <div class="col"><h3>Tab · Home</h3><ul>
       <li><span>First run</span><span class="st drawn"><i>◆</i>S3</span></li>
-      <li><span>Season strip and my bots</span><span class="st redesign"><i>◐</i>S4</span></li>
-      <li><span>Bot page: performance</span><span class="st drawn"><i>◆</i>S6</span></li>
-      <li><span>Bot page: decisions</span><span class="st drawn"><i>◆</i>S6</span></li>
-      <li><span>Bot page: versions</span><span class="st drawn"><i>◆</i>S6</span></li>
-      <li><span>Bot page: settings</span><span class="st redesign"><i>◐</i>S6</span></li>
-      <li><span>Create a bot (centre +)</span><span class="st redesign"><i>◐</i>S5</span></li>
+      <li><span>Season strip and my agents</span><span class="st redesign"><i>◐</i>S4</span></li>
+      <li><span>Agent page: performance</span><span class="st drawn"><i>◆</i>S6</span></li>
+      <li><span>Agent page: decisions</span><span class="st drawn"><i>◆</i>S6</span></li>
+      <li><span>Agent page: versions</span><span class="st drawn"><i>◆</i>S6</span></li>
+      <li><span>Agent page: settings</span><span class="st redesign"><i>◐</i>S6</span></li>
+      <li><span>Create an agent (centre +)</span><span class="st redesign"><i>◐</i>S5</span></li>
     </ul></div>
     <div class="col"><h3>Tab · Board and Market</h3><ul>
       <li><span>Leaderboard</span><span class="st redesign"><i>◐</i>S8</span></li>
       <li><span>Season archive</span><span class="st drawn"><i>◆</i>S8</span></li>
       <li><span>Season recap</span><span class="st drawn"><i>◆</i>S9</span></li>
       <li><span>Skill browse and detail</span><span class="st drawn"><i>◆</i>S12</span></li>
-      <li><span>Install on a bot</span><span class="st drawn"><i>◆</i>S12</span></li>
+      <li><span>Install on an agent</span><span class="st drawn"><i>◆</i>S12</span></li>
       <li><span>My skills (studio)</span><span class="st drawn"><i>◆</i>S13</span></li>
       <li><span>Seller dashboard</span><span class="st drawn"><i>◆</i>S13</span></li>
     </ul></div>
@@ -322,7 +323,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="tabbar">
             <div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div>
             <div><svg class="ic"><use href="#i-trophy"/></svg>Board</div>
-            <div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div>
+            <div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New agent</div>
             <div><svg class="ic"><use href="#i-store"/></svg>Market</div>
             <div><svg class="ic"><use href="#i-user"/></svg>Me</div>
           </div>
@@ -346,7 +347,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="tabbar">
             <div><svg class="ic"><use href="#i-home"/></svg>Home</div>
             <div><svg class="ic"><use href="#i-trophy"/></svg>Board</div>
-            <div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div>
+            <div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New agent</div>
             <div><svg class="ic"><use href="#i-store"/></svg>Market</div>
             <div class="on"><svg class="ic"><use href="#i-user"/></svg>Me</div>
           </div>
@@ -357,18 +358,18 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
       <h3>Decisions</h3>
       <ul>
         <li>The Arena gets its own shell, brand and footer. The owner's Live, Lab and Admin links never appear for members.</li>
-        <li>Board, Market and Me are the destinations. Home is the member's own bots. The centre button creates a bot from anywhere.</li>
+        <li>Board, Market and Me are the destinations. Home is the member's own agents. The centre button creates an agent from anywhere.</li>
         <li>When the plan is full the centre button stays visible and opens the paywall sheet (S10) instead of a dead control.</li>
         <li>The bell holds notifications (S15). The dot means unread, never a count.</li>
         <li>On a desktop the same five items become a left sidebar (below).</li>
       </ul>
-      <div class="cov"><span class="st redesign"><i>◐</i>Navigation</span><span class="st drawn"><i>◆</i>Me menu</span></div>
+      <div class="cov"><span class="st built"><i>✓</i>Navigation</span><span class="st drawn"><i>◆</i>Me menu</span></div>
     </div>
   </div>
   <div style="margin-top:16px"><div class="cap">Desktop layout, same content</div>
     <div class="desk">
-      <div class="side"><div class="brand" style="padding:6px 10px 12px"><span class="logo"></span>Arena</div><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Leaderboard</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div><div style="margin-top:10px" class="btn" ><svg class="ic"><use href="#i-plus"/></svg>New bot</div></div>
-      <div class="main"><div class="between"><h4 style="font-size:20px">Home</h4><span class="pill">Free</span></div><div class="grid2"><div class="m-card"><span class="eyebrow">Season</span><div class="ttl">2026-W40 · #2 in Free · Trend</div></div><div class="m-card"><span class="eyebrow">My bots</span><div class="ttl">Sleepy Quant · running</div></div></div></div>
+      <div class="side"><div class="brand" style="padding:6px 10px 12px"><span class="logo"></span>Arena</div><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Leaderboard</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div><div style="margin-top:10px" class="btn" ><svg class="ic"><use href="#i-plus"/></svg>New agent</div></div>
+      <div class="main"><div class="between"><h4 style="font-size:20px">Home</h4><span class="pill">Free</span></div><div class="grid2"><div class="m-card"><span class="eyebrow">Season</span><div class="ttl">2026-W40 · #2 in Free · Trend</div></div><div class="m-card"><span class="eyebrow">My agents</span><div class="ttl">Sleepy Quant · running</div></div></div></div>
     </div>
   </div>
 </div>
@@ -383,7 +384,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="btn sm ghost" style="min-height:44px">Sign in</div></div>
           <div class="scr">
             <span class="eyebrow">Paper trading, real prices</span>
-            <h4 style="font-size:26px;line-height:1.1">Build a trading bot. Race it every week.</h4>
+            <h4 style="font-size:26px;line-height:1.1">Build a trading agent. Race it every week.</h4>
             <p class="sub">Describe how it should trade. It runs on real market prices with simulated money, and climbs a public leaderboard.</p>
             <div class="btn">Start free</div>
             <div class="m-card"><div class="between"><span class="eyebrow">This week · Free · Trend</span><span class="pill ok">Live</span></div>
@@ -408,7 +409,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
             <h4>One last step</h4>
             <p class="sub">You are signed in as <span class="mono">ana@example.com</span>.</p>
             <div class="m-card">
-              <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I accept the Terms and the Privacy notice</span><span class="dim small">Your e-mail is never shown to anyone. Others see only your public name.</span></div></div>
+              <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I accept the Terms and have read the Privacy notice</span><span class="dim small">Your e-mail is never shown to anyone. Others see only your public name.</span></div></div>
               <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I understand this is simulated money</span><span class="dim small">Results are not advice and say nothing about real trading.</span></div></div>
               <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I am 18 or older</span></div></div>
             </div>
@@ -423,17 +424,17 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
       <ul>
         <li>The landing is the signed-out home. It shows the real leaderboard so a visitor sees people, not promises.</li>
         <li>Consent is asked after the first link, not on the sign-in form. The form keeps answering the same way for every address, so it cannot reveal who has an account.</li>
-        <li>Three statements, each its own switch, all off until the member turns them on. The text is placeholder. A lawyer writes the real terms and the age line.</li>
+        <li>Three statements, each its own box, all unticked until the member ticks them. The server records the document version and the time, nothing else, and refuses to create an agent until it is done. The text is a draft; counsel writes the real terms and the age line.</li>
         <li>The cookie line is true today: one functional session cookie. If analytics are ever added this line changes.</li>
       </ul>
-      <div class="cov"><span class="st drawn"><i>◆</i>Landing</span><span class="st drawn"><i>◆</i>Consent</span><span class="st decide"><i>?</i>Legal text</span></div>
+      <div class="cov"><span class="st built"><i>✓</i>Landing</span><span class="st built"><i>✓</i>Consent</span><span class="st decide"><i>?</i>Legal text (counsel)</span></div>
     </div>
   </div>
 </div>
 
 <!-- ============ S3 ============ -->
 <div class="screen" id="s3">
-  <div class="head"><span class="id">S3</span><h2>First run</h2><p>Three steps from a new account to a bot on the track. The platform pays for the AI here, for the first bot only.</p></div>
+  <div class="head"><span class="id">S3</span><h2>First run</h2><p>Three steps from a new account to an agent on the track. The platform pays for the AI here, for the first agent only.</p></div>
   <div class="row">
     <div class="phones">
       <div><div class="cap">Step 1 of 3 · Public name</div>
@@ -444,22 +445,22 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
             <div class="chips"><span class="chip">@ana-quant</span><span class="chip">@night-ana</span><span class="chip">@bunny-9d29</span></div>
             <p class="dim small">3 to 20 letters, numbers, - or _. You can change it later.</p>
             <div class="btn" style="margin-top:auto">Next</div></div></div></div>
-      <div><div class="cap">Step 2 of 3 · Describe your bot</div>
+      <div><div class="cap">Step 2 of 3 · Describe your agent</div>
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><span class="dim small">Back</span></div>
           <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
-            <h4>Describe your first bot</h4><p class="sub">One sentence is enough. We write the name, rules and look. You review everything.</p>
+            <h4>Describe your first agent</h4><p class="sub">One sentence is enough. We write the name, rules and look. You review everything.</p>
             <div class="input area focus"><span>A patient bunny that only buys sharp dips in BTC and ETH and never trades on weekends</span></div>
             <div class="chips"><span class="chip">Dip buyer</span><span class="chip">Trend follower</span><span class="chip">Breakout hunter</span></div>
             <div class="btn">Design it for me</div>
-            <p class="dim small">Free for your first bot. 3 tries, 3 left.</p>
+            <p class="dim small">Free for your first agent. 3 tries, 3 left.</p>
             <div class="between"><span class="small" style="color:var(--accent-text)">Start from a template</span><span class="small" style="color:var(--accent-text)">Build it myself</span></div></div></div></div>
-      <div><div class="cap">Step 3 of 3 · Meet your bot</div>
+      <div><div class="cap">Step 3 of 3 · Meet your agent</div>
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><span class="dim small">Back</span></div>
           <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i></div>
             <div class="m-card"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl" style="font-size:17px">Sleepy Quant</span><span class="dim small">the sleepy dip hunter</span><span class="pill">Bunny · Trend</span></div></div>
               <span class="small" style="color:var(--text-2)">Buy sharp dips in BTC and ETH, stay flat when unsure, never trade on weekends.</span>
               <div class="chips"><span class="pill">BTC</span><span class="pill">ETH</span></div></div>
-            <div class="m-card c2"><div class="between"><div class="stack"><span class="ttl">Paint its portrait</span><span class="dim small">Free once, for your first bot</span></div><div class="toggle on"></div></div>
+            <div class="m-card c2"><div class="between"><div class="stack"><span class="ttl">Paint its portrait</span><span class="dim small">Free once, for your first agent</span></div><div class="toggle on"></div></div>
               <div class="between"><div class="stack"><span class="ttl">Show on the leaderboard</span><span class="dim small">Name, style and results. Never rules.</span></div><div class="toggle on"></div></div></div>
             <div class="btn">Start racing</div>
             <p class="dim tiny">Starts with $1,000 of simulated money. Nothing real can happen.</p></div></div></div>
@@ -467,11 +468,11 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
     <div class="notes">
       <h3>Decisions</h3>
       <ul>
-        <li>Name first, because it is the only thing that has to exist before anyone can see the bot.</li>
+        <li>Name first, because it is the only thing that has to exist before anyone can see the agent.</li>
         <li>The AI box is the first thing on step 2, with the tries left stated. Template and manual are the two quiet alternatives.</li>
         <li>The review step is a preview of the real card, so people see what others will see.</li>
         <li>Skip is always allowed. A member who skips lands on Home with the checklist (S4).</li>
-        <li>The platform's AI is for the first bot only. The next bot uses the member's own keys (S11) or templates.</li>
+        <li>The platform's AI is for the first agent only. The next agent uses the member's own keys (S11) or templates.</li>
       </ul>
       <div class="cov"><span class="st drawn"><i>◆</i>First run</span><span class="st redesign"><i>◐</i>AI design</span><span class="st drawn"><i>◆</i>Public name</span></div>
     </div>
@@ -480,16 +481,16 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 
 <!-- ============ S4 ============ -->
 <div class="screen" id="s4">
-  <div class="head"><span class="id">S4</span><h2>Home: season and my bots</h2><p>The screen a member opens every day. The summary first, then each bot with its state in form, then what to do next.</p></div>
+  <div class="head"><span class="id">S4</span><h2>Home: season and my agents</h2><p>The screen a member opens every day. The summary first, then each agent with its state in form, then what to do next.</p></div>
   <div class="row">
     <div class="phones">
-      <div><div class="cap">A member with a running bot (sample data)</div>
+      <div><div class="cap">A member with a running agent (sample data)</div>
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg><span class="dot"></span></div></div>
           <div class="scr">
             <div class="m-card"><div class="between"><span class="eyebrow">2026-W40</span><span class="small dim">Ends in 4d 2h</span></div>
               <div class="between"><div class="stack"><span class="ttl" style="font-size:17px">#2 in Free · Trend</span><span class="dim small">of 4 ranked · 1 waiting</span></div><span class="pill vio">Score 4.19</span></div>
               <div class="meter"><i style="width:36%"></i></div><span class="dim tiny">Season is 36% done</span></div>
-            <div class="between"><h3>My bots</h3><div class="btn sm ghost"><svg class="ic"><use href="#i-pause"/></svg>Pause all</div></div>
+            <div class="between"><h3>My agents</h3><div class="btn sm ghost"><svg class="ic"><use href="#i-pause"/></svg>Pause all</div></div>
             <div class="m-card">
               <div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av">🐰</span><div class="stack"><span class="ttl">Sleepy Quant</span><span class="dim small">Bunny · Trend · v1</span></div></div><span class="pill ok">● Running</span></div>
               <svg class="spark" data-v="0,.3,.2,.9,1.4,1.1,1.8,2.4,2.2,3.1,3.6,3.3,4.2" data-x="Mon,Wed,Fri,Sun" viewBox="0 0 320 96"></svg>
@@ -497,7 +498,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
               <div class="between"><span class="small" style="color:var(--text-2)">Long BTC $622 · <span class="bad">-$0.03</span></span><span class="small" style="color:var(--accent-text)">Open ›</span></div>
             </div>
           </div>
-          <div class="tabbar"><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
+          <div class="tabbar"><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New agent</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
         </div></div>
       <div><div class="cap">A new member, checklist and quota</div>
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg></div></div>
@@ -505,18 +506,18 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
             <div class="m-card"><div class="between"><h3>Getting started</h3><span class="dim small">2 of 5</span></div><div class="meter"><i style="width:40%"></i></div>
               <div class="list">
                 <div><svg class="ic good"><use href="#i-check"/></svg><div class="grow dim" style="text-decoration:line-through">Pick a public name</div></div>
-                <div><svg class="ic good"><use href="#i-check"/></svg><div class="grow dim" style="text-decoration:line-through">Create your first bot</div></div>
+                <div><svg class="ic good"><use href="#i-check"/></svg><div class="grow dim" style="text-decoration:line-through">Create your first agent</div></div>
                 <div><span class="av sm" style="--c:#8a8894;width:24px;height:24px;font-size:0"></span><div class="grow"><div class="ttl">Paint its portrait</div><span class="dim small">1 free try left</span></div><svg class="ic"><use href="#i-chev"/></svg></div>
                 <div><span class="av sm" style="--c:#8a8894;width:24px;height:24px;font-size:0"></span><div class="grow"><div class="ttl">Leave it racing for 3 days</div><span class="dim small">Then it gets ranked</span></div></div>
                 <div><span class="av sm" style="--c:#8a8894;width:24px;height:24px;font-size:0"></span><div class="grow"><div class="ttl">Look at the leaderboard</div></div><svg class="ic"><use href="#i-chev"/></svg></div>
               </div></div>
             <div class="m-card c2"><div class="between"><span class="ttl">Free plan</span><span class="pill pro">Upgrade</span></div>
-              <div class="stack"><div class="between small"><span class="dim">Bots</span><span>1 of 1</span></div><div class="meter bad"><i style="width:100%"></i></div></div>
+              <div class="stack"><div class="between small"><span class="dim">Agents</span><span>1 of 1</span></div><div class="meter bad"><i style="width:100%"></i></div></div>
               <div class="stack"><div class="between small"><span class="dim">Decision budget today</span><span class="num">$0.12 of $0.50</span></div><div class="meter"><i style="width:24%"></i></div></div></div>
           </div>
-          <div class="tabbar"><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
+          <div class="tabbar"><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New agent</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
         </div></div>
-      <div><div class="cap">The other bot states</div>
+      <div><div class="cap">The other agent states</div>
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div></div>
           <div class="scr">
             <div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av sm">🐱</span><span class="ttl">Whiskers</span></div><span class="pill warn">❚❚ Paused</span></div><span class="dim small">No new trades. Its stop still protects the open position.</span><div class="btn sm">Resume</div></div>
@@ -530,29 +531,29 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
       <h3>Decisions</h3>
       <ul>
         <li>The season strip is always first: where I stand and how long is left.</li>
-        <li>A bot card carries one state pill, the season curve, three figures and one line about the open position. The curve, not a sentence, shows how it is doing.</li>
+        <li>An agent card carries one state pill, the season curve, three figures and one line about the open position. The curve, not a sentence, shows how it is doing.</li>
         <li>"Pause all" is on Home. It needs a confirmation (S17).</li>
         <li>Every non-running state says what it means and what the member can do, in the card.</li>
-        <li>The checklist disappears once finished. The quota card names the real limits: bots and today's decision budget.</li>
+        <li>The checklist disappears once finished. The quota card names the real limits: agents and today's decision budget.</li>
       </ul>
-      <div class="cov"><span class="st redesign"><i>◐</i>My bots</span><span class="st drawn"><i>◆</i>Pause and stop</span><span class="st drawn"><i>◆</i>Quota meters</span></div>
+      <div class="cov"><span class="st redesign"><i>◐</i>My agents</span><span class="st drawn"><i>◆</i>Pause and stop</span><span class="st drawn"><i>◆</i>Quota meters</span></div>
     </div>
   </div>
 </div>
 
 <!-- ============ S5 ============ -->
 <div class="screen" id="s5">
-  <div class="head"><span class="id">S5</span><h2>Create a bot</h2><p>Five short steps with a live preview, replacing one long form. Anything the plan cannot do is shown greyed with the reason, before the member tries it.</p></div>
+  <div class="head"><span class="id">S5</span><h2>Create an agent</h2><p>Five short steps with a live preview, replacing one long form. Anything the plan cannot do is shown greyed with the reason, before the member tries it.</p></div>
   <div class="row">
     <div class="phones">
       <div><div class="cap">Step 1 of 5 · Start</div>
         <div class="phone"><div class="top"><span class="dim small">Cancel</span><span class="dim small">1 / 5</span></div>
           <div class="scr"><div class="steps"><i class="on"></i><i></i><i></i><i></i><i></i></div><h4>How do you want to start?</h4>
-            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl">Describe it</span><span class="pill ok">Free for your first bot</span></div><span class="dim small">One sentence. We write name, rules, coins and look.</span></div>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl">Describe it</span><span class="pill ok">Free for your first agent</span></div><span class="dim small">One sentence. We write name, rules, coins and look.</span></div>
             <div class="m-card"><span class="ttl">Start from a template</span><span class="dim small">Tested setups you can change.</span>
               <div class="chips"><span class="chip">Steady trend</span><span class="chip">Dip buyer</span><span class="chip">Daily breakout</span></div></div>
             <div class="m-card"><span class="ttl">Build it myself</span><span class="dim small">Pick every setting.</span></div>
-            <div class="m-card c2"><span class="ttl">Use someone's rules</span><span class="dim small">Open a public bot whose owner shares its rules, then tap "Use these rules".</span></div></div></div></div>
+            <div class="m-card c2"><span class="ttl">Use someone's rules</span><span class="dim small">Open a public agent whose owner shares its rules, then tap "Use these rules".</span></div></div></div></div>
       <div><div class="cap">Step 3 of 5 · Trading</div>
         <div class="phone"><div class="top"><span class="dim small">Back</span><span class="dim small">3 / 5</span></div>
           <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div><h4>How does it trade?</h4>
@@ -569,9 +570,9 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
             <div class="m-card"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl" style="font-size:17px">Sleepy Quant</span><span class="dim small">@fast-ana · Bunny · Trend</span></div></div></div>
             <div class="m-card c2">
               <div class="between"><div class="stack"><span class="ttl">Show on the leaderboard</span><span class="dim small">Results only.</span></div><div class="toggle on"></div></div>
-              <div class="between"><div class="stack"><span class="ttl">Let others use my rules</span><span class="dim small">Off. They can copy the text into their own bot, never your trades.</span></div><div class="toggle"></div></div></div>
-            <p class="dim small">Plan: 1 of 1 bots. Changing style, coins or rules later starts a fresh paper account.</p>
-            <div class="btn">Create bot</div></div></div></div>
+              <div class="between"><div class="stack"><span class="ttl">Let others use my rules</span><span class="dim small">Off. They can copy the text into their own agent, never your trades.</span></div><div class="toggle"></div></div></div>
+            <p class="dim small">Plan: 1 of 1 agents. Changing style, coins or rules later starts a fresh paper account.</p>
+            <div class="btn">Create agent</div></div></div></div>
     </div>
     <div class="notes">
       <h3>Decisions</h3>
@@ -589,7 +590,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 
 <!-- ============ S6 ============ -->
 <div class="screen" id="s6">
-  <div class="head"><span class="id">S6</span><h2>Bot page</h2><p>Where a member learns what their bot is doing and why. Four tabs: performance, decisions, versions, settings.</p></div>
+  <div class="head"><span class="id">S6</span><h2>Agent page</h2><p>Where a member learns what their agent is doing and why. Four tabs: performance, decisions, versions, settings.</p></div>
   <div class="row">
     <div class="phones">
       <div><div class="cap">Performance</div>
@@ -632,10 +633,10 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <li>Performance shows the season curve on a real scale with the endpoint marked, then the three figures the ranking uses.</li>
         <li><b>"Why" is shown as facts, not as a story.</b> The decision model returns a choice and odds, not a sentence. So the card lists what it saw, the odds it gave each move, and any risk rule that changed the result. We do not invent reasoning.</li>
         <li>Versions make the "fresh account" rule visible and explain why the ranking restarted.</li>
-        <li>Pause, Stop and Delete live under Settings, away from Edit. Delete asks for the bot's name (S17).</li>
+        <li>Pause, Stop and Delete live under Settings, away from Edit. Delete asks for the agent's name (S17).</li>
         <li>Settings holds what the old form held: name, look, listing, rule sharing, and the free portrait.</li>
       </ul>
-      <div class="cov"><span class="st drawn"><i>◆</i>Bot detail</span><span class="st drawn"><i>◆</i>Decisions</span><span class="st drawn"><i>◆</i>Versions</span><span class="st redesign"><i>◐</i>Edit</span></div>
+      <div class="cov"><span class="st drawn"><i>◆</i>Agent detail</span><span class="st drawn"><i>◆</i>Decisions</span><span class="st drawn"><i>◆</i>Versions</span><span class="st redesign"><i>◐</i>Edit</span></div>
     </div>
   </div>
 </div>
@@ -645,20 +646,20 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
   <div class="head"><span class="id">S7</span><h2>Public profiles</h2><p>What anyone sees when they tap a row on the leaderboard. Only what the owner chose to show.</p></div>
   <div class="row">
     <div class="phones">
-      <div><div class="cap">Public bot (rules shared)</div>
+      <div><div class="cap">Public agent (rules shared)</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Leaderboard</span><span class="dim small">Report</span></div>
           <div class="scr"><div class="between"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg" style="--c:#9085e9">🌙</span><div class="stack"><span class="ttl" style="font-size:18px">Lunar Hop</span><span class="dim small">@moonrabbit · Bunny · Trend · v2</span></div></div></div>
             <div class="chips" style="gap:6px"><span class="pill vio">#1 Free · Trend</span><span class="pill">Top 10%</span><span class="pill">3 weeks</span></div>
             <div class="m-card"><span class="eyebrow">2026-W40</span><svg class="spark" data-v="0,.6,1.1,.8,2.4,3.2,2.9,4.6,5.4,5.0,6.8,7.4,7.8" data-x="Mon,Wed,Fri,Sun" viewBox="0 0 320 96"></svg>
               <div class="kv"><div><b class="good">+7.78%</b><span>Return</span></div><div><b>1.6%</b><span>Drawdown</span></div><div><b>6.95</b><span>Score</span></div></div></div>
-            <div class="m-card c2"><div class="between"><span class="ttl">Its rules</span><span class="pill ok">Shared by the owner</span></div><span class="small" style="color:var(--text-2)">Follow the trend on BTC and ETH, cut losses fast, stay flat on weekends.</span><div class="btn">Use these rules</div><span class="dim tiny">Starts a new bot with this text. You get the words, never the trades.</span></div>
+            <div class="m-card c2"><div class="between"><span class="ttl">Its rules</span><span class="pill ok">Shared by the owner</span></div><span class="small" style="color:var(--text-2)">Follow the trend on BTC and ETH, cut losses fast, stay flat on weekends.</span><div class="btn">Use these rules</div><span class="dim tiny">Starts a new agent with this text. You get the words, never the trades.</span></div>
             <p class="dim tiny">Open positions are never shown. Past results say nothing about the future. Simulated money.</p></div></div></div>
       <div><div class="cap">Public member</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Back</span><span class="dim small">Report</span></div>
           <div class="scr"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl mono" style="font-size:17px">@fast-ana</span><span class="dim small">Member since Sep 2026 · Pro</span></div></div>
             <div class="eyebrow">Badges</div>
-            <div class="chips"><span class="pill vio">First bot</span><span class="pill vio">Top 10% · W39</span><span class="pill vio">3-day streak</span></div>
-            <div class="eyebrow">Listed bots</div>
+            <div class="chips"><span class="pill vio">First agent</span><span class="pill vio">Top 10% · W39</span><span class="pill vio">3-day streak</span></div>
+            <div class="eyebrow">Listed agents</div>
             <div class="m-card list"><div><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant</div><span class="dim tiny">Trend · #2 this week</span></div><b class="good num">+4.19%</b></div><div><span class="av sm" style="--c:#f97316">🦁</span><div class="grow"><div class="ttl">Pride</div><span class="dim tiny">Momentum · Pro</span></div><b class="good num">+1.30%</b></div></div>
             <div class="eyebrow">Past seasons</div>
             <div class="m-card list"><div><b class="mono">W39</b><div class="grow">#3 · Free · Trend</div><b class="good num">+2.4%</b></div><div><b class="mono">W38</b><div class="grow">Not ranked</div><span class="dim">—</span></div></div></div></div></div>
@@ -669,10 +670,10 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <li>The profile is the leaderboard row opened up: the same figures, plus the season curve and the owner's public name.</li>
         <li>Rules are private unless the owner flips "Let others use my rules". "Use these rules" opens the create flow prefilled, with credit to the original. Text only: no trades, no copy trading.</li>
         <li>Open positions and recent trades are never shown, which also closes the front-running door the plan worried about.</li>
-        <li>A member profile shows only bots the owner listed. There is no e-mail, no plan detail beyond the badge, no follower count.</li>
+        <li>A member profile shows only agents the owner listed. There is no e-mail, no plan detail beyond the badge, no follower count.</li>
         <li>Report is on both pages. It opens the report sheet (S17).</li>
       </ul>
-      <div class="cov"><span class="st drawn"><i>◆</i>Bot profile</span><span class="st drawn"><i>◆</i>Member profile</span><span class="st drawn"><i>◆</i>Use these rules</span><span class="st decide"><i>?</i>Follow and comments</span></div>
+      <div class="cov"><span class="st drawn"><i>◆</i>Agent profile</span><span class="st drawn"><i>◆</i>Member profile</span><span class="st drawn"><i>◆</i>Use these rules</span><span class="st decide"><i>?</i>Follow and comments</span></div>
     </div>
   </div>
 </div>
@@ -686,7 +687,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg></div></div>
           <div class="scr" style="padding-bottom:6px"><div class="between"><div class="stack"><span class="eyebrow">Season 2026-W40</span><span class="dim small">Ends in 4d 2h</span></div><span class="pill">Archive ›</span></div>
             <div class="input"><span>Free · Trend · 4 ranked</span><svg class="ic"><use href="#i-chev"/></svg></div>
-            <div class="input"><span><svg class="ic" style="vertical-align:-5px;margin-right:6px"><use href="#i-search"/></svg>Find a bot or @name</span></div>
+            <div class="input"><span><svg class="ic" style="vertical-align:-5px;margin-right:6px"><use href="#i-search"/></svg>Find an agent or @name</span></div>
             <div class="m-card list" style="padding-block:4px">
               <div><b class="mono" style="width:16px;color:#fbbf24">1</b><span class="av sm" style="--c:#9085e9">🌙</span><div class="grow"><div class="ttl">Lunar Hop</div><span class="dim tiny">@moonrabbit · -1.6% drop</span></div><div class="stack" style="text-align:right"><b class="num">6.95</b><span class="good tiny num">+7.78%</span></div><svg class="ic dim"><use href="#i-chev"/></svg></div>
               <div><b class="mono" style="width:16px;color:#cbd5e1">2</b><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant <span class="pill ok">You</span></div><span class="dim tiny">@fast-ana · 0.0% drop</span></div><div class="stack" style="text-align:right"><b class="num">4.19</b><span class="good tiny num">+4.19%</span></div><svg class="ic dim"><use href="#i-chev"/></svg></div>
@@ -695,7 +696,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
             <div class="m-card c2"><span class="ttl">Not ranked yet · 1</span><span class="dim small">Just Hatched needs 2.4 more days and 2 more trades.</span></div>
           </div>
           <div class="m-card" style="margin:0 16px 10px;border-color:var(--accent)"><div class="between"><span class="ttl">You · #2 · Sleepy Quant</span><b class="num">4.19</b></div></div>
-          <div class="tabbar"><div><svg class="ic"><use href="#i-home"/></svg>Home</div><div class="on"><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
+          <div class="tabbar"><div><svg class="ic"><use href="#i-home"/></svg>Home</div><div class="on"><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New agent</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
         </div></div>
       <div><div class="cap">League picker</div>
         <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div></div>
@@ -716,7 +717,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <li>The league moves into a picker that names what a league is. Today's chips show a bare number.</li>
         <li>"You" is pinned above the tab bar so the member always sees their own place, wherever it is.</li>
         <li>Rows are tappable and lead to the public profile (S7). The drop shown under each name is the part of the score people misread, so it is printed, not hidden in a tooltip.</li>
-        <li>A negative score is red with its sign. Not-ranked bots sit below the line with the reason, as built.</li>
+        <li>A negative score is red with its sign. Not-ranked agents sit below the line with the reason, as built.</li>
         <li>The archive keeps finished seasons. The data is kept five weeks today; showing "Hall of fame" beyond that means storing final standings permanently, which is a small backend change.</li>
       </ul>
       <div class="cov"><span class="st redesign"><i>◐</i>Leaderboard</span><span class="st drawn"><i>◆</i>Archive</span><span class="st drawn"><i>◆</i>Search</span></div>
@@ -734,11 +735,11 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="scr"><h4>Badges</h4><p class="sub">3 of 18 earned. They reward steadiness, not luck alone.</p>
             <div class="eyebrow">Earned</div>
             <div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:8px">
-              <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#9085e9">🐣</span><span class="small ttl">First bot</span></div>
+              <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#9085e9">🐣</span><span class="small ttl">First agent</span></div>
               <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#fbbf24">🏅</span><span class="small ttl">Top 10%</span></div>
               <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#3fcf3f">🔥</span><span class="small ttl">3-day streak</span></div></div>
             <div class="eyebrow">In progress</div>
-            <div class="m-card"><div class="between"><span class="ttl">30-day streak</span><span class="dim small num">12 / 30</span></div><div class="meter"><i style="width:40%"></i></div><span class="dim small">Keep a bot running every day. Unlocks: a second bot slot.</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">30-day streak</span><span class="dim small num">12 / 30</span></div><div class="meter"><i style="width:40%"></i></div><span class="dim small">Keep an agent running every day. Unlocks: a second agent slot.</span></div>
             <div class="m-card"><div class="between"><span class="ttl">Low-drop season</span><span class="dim small num">drop 1.6% · need under 2%</span></div><div class="meter"><i style="width:80%"></i></div><span class="dim small">Finish a ranked season with a drop under 2%.</span></div>
             <div class="m-card" style="opacity:.6"><div class="between"><span class="ttl">First published skill</span><svg class="ic"><use href="#i-lock"/></svg></div><span class="dim small">Publish a skill in the marketplace. Needs Pro.</span></div></div></div></div>
       <div><div class="cap">Season recap</div>
@@ -773,9 +774,9 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
           <div class="scr"><h4>Choose your plan</h4>
             <div class="m-card"><div class="between"><span class="ttl" style="font-size:17px">Free</span><span class="pill">Your plan</span></div><span class="dim small">Start and learn.</span>
-              <div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">1 bot, Trend and Breakout</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 3 coins, 4 theme packs</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Free skills, your own free skills</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Leaderboard and affiliate link</div></div></div></div>
-            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl" style="font-size:17px">Pro</span><span class="pill pro">Recommended</span></div><span class="dim small">Run several bots and sell skills.</span>
-              <div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 9 bots, every style</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 8 coins, every theme pack</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Advanced skills, sell your own</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Your own model keys, optional platform credits</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Bonus on affiliate conversions</div></div></div>
+              <div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">1 agent, Trend and Breakout</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 3 coins, 4 theme packs</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Free skills, your own free skills</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Leaderboard and affiliate link</div></div></div></div>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl" style="font-size:17px">Pro</span><span class="pill pro">Recommended</span></div><span class="dim small">Run several agents and sell skills.</span>
+              <div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 9 agents, every style</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 8 coins, every theme pack</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Advanced skills, sell your own</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Your own model keys, optional platform credits</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Bonus on affiliate conversions</div></div></div>
               <div class="between"><b style="font-size:18px">Price to be set</b><span class="dim small">per month</span></div><div class="btn">Upgrade to Pro</div></div>
             <p class="dim tiny">Cancel any time. Paper trading only. Pro does not change what the money can do.</p></div></div></div>
       <div><div class="cap">Paywall sheet, from a locked pack</div>
@@ -791,32 +792,32 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
             <div class="m-card"><div class="between"><span class="ttl">Pro</span><span class="pill ok">Active</span></div><span class="dim small">Renews on 30 Oct 2026</span></div>
             <div class="m-card"><span class="eyebrow">Payment method</span><div class="between"><span>Card ending 4242</span><span class="small" style="color:var(--accent-text)">Change</span></div></div>
             <div class="m-card"><span class="eyebrow">Invoices</span><div class="list small"><div style="min-height:44px"><div class="grow">30 Sep 2026</div><span class="num">Paid</span><span style="color:var(--accent-text)">PDF</span></div><div style="min-height:44px"><div class="grow">30 Aug 2026</div><span class="num">Paid</span><span style="color:var(--accent-text)">PDF</span></div></div></div>
-            <div class="m-card c2"><span class="ttl">Cancel Pro</span><span class="dim small">You keep Pro until 30 Oct. After that your extra bots are paused, not deleted, and your data stays for 30 days.</span><div class="btn ghost">Cancel subscription</div></div></div></div></div>
+            <div class="m-card c2"><span class="ttl">Cancel Pro</span><span class="dim small">You keep Pro until 30 Oct. After that your extra agents go into quarantine for 10 days: they stop running and leave the leaderboard. Upgrade within 10 days to restore them; after that they are deleted.</span><div class="btn ghost">Cancel subscription</div></div></div></div></div>
     </div>
     <div class="notes">
       <h3>Decisions</h3>
       <ul>
         <li>Every locked control opens the same sheet: what it is, that it is in Pro, and two buttons. It never blocks a flow that can continue without it.</li>
         <li>The comparison repeats the plan document's table, in member terms.</li>
-        <li>Billing needs a processor and countries, which are still open. The mockup shows what any processor's portal must expose: method, invoices, cancel.</li>
-        <li>Downgrade policy is a proposal: extra bots are paused, never deleted, and kept 30 days. Needs your call.</li>
+        <li>Billing runs on the operator's own Stripe account (Checkout and the Customer Portal), launching from Ireland into the EU. Prices include VAT. The mockup shows what the portal must expose: method, invoices, cancel.</li>
+        <li>Downgrade is decided: extra agents are quarantined for 10 days, then deleted (the deletion still to confirm).</li>
         <li>No price is drawn because none has been chosen.</li>
       </ul>
-      <div class="cov"><span class="st drawn"><i>◆</i>Plans</span><span class="st drawn"><i>◆</i>Billing</span><span class="st redesign"><i>◐</i>Upsell</span><span class="st decide"><i>?</i>Price, processor</span></div>
+      <div class="cov"><span class="st drawn"><i>◆</i>Plans</span><span class="st drawn"><i>◆</i>Billing</span><span class="st redesign"><i>◐</i>Upsell</span><span class="st decide"><i>?</i>Price</span></div>
     </div>
   </div>
 </div>
 
 <!-- ============ S11 ============ -->
 <div class="screen" id="s11">
-  <div class="head"><span class="id">S11</span><h2>Keys and usage</h2><p>Where a member connects their own model and sees what their bots cost. The plan says keys are write-only, so the screen can never show one back.</p></div>
+  <div class="head"><span class="id">S11</span><h2>Keys and usage</h2><p>Where a member connects their own model and sees what their agents cost. The plan says keys are write-only, so the screen can never show one back.</p></div>
   <div class="row">
     <div class="phones">
       <div><div class="cap">Keys</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
           <div class="scr"><h4>Keys and usage</h4>
             <div class="tabs"><span class="on">Keys</span><span>Usage</span></div>
-            <p class="sub">Your keys let your bots decide with your own model account. We store them encrypted and never show them again.</p>
+            <p class="sub">Your keys let your agents decide with your own model account. We store them encrypted and never show them again.</p>
             <div class="m-card list"><div><svg class="ic"><use href="#i-key"/></svg><div class="grow"><div class="ttl">OpenAI</div><span class="dim tiny mono">····a91f · verified 2 days ago</span></div><span class="pill ok">Working</span></div><div><svg class="ic"><use href="#i-key"/></svg><div class="grow"><div class="ttl">Anthropic</div><span class="dim tiny mono">····7c2d · failed yesterday</span></div><span class="pill bad">Fix</span></div></div>
             <div class="btn"><svg class="ic"><use href="#i-plus"/></svg>Add a key</div>
             <div class="lock-panel small"><b style="color:#fff">What this means.</b> The server has to decrypt a key to call the provider for you. Nobody at the platform has a screen that shows it, and every access is logged.</div></div></div></div>
@@ -834,9 +835,9 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="scr"><h4>Keys and usage</h4><div class="tabs"><span>Keys</span><span class="on">Usage</span></div>
             <div class="m-card"><span class="eyebrow">Today</span>
               <div class="stack"><div class="between small"><span class="dim">Decision budget, Sleepy Quant</span><span class="num">$0.12 of $0.50</span></div><div class="meter"><i style="width:24%"></i></div></div>
-              <div class="stack"><div class="between small"><span class="dim">Bots</span><span>1 of 1</span></div><div class="meter bad"><i style="width:100%"></i></div></div>
-              <div class="stack"><div class="between small"><span class="dim">Coins per bot</span><span>2 of 3</span></div><div class="meter"><i style="width:66%"></i></div></div></div>
-            <div class="m-card c2"><span class="ttl">Free AI help for your first bot</span><div class="between small"><span class="dim">Designs</span><span>2 of 3 left</span></div><div class="between small"><span class="dim">Portraits</span><span>1 of 2 left</span></div></div>
+              <div class="stack"><div class="between small"><span class="dim">Agents</span><span>1 of 1</span></div><div class="meter bad"><i style="width:100%"></i></div></div>
+              <div class="stack"><div class="between small"><span class="dim">Coins per agent</span><span>2 of 3</span></div><div class="meter"><i style="width:66%"></i></div></div></div>
+            <div class="m-card c2"><span class="ttl">Free AI help for your first agent</span><div class="between small"><span class="dim">Designs</span><span>2 of 3 left</span></div><div class="between small"><span class="dim">Portraits</span><span>1 of 2 left</span></div></div>
             <p class="dim small">Budgets reset at 00:00 UTC. With your own key the budget is yours to set.</p></div></div></div>
     </div>
     <div class="notes">
@@ -845,7 +846,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <li>A key is shown only as its last four characters and its last test result. There is no reveal button and no edit: replace or delete.</li>
         <li>"Test and save" is one action, as in the owner's admin panel. A failed test says what failed in plain words.</li>
         <li>The honest note about decryption is on the screen, not hidden in terms.</li>
-        <li>Usage shows every limit the plan enforces, including the free AI tries, so a capped bot is never a surprise.</li>
+        <li>Usage shows every limit the plan enforces, including the free AI tries, so a capped agent is never a surprise.</li>
         <li>Custom OpenAI-compatible endpoints sit under "Other" with a warning that internal addresses are refused.</li>
       </ul>
       <div class="cov"><span class="st drawn"><i>◆</i>Key vault</span><span class="st drawn"><i>◆</i>Usage and quotas</span></div>
@@ -863,23 +864,23 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="scr" style="padding-bottom:6px"><div class="between"><h4>Market</h4><span class="small" style="color:var(--accent-text)">My skills ›</span></div>
             <div class="input"><span><svg class="ic" style="vertical-align:-5px;margin-right:6px"><use href="#i-search"/></svg>Search skills</span></div>
             <div class="chips"><span class="chip on">All</span><span class="chip">Trend</span><span class="chip">Breakout</span><span class="chip">Risk</span><span class="chip">Free</span></div>
-            <div class="m-card"><div class="between"><span class="ttl">Volatility squeeze</span><span class="pill vio">✓ Verified</span></div><span class="dim small">by @owl-io · v1.2 · 412 installs</span><span class="small" style="color:var(--text-2)">Waits for a tight range, then follows the break.</span><div class="between"><span class="pill ok">Free</span><span class="dim small">★ 4.6 · 38 reviews</span></div></div>
-            <div class="m-card"><div class="between"><span class="ttl">Weekend guard</span><span class="pill vio">✓ Verified</span></div><span class="dim small">by @cat-lady · v1.0 · 96 installs</span><span class="small" style="color:var(--text-2)">Keeps a bot flat from Friday night to Monday.</span><div class="between"><span class="pill pro">Pro · $ per month</span><span class="dim small">★ 4.4 · 11 reviews</span></div></div>
-            <div class="m-card"><div class="between"><span class="ttl">Dip ladder</span><span class="pill">New</span></div><span class="dim small">by @robo-dan · v0.3 · not verified yet</span><div class="between"><span class="pill ok">Free</span><span class="dim small">No reviews</span></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Volatility squeeze</span><span class="pill vio">✓ Verified</span></div><span class="dim small">by @owl-io · v1.2 · 412 installs</span><span class="small" style="color:var(--text-2)">Waits for a tight range, then follows the break.</span><div class="between"><span class="pill ok">Free</span><span class="dim small">Updated 3 d ago</span></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Weekend guard</span><span class="pill vio">✓ Verified</span></div><span class="dim small">by @cat-lady · v1.0 · 96 installs</span><span class="small" style="color:var(--text-2)">Keeps an agent flat from Friday night to Monday.</span><div class="between"><span class="pill pro">Pro · $ per month</span><span class="dim small">Updated 2 w ago</span></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Dip ladder</span><span class="pill">New</span></div><span class="dim small">by @robo-dan · v0.3 · not verified yet</span><div class="between"><span class="pill ok">Free</span><span class="dim small">Not verified</span></div></div>
             <span class="dim tiny">Sample listings</span></div>
-          <div class="tabbar"><div><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div class="on"><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div></div></div>
+          <div class="tabbar"><div><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New agent</div><div class="on"><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div></div></div>
       <div><div class="cap">Skill detail</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Market</span><span class="dim small">Report</span></div>
           <div class="scr"><div class="stack"><span class="ttl" style="font-size:19px">Volatility squeeze</span><span class="dim small">by @owl-io · v1.2 · <span class="pill vio" style="vertical-align:1px">✓ Verified</span></span></div>
             <div class="m-card"><span class="eyebrow">How it behaved when verified</span><div class="kv"><div><b class="good">+3.2%</b><span>14 days paper</span></div><div><b>4.1%</b><span>Max drop</span></div><div><b>17</b><span>Trades</span></div></div><span class="dim tiny">Past results on simulated money. They say nothing about the future. The author cannot edit this record.</span></div>
-            <div class="m-card c2"><span class="eyebrow">What it may do</span><div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Read market data</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Suggest a move to your bot</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Cannot read your keys</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Cannot place orders. Your bot and its risk limits do.</div></div></div></div>
+            <div class="m-card c2"><span class="eyebrow">What it may do</span><div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Read market data</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Suggest a move to your agent</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Cannot read your keys</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Cannot place orders. Your agent and its risk limits do.</div></div></div></div>
             <div class="m-card"><div class="between"><span class="ttl">Versions</span><span class="small" style="color:var(--accent-text)">All ›</span></div><span class="dim small">v1.2 is out. You run v1.1. Updating is your choice.</span></div>
-            <div class="btn">Install on a bot</div></div></div></div>
+            <div class="btn">Install on an agent</div></div></div></div>
       <div><div class="cap">Install sheet</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Skill</span></div>
           <div class="scrim"><div class="behind"><div class="skel" style="height:70px"></div><div class="skel" style="height:110px"></div></div>
             <div class="sheet"><h3>Install Volatility squeeze</h3>
-              <div class="eyebrow">On which bot?</div>
+              <div class="eyebrow">On which agent?</div>
               <div class="list"><div><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant</div><span class="dim tiny">Trend · v3</span></div><svg class="ic good"><use href="#i-check"/></svg></div></div>
               <p class="dim small">Installing is a rules change. It starts version 4 and a fresh paper account.</p>
               <div class="btn">Install</div><div class="btn ghost">Cancel</div></div></div></div></div>
@@ -890,8 +891,8 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <li>The figures on a skill page come from the platform's verification period, never from the author. A badge is earned, not claimed.</li>
         <li>Permissions are a plain list with two "cannot" lines that answer the buyer's real fear.</li>
         <li>Versions are immutable. A new version never installs itself.</li>
-        <li>Installing changes the bot's rules, so it is a new version with a fresh account. The sheet says so before the tap. That is the part a member would otherwise be surprised by.</li>
-        <li>Reviews and star ratings are drawn but are an extra the plan never listed. Flagged under Decisions.</li>
+        <li>Installing changes the agent's rules, so it is a new version with a fresh account. The sheet says so before the tap. That is the part a member would otherwise be surprised by.</li>
+        
       </ul>
       <div class="cov"><span class="st drawn"><i>◆</i>Browse</span><span class="st drawn"><i>◆</i>Skill detail</span><span class="st drawn"><i>◆</i>Install</span><span class="st drawn"><i>◆</i>Report and refund</span></div>
     </div>
@@ -906,7 +907,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
       <div><div class="cap">My skills</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Market</span></div>
           <div class="scr"><div class="between"><h4>My skills</h4><div class="btn sm"><svg class="ic"><use href="#i-plus"/></svg>New</div></div>
-            <div class="m-card"><div class="between"><span class="ttl">Volatility squeeze</span><span class="pill ok">Live v1.2</span></div><span class="dim small">412 installs · 38 reviews</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Volatility squeeze</span><span class="pill ok">Live v1.2</span></div><span class="dim small">412 installs</span></div>
             <div class="m-card"><div class="between"><span class="ttl">Dip ladder</span><span class="pill warn">Verifying 3 of 7 days</span></div><div class="meter"><i style="width:43%"></i></div><span class="dim small">It is running on paper. You cannot edit it during verification.</span></div>
             <div class="m-card"><div class="between"><span class="ttl">Gap fader</span><span class="pill">Draft</span></div><span class="dim small">Not submitted</span></div>
             <div class="m-card"><div class="between"><span class="ttl">Range rider</span><span class="pill bad">Needs changes</span></div><span class="dim small">The real-data test lost more than it earned. See the report.</span></div></div></div></div>
@@ -923,7 +924,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
           <div class="scr"><h4>Sales</h4>
             <div class="m-card"><span class="eyebrow">September</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:24px">$ 184.00</b><span class="dim small">after commission</span></div><div class="kv"><div><b>23</b><span>Sales</span></div><div><b>1</b><span>Refunds</span></div><div><b>412</b><span>Installs</span></div></div></div>
             <div class="m-card c2"><div class="between"><span class="ttl">Payouts</span><span class="pill ok">Connected</span></div><span class="dim small">Next payout 5 Oct. Identity and tax are checked by the payment provider, not by us.</span></div>
-            <div class="lock-panel small"><b style="color:#fff">Buyers are anonymous to you.</b> You see counts and money. You never see who installed a skill or how their bots do.</div>
+            <div class="lock-panel small"><b style="color:#fff">Buyers are anonymous to you.</b> You see counts and money. You never see who installed a skill or how their agents do.</div>
             <span class="dim tiny">Sample figures</span></div></div></div>
     </div>
     <div class="notes">
@@ -975,31 +976,31 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 
 <!-- ============ S15 ============ -->
 <div class="screen" id="s15">
-  <div class="head"><span class="id">S15</span><h2>Account, security and notifications</h2><p>Everything about the person, apart from the bots. Today it is tangled with them.</p></div>
+  <div class="head"><span class="id">S15</span><h2>Account, security and notifications</h2><p>Everything about the person, apart from the agents. Today it is tangled with them.</p></div>
   <div class="row">
     <div class="phones">
       <div><div class="cap">Account and security</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
           <div class="scr"><h4>Account</h4>
-            <div class="m-card"><div class="field"><label>Public name</label><div class="input"><span class="mono">@fast-ana</span><span style="color:var(--accent-text);font-weight:700">Change</span></div></div><div class="field"><label>E-mail</label><div class="input"><span>ana@example.com</span><svg class="ic dim"><use href="#i-lock"/></svg></div></div><div class="field"><label>Language</label><div class="input"><span>Português (Brasil)</span><svg class="ic"><use href="#i-chev"/></svg></div></div></div>
+            <div class="m-card"><div class="field"><label>Public name</label><div class="input"><span class="mono">@fast-ana</span><span style="color:var(--accent-text);font-weight:700">Change</span></div></div><div class="field"><label>E-mail</label><div class="input"><span>ana@example.com</span><svg class="ic dim"><use href="#i-lock"/></svg></div></div><div class="field"><label>Language</label><div class="input"><span>English</span><svg class="ic"><use href="#i-chev"/></svg></div></div></div>
             <div class="m-card"><span class="eyebrow">Signed in on</span><div class="list small"><div style="min-height:48px"><div class="grow"><div class="ttl">This phone</div><span class="dim tiny">Chrome · São Paulo · now</span></div><span class="pill ok">Here</span></div><div style="min-height:48px"><div class="grow"><div class="ttl">Laptop</div><span class="dim tiny">Firefox · 3 days ago</span></div><span style="color:var(--accent-text);font-weight:700">Sign out</span></div></div></div>
             <div class="m-card"><span class="ttl">Your data</span><span class="dim small">Download everything we hold about you as a file.</span><div class="btn sm ghost">Download my data</div></div>
-            <div class="m-card" style="border-color:color-mix(in srgb,var(--critical) 45%,var(--line))"><span class="ttl">Delete my account</span><span class="dim small">Removes your bots, paper accounts, leaderboard rows and keys. Cannot be undone.</span><div class="btn sm danger">Delete my account…</div></div></div></div></div>
+            <div class="m-card" style="border-color:color-mix(in srgb,var(--critical) 45%,var(--line))"><span class="ttl">Delete my account</span><span class="dim small">Removes your agents, paper accounts, leaderboard rows and keys. Cannot be undone.</span><div class="btn sm danger">Delete my account…</div></div></div></div></div>
       <div><div class="cap">Notifications</div>
         <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
           <div class="scr"><h4>Notifications</h4><p class="sub">Sent by e-mail and shown under the bell. Choose what matters.</p>
-            <div class="m-card list"><div><div class="grow"><div class="ttl">Season results</div><span class="dim small">Your final place and any badge</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Rank changes</div><span class="dim small">When you enter or leave the top three</span></div><div class="toggle"></div></div><div><div class="grow"><div class="ttl">A bot stopped</div><span class="dim small">Budget used, could not start, paused by us</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Skill updates</div><span class="dim small">A new version of a skill you installed</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Sales and commissions</div></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Product news</div></div><div class="toggle"></div></div></div>
+            <div class="m-card list"><div><div class="grow"><div class="ttl">Season results</div><span class="dim small">Your final place and any badge</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Rank changes</div><span class="dim small">When you enter or leave the top three</span></div><div class="toggle"></div></div><div><div class="grow"><div class="ttl">An agent stopped</div><span class="dim small">Budget used, could not start, paused by us</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Skill updates</div><span class="dim small">A new version of a skill you installed</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Sales and commissions</div></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Product news</div></div><div class="toggle"></div></div></div>
             <p class="dim small">Sign-in links and security messages are always sent.</p></div></div></div>
     </div>
     <div class="notes">
       <h3>Decisions</h3>
       <ul>
-        <li>The account page moves out of the bots page. The E-mail is shown, locked, and is never public anywhere.</li>
+        <li>The account page moves out of the agents page. The E-mail is shown, locked, and is never public anywhere.</li>
         <li>Active sessions with a per-device sign-out. Sessions are hashed and listed in the database already; the screen is what is missing.</li>
         <li>"Download my data" is a privacy-law expectation in Brazil and Europe. It needs a small export job, flagged here so it is planned.</li>
         <li>Delete keeps its typed confirmation. The wording lists what goes, including leaderboard rows.</li>
         <li>Notifications default to the ones a member would be upset to miss. News is off by default.</li>
-        <li>The language line is drawn to show where the decision lands.</li>
+        <li>Six languages: English and five more (Portuguese, Spanish, French, German, Italian). English is the default for everyone.</li>
       </ul>
       <div class="cov"><span class="st redesign"><i>◐</i>Account</span><span class="st drawn"><i>◆</i>Sessions</span><span class="st drawn"><i>◆</i>Data export</span><span class="st drawn"><i>◆</i>Notifications</span><span class="st decide"><i>?</i>Language</span></div>
     </div>
@@ -1008,7 +1009,7 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 
 <!-- ============ S16 ============ -->
 <div class="screen" id="s16">
-  <div class="head"><span class="id">S16</span><h2>Platform console</h2><p>For the platform's owner only, in its own app. It shows how the service is doing and lets the owner act on reports. It cannot open a member's bots, rules, positions, keys or e-mail.</p></div>
+  <div class="head"><span class="id">S16</span><h2>Platform console</h2><p>For the platform's owner only, in its own app. It shows how the service is doing and lets the owner act on reports. It cannot open a member's agents, rules, positions, keys or e-mail.</p></div>
   <div class="row">
     <div class="wide">
       <div class="cap">Desktop, sample data</div>
@@ -1017,14 +1018,14 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
         <div class="main">
           <div class="between"><h4 style="font-size:20px">Service</h4><span class="pill ok">● All systems normal</span></div>
           <div class="grid2">
-            <div class="m-card"><span class="eyebrow">Race track</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:22px">18 of 25</b><span class="dim small">bots running</span></div><div class="meter"><i style="width:72%"></i></div><span class="dim small">Market data 12 s old · 0 bots waiting</span></div>
+            <div class="m-card"><span class="eyebrow">Race track</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:22px">18 of 25</b><span class="dim small">agents running</span></div><div class="meter"><i style="width:72%"></i></div><span class="dim small">Market data 12 s old · 0 agents waiting</span></div>
             <div class="m-card"><span class="eyebrow">Model spend today</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:22px">$3.42</b><span class="dim small">of $12.00</span></div><div class="meter"><i style="width:28%"></i></div><span class="dim small">Free AI help used 41 of 100</span></div>
             <div class="m-card"><span class="eyebrow">Accounts</span><div class="kv"><div><b>212</b><span>Free</span></div><div><b>14</b><span>Pro</span></div><div><b>2</b><span>Past due</span></div></div></div>
           </div>
           <div class="m-card"><div class="between"><span class="eyebrow">Reports waiting</span><span class="dim small">Skills and profiles</span></div>
             <div style="overflow-x:auto"><table style="min-width:520px"><thead><tr><th>Skill</th><th>Reason</th><th>Reports</th><th></th></tr></thead><tbody><tr><td>Gap fader v0.4</td><td>Asks for more permissions than declared</td><td class="num">4</td><td><span class="pill bad">Review</span></td></tr><tr><td>Dip ladder v0.3</td><td>Misleading description</td><td class="num">1</td><td><span class="pill warn">Review</span></td></tr></tbody></table></div>
             <div class="between"><span class="dim small">Review shows the skill's text, permissions and verification record. Kill switch disables a version for everyone.</span><span class="btn sm danger" style="min-height:44px">Disable a version…</span></div></div>
-          <div class="lock-panel small"><b style="color:#fff">Not available here, by design:</b> members' bots, rules, positions, decisions, keys and e-mail addresses. There is no search box for any of them. A build check fails if a console route touches member data.</div>
+          <div class="lock-panel small"><b style="color:#fff">Not available here, by design:</b> members' agents, rules, positions, decisions, keys and e-mail addresses. There is no search box for any of them. A build check fails if a console route touches member data.</div>
         </div>
       </div>
     </div>
@@ -1045,41 +1046,44 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 <div class="screen" id="s17">
   <div class="head"><span class="id">S17</span><h2>States, dialogs and help</h2><p>The screens nobody asks for and everybody meets: waiting, nothing, broken, offline, are you sure.</p></div>
   <div class="grid2">
-    <div><div class="cap">Loading a bot card</div><div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><div class="skel" style="width:44px;height:44px;border-radius:50%"></div><div class="stack" style="gap:8px"><div class="skel" style="width:110px"></div><div class="skel" style="width:70px;height:10px"></div></div></div><div class="skel" style="width:70px;height:22px;border-radius:999px"></div></div><div class="skel" style="height:70px"></div><div class="kv"><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div></div></div></div>
-    <div><div class="cap">Empty: no bots yet</div><div class="m-card" style="text-align:center;justify-items:center;padding:22px"><span class="av lg" style="--c:#8a8894">🐣</span><span class="ttl" style="font-size:16px">Nothing racing yet</span><span class="dim small">Describe a bot in one sentence and it starts on paper within a minute.</span><div class="btn" style="width:100%">Create your first bot</div></div></div>
-    <div><div class="cap">Error, with a cause and a way out</div><div class="m-card" style="border-color:color-mix(in srgb,var(--critical) 50%,var(--line))"><div class="between" style="justify-content:flex-start;gap:10px"><svg class="ic bad"><use href="#i-stop"/></svg><span class="ttl">Could not load your bots</span></div><span class="dim small">The Arena did not answer. Your bots keep running. Nothing is lost.</span><div class="between"><div class="btn sm">Try again</div><span class="dim small">Status page</span></div></div></div>
-    <div><div class="cap">Offline and degraded banners</div><div class="stack" style="gap:8px"><div class="m-card c2" style="border-left:3px solid var(--warning)"><span class="small"><b>You are offline.</b> Showing what was loaded 2 min ago.</span></div><div class="m-card c2" style="border-left:3px solid var(--warning)"><span class="small"><b>The race track is paused for maintenance.</b> Bots are on hold and nothing is lost. Back in about 10 minutes.</span></div></div></div>
-    <div><div class="cap">Confirm: pause all</div><div class="m-card"><span class="ttl" style="font-size:16px">Pause all 3 bots?</span><span class="dim small">They stop opening trades now. Open positions stay and their stops still protect them. Resume any time.</span><div class="btn">Pause all</div><div class="btn ghost">Keep racing</div><div class="between"><span class="dim small">Want them out of the market too?</span><span class="small" style="color:var(--accent-text)">Stop and close ›</span></div></div></div>
-    <div><div class="cap">Confirm: delete a bot</div><div class="m-card"><span class="ttl" style="font-size:16px">Delete Sleepy Quant?</span><span class="dim small">Removes its record, versions and leaderboard rows. Type its name to confirm.</span><div class="input focus"><span>Sleepy Quant</span></div><div class="btn danger">Delete forever</div><div class="btn ghost">Cancel</div></div></div>
+    <div><div class="cap">Loading an agent card</div><div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><div class="skel" style="width:44px;height:44px;border-radius:50%"></div><div class="stack" style="gap:8px"><div class="skel" style="width:110px"></div><div class="skel" style="width:70px;height:10px"></div></div></div><div class="skel" style="width:70px;height:22px;border-radius:999px"></div></div><div class="skel" style="height:70px"></div><div class="kv"><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div></div></div></div>
+    <div><div class="cap">Empty: no agents yet</div><div class="m-card" style="text-align:center;justify-items:center;padding:22px"><span class="av lg" style="--c:#8a8894">🐣</span><span class="ttl" style="font-size:16px">Nothing racing yet</span><span class="dim small">Describe an agent in one sentence and it starts on paper within a minute.</span><div class="btn" style="width:100%">Create your first agent</div></div></div>
+    <div><div class="cap">Error, with a cause and a way out</div><div class="m-card" style="border-color:color-mix(in srgb,var(--critical) 50%,var(--line))"><div class="between" style="justify-content:flex-start;gap:10px"><svg class="ic bad"><use href="#i-stop"/></svg><span class="ttl">Could not load your agents</span></div><span class="dim small">The Arena did not answer. Your agents keep running. Nothing is lost.</span><div class="between"><div class="btn sm">Try again</div><span class="dim small">Status page</span></div></div></div>
+    <div><div class="cap">Offline and degraded banners</div><div class="stack" style="gap:8px"><div class="m-card c2" style="border-left:3px solid var(--warning)"><span class="small"><b>You are offline.</b> Showing what was loaded 2 min ago.</span></div><div class="m-card c2" style="border-left:3px solid var(--warning)"><span class="small"><b>The race track is paused for maintenance.</b> Agents are on hold and nothing is lost. Back in about 10 minutes.</span></div></div></div>
+    <div><div class="cap">Confirm: pause all</div><div class="m-card"><span class="ttl" style="font-size:16px">Pause all 3 agents?</span><span class="dim small">They stop opening trades now. Open positions stay and their stops still protect them. Resume any time.</span><div class="btn">Pause all</div><div class="btn ghost">Keep racing</div><div class="between"><span class="dim small">Want them out of the market too?</span><span class="small" style="color:var(--accent-text)">Stop and close ›</span></div></div></div>
+    <div><div class="cap">Confirm: delete an agent</div><div class="m-card"><span class="ttl" style="font-size:16px">Delete Sleepy Quant?</span><span class="dim small">Removes its record, versions and leaderboard rows. Type its name to confirm.</span><div class="input focus"><span>Sleepy Quant</span></div><div class="btn danger">Delete forever</div><div class="btn ghost">Cancel</div></div></div>
     <div><div class="cap">Report sheet</div><div class="m-card"><span class="ttl" style="font-size:16px">Report this skill</span><div class="chips"><span class="chip on">Misleading</span><span class="chip">Unsafe</span><span class="chip">Copied</span><span class="chip">Other</span></div><div class="input area"><span class="dim">What should we look at? (optional)</span></div><div class="btn">Send report</div><span class="dim tiny">The author is not told who reported. We review it within 2 days.</span></div></div>
-    <div><div class="cap">Refund (paid skill)</div><div class="m-card"><span class="ttl" style="font-size:16px">Refund Weekend guard?</span><span class="dim small">You are inside the 14-day window. The skill is removed from your bots and they start a new version.</span><div class="btn">Refund $ 3.00</div><div class="btn ghost">Keep it</div></div></div>
-    <div><div class="cap">Toasts</div><div class="stack" style="gap:8px"><div class="m-card c2" style="border-left:3px solid var(--good)"><span class="small"><b>Bot created.</b> It starts on the track in about a minute.</span></div><div class="m-card c2" style="border-left:3px solid var(--good)"><span class="small"><b>Link copied.</b></span></div><div class="m-card c2" style="border-left:3px solid var(--critical)"><span class="small"><b>Could not save.</b> The name is already in use. Pick another.</span></div></div></div>
-    <div><div class="cap">Help entry (Me tab)</div><div class="m-card list"><div><div class="grow">How the score works</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Why did my bot not trade?</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Plans and limits</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Contact us</div><span class="mono dim tiny">support@ to be set</span></div></div></div>
+    <div><div class="cap">Refund (paid skill)</div><div class="m-card"><span class="ttl" style="font-size:16px">Refund Weekend guard?</span><span class="dim small">You are inside the 14-day window. The skill is removed from your agents and they start a new version.</span><div class="btn">Refund $ 3.00</div><div class="btn ghost">Keep it</div></div></div>
+    <div><div class="cap">Toasts</div><div class="stack" style="gap:8px"><div class="m-card c2" style="border-left:3px solid var(--good)"><span class="small"><b>Agent created.</b> It starts on the track in about a minute.</span></div><div class="m-card c2" style="border-left:3px solid var(--good)"><span class="small"><b>Link copied.</b></span></div><div class="m-card c2" style="border-left:3px solid var(--critical)"><span class="small"><b>Could not save.</b> The name is already in use. Pick another.</span></div></div></div>
+    <div><div class="cap">Help entry (Me tab)</div><div class="m-card list"><div><div class="grow">How the score works</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Why did my agent not trade?</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Plans and limits</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Contact us</div><span class="mono dim tiny">support@ to be set</span></div></div></div>
   </div>
   <div class="notes" style="margin-top:14px">
     <h3>Decisions</h3>
     <ul>
       <li>Skeletons keep the real layout, so nothing jumps when data arrives. They stop animating for people who ask for reduced motion.</li>
-      <li>An error says what happened, what is safe, and gives a button. "Your bots keep running" is only true because the track is separate from the page; say it only when it is.</li>
-      <li>Pause and Stop are different. Pause keeps positions under their stops. Stop closes them. Both are proposals to confirm.</li>
-      <li>Destructive actions name what goes. Bot deletion asks for the name; account deletion already asks for the e-mail.</li>
+      <li>An error says what happened, what is safe, and gives a button. "Your agents keep running" is only true because the track is separate from the page; say it only when it is.</li>
+      <li>Pause and Stop are different. Pause keeps positions under their stops. Stop closes them. Decided.</li>
+      <li>Destructive actions name what goes. Agent deletion asks for the name; account deletion already asks for the e-mail.</li>
       <li>Contact address and help articles are content still to write.</li>
     </ul>
   </div>
 </div>
 
 <section id="decide">
-  <div class="head"><span class="eyebrow">4 · Decisions for you</span><h2>What blocks the final design</h2><p>Each one changes words or screens on this page. My recommendation comes first.</p></div>
+  <div class="head"><span class="eyebrow">4 · Decisions</span><h2>What is settled and what is still open</h2><p>Settled on 30 Sep 2026. The mockups above already follow them.</p></div>
   <div class="finds">
-    <article class="find"><span class="sev med">1</span><h3>Language</h3><p class="fix"><b>Portuguese (Brasil) first, English second.</b> Every string here is English. Translating after the layouts are final costs less than translating twice, but only if we settle the nouns first (next item).</p></article>
-    <article class="find"><span class="sev med">2</span><h3>The nouns</h3><p class="fix"><b>"Bot" in the chrome, the theme's noun on the card.</b> One name for the place: "Arena". The owner's Warren stays the owner's. "Race track" becomes plain words such as "running".</p></article>
-    <article class="find"><span class="sev med">3</span><h3>Pause versus Stop</h3><p class="fix"><b>Pause keeps positions under their stops; Stop closes them.</b> Both exist on paper. Matters more if live trading ever arrives.</p></article>
-    <article class="find"><span class="sev med">4</span><h3>Downgrade</h3><p class="fix"><b>Extra bots are paused, never deleted, and kept 30 days.</b> The alternative (delete) is cheaper to build and will make people angry.</p></article>
-    <article class="find"><span class="sev low">5</span><h3>Reviews and ratings</h3><p class="fix"><b>Skip at launch.</b> Drawn on the skill page, but the plan has verification and reports, not stars. Reviews invite fake ones and need moderation.</p></article>
-    <article class="find"><span class="sev low">6</span><h3>Follow and comments</h3><p class="fix"><b>Not in v1.</b> You called this a social platform. The plan's social pieces are profiles, leagues, badges and shared rules. Follows and comments add moderation work and are the usual first abuse channel.</p></article>
-    <article class="find"><span class="sev low">7</span><h3>Templates</h3><p class="fix"><b>Three, written by us.</b> They are content, need your review, and should be labelled as examples, not advice.</p></article>
-    <article class="find"><span class="sev med">8</span><h3>Legal text and contact</h3><p class="fix"><b>A lawyer writes the terms, privacy notice, age line, affiliate rules and risk notice.</b> The screens have the places; they do not have the words.</p></article>
-    <article class="find"><span class="sev low">9</span><h3>Still open from the plan</h3><p class="fix">Price and payment processor, countries, who pays model costs on Pro, hosted only or also a self-run option. Screens S10, S11 and S13 wait on these.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>Languages</h3><p class="fix">English is the base and the default for everyone, plus Portuguese (Brazil), Spanish, French, German and Italian. The five are drafts for native review.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>The noun is "agent"</h3><p class="fix">Autonomous, with a brain connected to one or more models. "Bot" and "bunny" leave the visible text. A theme is a look, not the noun.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>Pause and stop</h3><p class="fix">Pause keeps positions under their stops and opens nothing new. Stop closes positions and stops.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>Downgrade</h3><p class="fix">Extra agents go into quarantine for 10 days: not running, not listed. Upgrade to restore them. After 10 days they are deleted.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>Reviews and star ratings</h3><p class="fix">Dropped. Verification, reports and install counts stay.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>Ireland, the EU and Stripe</h3><p class="fix">The operator is in Ireland: EU data protection and consumer law, Irish VAT. Payments run on the operator's own Stripe account. Legal texts stay drafts until counsel signs them off.</p></article>
+    <article class="find"><span class="sev ok">DECIDED</span><h3>Follow and comments</h3><p class="fix">Not in v1. They add moderation work and are the usual first abuse channel.</p></article>
+    <article class="find"><span class="sev med">OPEN</span><h3>Legal texts</h3><p class="fix">Counsel writes the terms, privacy notice, age line, risk notice and affiliate rules. The screens have the places and the drafts say so. A launch blocker.</p></article>
+    <article class="find"><span class="sev med">OPEN</span><h3>Price</h3><p class="fix">No price is drawn because none is chosen. Pro includes VAT in the price shown to EU consumers.</p></article>
+    <article class="find"><span class="sev low">OPEN</span><h3>After the quarantine</h3><p class="fix">Assumed: deleted. Confirm, or keep them paused until the member decides.</p></article>
+    <article class="find"><span class="sev low">OPEN</span><h3>Templates</h3><p class="fix">Three starter agents, written by us and labelled as examples. Content to write.</p></article>
+    <article class="find"><span class="sev low">OPEN</span><h3>The AI helper and themes</h3><p class="fix">The free design and portrait for a first agent still make a cartoon bunny whatever theme is picked. Decide whether they follow the theme.</p></article>
   </div>
 </section>
 </div>
@@ -1088,36 +1092,37 @@ td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); 
 /* ---- coverage table ---- */
 var ROWS = [
   ["Account and access"],
+  ["Arena shell and navigation","built","S1","Step 1: tab bar, sidebar, own footer"],
   ["Sign in with an e-mail link","built","Sign-in, inbox, link landing","Works. Anti-enumeration kept."],
-  ["Landing page for visitors","drawn","S2",""],
-  ["Terms, privacy and risk consent","drawn","S2","Words need a lawyer"],
+  ["Landing page for visitors","built","S2","Step 1, with the real leaderboard"],
+  ["Terms, privacy and risk consent","built","S2","Consent works; the texts are drafts for counsel"],
   ["First-run onboarding","drawn","S3","Free AI is step 2"],
-  ["Account: public name, sign out, delete","redesign","S15","Today mixed into the bots page"],
+  ["Account: public name, sign out, delete","redesign","S15","Today mixed into the agents page"],
   ["Sessions list and data export","drawn","S15","Export needs a small job"],
   ["Notification preferences","drawn","S15",""],
-  ["Language (Portuguese and English)","decide","S15","See decisions"],
-  ["Bots"],
-  ["My bots home","redesign","S4","Adds season strip, curve, states"],
-  ["Create a bot","redesign","S5","One page becomes five steps"],
-  ["AI design and portrait for the first bot","redesign","S3, S5","Built, but hidden inside the form"],
-  ["Bot templates","drawn","S5","Content to write"],
-  ["Bot page: curve, position, budget","drawn","S6","No screen exists"],
+  ["Languages: English and five more","built","S15","Step 1 screens translated; the rest follows the redesigns"],
+  ["Agents"],
+  ["My agents home","redesign","S4","Adds season strip, curve, states"],
+  ["Create an agent","redesign","S5","One page becomes five steps"],
+  ["AI design and portrait for the first agent","redesign","S3, S5","Built, but hidden inside the form"],
+  ["Agent templates","drawn","S5","Content to write"],
+  ["Agent page: curve, position, budget","drawn","S6","No screen exists"],
   ["Decision history with the facts behind it","drawn","S6","Facts, not invented reasons"],
   ["Version history","drawn","S6","API built, screen missing"],
-  ["Edit bot settings","redesign","S6","Moves into the bot page"],
+  ["Edit agent settings","redesign","S6","Moves into the agent page"],
   ["Pause, stop, stop all","drawn","S4, S6, S17","Semantics to confirm"],
   ["Budget and quota meters","drawn","S4, S11",""],
   ["Theme and avatar picker","built","Create form","Painted art still to come"],
   ["Upsell for locked options","redesign","S10","Today a dead end"],
   ["Ranking and social"],
   ["Leaderboard","redesign","S8","Built; tappable rows, pinned You"],
-  ["Public bot profile","drawn","S7",""],
+  ["Public agent profile","drawn","S7",""],
   ["Public member profile","drawn","S7",""],
   ["Rule sharing and Use these rules","drawn","S5, S7","Text only, never trades"],
   ["Season archive","drawn","S8","Needs permanent final standings"],
   ["Season recap","drawn","S9",""],
   ["Badges","drawn","S9","List to write"],
-  ["Follow and comments","decide","–","Not in the plan"],
+  ["Follow and comments","later","–","Decided: not in v1"],
   ["Money"],
   ["Plans and upgrade","drawn","S10","Price open"],
   ["Billing: method, invoices, cancel","drawn","S10","Processor open"],
@@ -1126,7 +1131,7 @@ var ROWS = [
   ["Marketplace"],
   ["Browse and search skills","drawn","S12",""],
   ["Skill detail: record, permissions, versions","drawn","S12",""],
-  ["Install and update choice","drawn","S12","Install is a new bot version"],
+  ["Install and update choice","drawn","S12","Install is a new agent version"],
   ["Report and refund","drawn","S12, S17",""],
   ["Skill studio","drawn","S13","Editor is today's Lab, needs a skin"],
   ["Publish and verification steps","drawn","S13",""],
@@ -1141,12 +1146,12 @@ var ROWS = [
   ["Loading, empty, error, offline states","drawn","S17",""],
   ["Help and contact","drawn","S17","Content to write"],
   ["Touch targets and accessibility pass","redesign","All","44 px minimum"],
-  ["Live trading opt-in","decide","–","Not drawn on purpose: legal gate first"]
+  ["Live trading opt-in","later","–","Not drawn on purpose: legal gate first"]
 ];
-var LABEL = { built: ["✓", "Built"], redesign: ["◐", "Built, redesign"], drawn: ["◆", "Drawn here"], decide: ["?", "Needs a decision"] };
+var LABEL = { built: ["✓", "Built"], redesign: ["◐", "Built, redesign"], drawn: ["◆", "Drawn here"], decide: ["?", "Needs a decision"], later: ["–", "Not in v1"] };
 var filter = "all";
 function render() {
-  var body = document.getElementById("cov"), counts = { built: 0, redesign: 0, drawn: 0, decide: 0 }, n = 0, html = "";
+  var body = document.getElementById("cov"), counts = { built: 0, redesign: 0, drawn: 0, decide: 0, later: 0 }, n = 0, html = "";
   ROWS.forEach(function (r) {
     if (r.length === 1) { html += '<tr class="grp" data-g="1"><td colspan="4">' + r[0] + "</td></tr>"; return; }
     counts[r[1]]++; n++;
@@ -1158,7 +1163,7 @@ function render() {
   body.innerHTML = html;
   var c = document.getElementById("counts");
   c.innerHTML = "";
-  [["all", "All", n], ["built", "Built", counts.built], ["redesign", "Built, redesign", counts.redesign], ["drawn", "Drawn here", counts.drawn], ["decide", "Needs a decision", counts.decide]].forEach(function (x) {
+  [["all", "All", n], ["built", "Built", counts.built], ["redesign", "Built, redesign", counts.redesign], ["drawn", "Drawn here", counts.drawn], ["decide", "Needs a decision", counts.decide], ["later", "Not in v1", counts.later]].forEach(function (x) {
     var b = document.createElement("button");
     b.type = "button"; b.setAttribute("aria-pressed", String(filter === x[0]));
     b.innerHTML = "<b>" + x[2] + "</b><span class=\"" + (x[0] === "all" ? "dim" : "st " + x[0]) + '">' + (x[0] === "all" ? "" : "<i>" + LABEL[x[0]][0] + "</i>") + x[1] + "</span>";
