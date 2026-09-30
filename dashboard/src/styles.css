@@ -48,14 +48,10 @@ body,
   overflow: hidden;
 }
 .num,
-.tick-choice,
-.prob-label,
-.tick-bar-label {
+.prob-label {
   font-variant-numeric: tabular-nums;
 }
-.tick-choice,
 .prob-label,
-.tick-bar-label,
 .pos-coin {
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -852,90 +848,159 @@ a.counter.host:hover {
   flex: 1;
   mask-image: linear-gradient(to bottom, #000 80%, transparent);
 }
-.tick {
+.tk {
+  --tk-pad: 0.55rem;
   border-left: 3px solid var(--bee);
-  padding: 0.4rem 0.6rem 0.45rem;
-  margin-bottom: 0.4rem;
+  padding: var(--tk-pad) 0.7rem calc(var(--tk-pad) + 0.05rem);
+  margin-bottom: 0.45rem;
   background: var(--card-2);
-  border-radius: 0 0.5rem 0.5rem 0;
+  border-radius: 0 0.6rem 0.6rem 0;
+  display: grid;
+  gap: 0.3rem;
   animation: tick-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-.tick.acted {
-  background: color-mix(in srgb, var(--bee) 16%, var(--card-2));
+.tk.acted {
+  background: color-mix(in srgb, var(--bee) 14%, var(--card-2));
 }
-.tick-line {
+.tk-head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.8rem;
 }
-.tick-dot {
+.tk-dot {
+  flex: none;
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
   background: var(--bee);
 }
-.tick-bee {
+.tk-name {
+  flex: 0 1 auto;
+  min-width: 0;
   font-weight: 700;
-  width: 3.4rem;
   color: var(--text-2);
-}
-.tick-choice {
-  font-weight: 700;
-  flex: 1;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.tick-meta {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-}
-.tick-bars {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.35rem;
-  margin-top: 0.3rem;
-}
-.tick-bar {
-  position: relative;
-  height: 1.05rem;
+.tk-count {
+  flex: none;
+  font-size: 0.7rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  color: var(--text-2);
   background: var(--grid);
-  border-radius: 0.25rem;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
-.tick-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  opacity: 0.85;
-}
-.tick-bar-label {
-  position: relative;
-  font-size: 0.62rem;
-  line-height: 1;
-  padding: 0 0.3rem;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-  white-space: nowrap;
-  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
-}
-.tick-note {
+.tk-time {
+  margin-left: auto;
+  flex: none;
   font-size: 0.72rem;
-  margin-top: 0.25rem;
+}
+.tk-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+}
+.tk-action {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.tk-sure {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.tk-pnl {
+  margin-left: auto;
+  font-weight: 800;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.tk-pnl small {
+  font-weight: 500;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-right: 0.15rem;
+}
+.tk-pnl.good {
+  color: var(--good-text);
+}
+.tk-pnl.bad {
+  color: var(--critical-text);
+}
+.tk-detail {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
   color: var(--text-2);
 }
-.tick-note.veto {
+.tk-tag {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  color: var(--text-2);
+  background: var(--grid);
+}
+.tk-tag.long {
+  color: var(--good-text);
+}
+.tk-tag.short {
+  color: var(--critical-text);
+}
+.tk-odds {
+  display: grid;
+  gap: 0.3rem;
+}
+.tk-odds-bar {
+  display: flex;
+  gap: 2px;
+  height: 0.4rem;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.tk-odds-bar span {
+  flex-basis: 0;
+  min-width: 3px;
+}
+.tk-odds-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.8rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.tk-odds-legend li.chosen {
+  color: var(--text);
+  font-weight: 600;
+}
+.tk-note {
+  font-size: 0.76rem;
+  color: var(--text-2);
+}
+.tk-note.veto {
   color: var(--warning);
 }
-.tick-note.forced {
+.tk-note.forced {
   color: var(--text);
   font-weight: 700;
+}
+.tk-help {
+  margin: 0 0 0.5rem;
+  font-size: 0.74rem;
 }
 .blocked-list {
   display: flex;
@@ -1197,14 +1262,10 @@ a.counter.host:hover {
 
 
 /* ---------- live money in the stream: green up, red down ---------- */
-.tick-money {
-  font-weight: 800;
-  font-size: 0.85rem;
-}
-.tick.move-up {
+.tk.move-up {
   animation: tick-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), flash-up 1.6s ease-out;
 }
-.tick.move-down {
+.tk.move-down {
   animation: tick-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1), flash-down 1.6s ease-out;
 }
 @keyframes flash-up {
@@ -1227,7 +1288,7 @@ a.counter.host:hover {
     box-shadow: inset 0 0 0 1px transparent;
   }
 }
-.tick.pulse .tick-dot {
+.tk.pulse .tk-dot {
   animation: live-dot 1.2s ease-in-out infinite;
 }
 @keyframes live-dot {
@@ -1235,31 +1296,29 @@ a.counter.host:hover {
     box-shadow: 0 0 0 0.3rem color-mix(in srgb, var(--bee) 25%, transparent);
   }
 }
-.tick-pulse {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  margin-top: 0.3rem;
-  font-size: 0.75rem;
-}
-.tick-pulse .side {
-  font-size: 0.75rem;
-}
-.tick-delta {
+.tk-delta {
   font-weight: 800;
   padding: 0.05rem 0.4rem;
   border-radius: 0.3rem;
 }
-.tick-delta.up {
+.tk-delta.up {
   color: var(--good-text);
   background: color-mix(in srgb, var(--good) 18%, transparent);
 }
-.tick-delta.down {
+.tk-delta.down {
   color: var(--critical-text);
   background: color-mix(in srgb, var(--critical) 18%, transparent);
 }
-.tick-delta.still {
+.tk-delta.still {
   color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk,
+  .tk.move-up,
+  .tk.move-down,
+  .tk.pulse .tk-dot {
+    animation: none;
+  }
 }
 
 /* ---------- First-run Setup (fixed px sizing: it is a form, not the camera layout) ---------- */
