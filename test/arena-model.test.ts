@@ -5,14 +5,22 @@ describe("arenaView", () => {
   it("reads the e-mailed link", () => {
     expect(arenaView("#/arena/verify?token=abc123")).toEqual({ kind: "verify", token: "abc123" });
   });
+  it("knows every page of the Arena shell", () => {
+    expect(arenaView("#/arena")).toEqual({ kind: "home" });
+    expect(arenaView("#/arena/new")).toEqual({ kind: "new" });
+    expect(arenaView("#/arena/me")).toEqual({ kind: "me" });
+    expect(arenaView("#/arena/legal/terms")).toEqual({ kind: "legal", doc: "terms" });
+    expect(arenaView("#/arena/legal/cookies")).toEqual({ kind: "legal", doc: "cookies" });
+    expect(arenaView("#/arena/legal/nonsense")).toEqual({ kind: "home" });
+  });
   it("knows the leaderboard page", () => {
     expect(arenaView("#/arena/ranking")).toEqual({ kind: "ranking" });
   });
   it("falls back to the account page", () => {
-    expect(arenaView("#/arena")).toEqual({ kind: "account" });
-    expect(arenaView("#/arena/verify")).toEqual({ kind: "account" });
-    expect(arenaView("#/arena/verify?token=")).toEqual({ kind: "account" });
-    expect(arenaView("#/arena/other?token=x")).toEqual({ kind: "account" });
+    expect(arenaView("#/arena")).toEqual({ kind: "home" });
+    expect(arenaView("#/arena/verify")).toEqual({ kind: "home" });
+    expect(arenaView("#/arena/verify?token=")).toEqual({ kind: "home" });
+    expect(arenaView("#/arena/other?token=x")).toEqual({ kind: "home" });
   });
 });
 
@@ -66,7 +74,7 @@ describe("runSummary", () => {
   const run = { state: "running" as const, equityUsd: 1012.5, pnlUsd: 12.5, pnlPct: 1.25, decisions: 40, position: null, last: { choice: "HOLD_WINNER", confidence: 0.82, status: "ok", ts: 1 } };
   it("explains a bot that is not trading, in words", () => {
     expect(runSummary(false, undefined).headline).toMatch(/not trading yet/);
-    expect(runSummary(true, undefined).headline).toMatch(/Waiting for a place/);
+    expect(runSummary(true, undefined).headline).toMatch(/Waiting for a free slot/);
     expect(runSummary(true, { state: "error" })).toMatchObject({ headline: "Could not start", tone: "bad" });
   });
   it("shows the paper account, the position and the last call", () => {

@@ -1,251 +1,35 @@
-// #/arena: sign in with an e-mailed link, and the account page. The Arena is its own service (/arena/*), separate from the
-// owner's engine and admin panel: nothing on this page can reach them, and they cannot reach a member's data.
+// #/arena and everything under it: the Arena's pages. It is its own service (/arena/*), separate from the owner's engine and admin
+// panel, and it has its own frame (ArenaShell): nothing on these pages can reach the owner's side, and it cannot reach a member's data.
+//   #/arena            home (the member's agents), or the landing page when signed out
+//   #/arena/new        home with the create form open (the centre button)
+//   #/arena/ranking    the leaderboard, public
+//   #/arena/me         account, public name, language
+//   #/arena/legal/<x>  terms, privacy, risk, cookies (drafts until counsel signs them off)
+//   #/arena/verify?token=...  the page the e-mailed link opens
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArenaBots } from "./ArenaBots";
+import { ArenaConsent } from "./ArenaConsent";
+import { ArenaLanding } from "./ArenaLanding";
+import { ArenaLegal } from "./ArenaLegal";
+import { ArenaMe } from "./ArenaMe";
 import { ArenaRanking } from "./ArenaRanking";
-import { PageNav } from "./LabPage";
-import { arenaView, handleProblem, looksLikeEmail, memberSince, resendIn, TIER_LABEL } from "./arenaModel";
+import { ArenaShell, type Mode, type Tab } from "./ArenaShell";
+import { arena, type ConsentState, type Limits, type Member } from "./arenaApi";
+import { arenaView } from "./arenaModel";
+import { I18nProvider, useI18n } from "./i18n/I18n";
+import type { Locale } from "./i18n/locales";
 
-interface Member {
-  id: string;
-  email: string;
-  handle: string;
-  tier: "free" | "pro";
-  createdAt: number;
-}
-
-export interface Limits {
-  bots: number;
-  maxCoins: number;
-  styles: string[];
-  proThemes: boolean;
-}
-
-async function arena<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: T & { error?: string } }> {
-  const r = await fetch(`/arena/${path}`, {
-    method,
-    headers: method === "POST" ? { "content-type": "application/json", "x-arena": "1" } : undefined,
-    body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
-    credentials: "same-origin",
-    cache: "no-store",
-  });
-  return { status: r.status, data: (await r.json().catch(() => ({}))) as T & { error?: string } };
-}
-
-const DOWN = "The Arena is not reachable right now. Try again in a minute.";
+export type { Limits } from "./arenaApi";
 
 // A sign-in link works once, and React's StrictMode runs effects twice in development: remember what was already spent.
 const spent = new Set<string>();
 
-function SignIn({ notice }: { notice?: string }) {
-  const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [sentAt, setSentAt] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (sentAt === null) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [sentAt]);
-
-  const send = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await arena("POST", "auth/request", { email });
-      if (r.status === 200) {
-        setNow(Date.now());
-        setSentAt(Date.now());
-      }
-      else setError(r.data.error ?? DOWN);
-    } catch {
-      setError(DOWN);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (sentAt !== null) {
-    const wait = resendIn(sentAt, now);
-    return (
-      <div className="pcard login arena-card">
-        <h2>Check your inbox</h2>
-        <p>
-          If <strong className="mono">{email.trim().toLowerCase()}</strong> can sign in, a link is on its way. It works once and expires in 15 minutes.
-        </p>
-        <p className="dim small">Nothing arrived? Look in spam, or ask for a new link.</p>
-        <div className="arena-actions">
-          <button className="pbtn ghost" disabled={busy || wait > 0} onClick={() => void send()}>
-            {wait > 0 ? `Send again in ${wait}s` : "Send again"}
-          </button>
-          <button className="linkbtn" onClick={() => setSentAt(null)}>
-            Use another e-mail
-          </button>
-        </div>
-        {error && <p className="bad">{error}</p>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="pcard login arena-card">
-      <h2>Sign in to the Arena</h2>
-      <p className="dim">No password. Enter your e-mail and we send a one-time link. New here? The same link creates your account.</p>
-      {notice && <p className="bad">{notice}</p>}
-      <form
-        className="arena-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <input className="pinput" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-        <button className="pbtn" disabled={busy || !looksLikeEmail(email)}>
-          {busy ? "Sending…" : "Send me a link"}
-        </button>
-      </form>
-      {error && <p className="bad">{error}</p>}
-      <p className="dim small">Paper trading only for now: simulated money, real prices. Not financial advice.</p>
-    </div>
-  );
-}
-
-function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(me.handle);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const problem = handleProblem(value);
-  const save = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await arena<{ handle?: string }>("POST", "account/handle", { handle: value });
-      if (r.status === 200 && r.data.handle) {
-        onChange(r.data.handle);
-        setEditing(false);
-      } else setError(r.data.error ?? "Could not change it.");
-    } catch {
-      setError(DOWN);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="arena-handle">
-      <div className="eyebrow">Public name</div>
-      {!editing ? (
-        <div className="arena-actions">
-          <span className="mono strong">@{me.handle}</span>
-          <button className="pbtn ghost small" onClick={() => setEditing(true)}>
-            Change
-          </button>
-          <span className="dim small">This is what others see on the leaderboard, never your e-mail.</span>
-        </div>
-      ) : (
-        <form
-          className="arena-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}
-        >
-          <input className="pinput" value={value} maxLength={20} autoFocus onChange={(e) => setValue(e.target.value)} aria-label="Public name" />
-          <button className="pbtn" disabled={busy || problem !== null} title={problem ?? undefined}>
-            {busy ? "Saving…" : "Save"}
-          </button>
-          <button type="button" className="pbtn ghost" onClick={() => setEditing(false)}>
-            Cancel
-          </button>
-        </form>
-      )}
-      {error && <p className="bad">{error}</p>}
-    </div>
-  );
-}
-
-function Account({ me, limits, onOut, onHandle }: { me: Member; limits: Limits; onOut: () => void; onHandle: (h: string) => void }) {
-  const [confirm, setConfirm] = useState("");
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  const out = async () => {
-    setBusy(true);
-    try {
-      await arena("POST", "auth/logout");
-    } finally {
-      onOut();
-    }
-  };
-  const erase = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const r = await arena("POST", "account/delete", { confirm });
-      if (r.status === 200) onOut();
-      else setError(r.data.error ?? DOWN);
-    } catch {
-      setError(DOWN);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="pcard arena-card">
-        <div className="arena-who">
-          <div>
-            <div className="eyebrow">Signed in as</div>
-            <div className="arena-email mono">{me.email}</div>
-            <div className="dim small">{memberSince(me.createdAt)}</div>
-          </div>
-          <span className={`badge ${me.tier === "pro" ? "ok" : ""}`}>{TIER_LABEL[me.tier]}</span>
-        </div>
-        <PublicName me={me} onChange={onHandle} />
-        <div className="arena-actions">
-          <button className="pbtn ghost" disabled={busy} onClick={() => void out()}>
-            Sign out
-          </button>
-        </div>
-      </div>
-
-      <ArenaBots limits={limits} />
-
-      <div className="pcard arena-card arena-danger">
-        <h3>Delete my account</h3>
-        <p className="dim small">Removes your account, your sessions and your whole private database. This cannot be undone.</p>
-        {!open ? (
-          <button className="pbtn ghost small" onClick={() => setOpen(true)}>
-            Delete my account…
-          </button>
-        ) : (
-          <form
-            className="arena-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void erase();
-            }}
-          >
-            <input className="pinput" type="email" placeholder={`Type ${me.email} to confirm`} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoFocus />
-            <button className="pbtn danger" disabled={busy || confirm.trim().toLowerCase() !== me.email}>
-              {busy ? "Deleting…" : "Delete forever"}
-            </button>
-          </form>
-        )}
-        {error && <p className="bad">{error}</p>}
-      </div>
-    </>
-  );
-}
-
-export function ArenaPage() {
+function Arena() {
+  const { t, choose, adopt } = useI18n();
   const [view, setView] = useState(() => arenaView(location.hash));
   const [me, setMe] = useState<Member | null | "loading">("loading");
   const [limits, setLimits] = useState<Limits | null>(null);
+  const [consent, setConsent] = useState<ConsentState | null>(null);
   const [notice, setNotice] = useState("");
   const [down, setDown] = useState(false);
   const verifying = useRef(false);
@@ -258,15 +42,19 @@ export function ArenaPage() {
 
   const load = useCallback(async () => {
     try {
-      const r = await arena<{ user?: Member; limits?: Limits }>("GET", "me");
+      const r = await arena<{ user?: Member; limits?: Limits; consent?: ConsentState }>("GET", "me");
       setDown(false);
       if (r.data.limits) setLimits(r.data.limits);
-      setMe(r.status === 200 && r.data.user ? r.data.user : null);
+      setConsent(r.data.consent ?? null);
+      if (r.status === 200 && r.data.user) {
+        setMe(r.data.user);
+        adopt(r.data.user.locale);
+      } else setMe(null);
     } catch {
       setDown(true);
       setMe(null);
     }
-  }, []);
+  }, [adopt]);
 
   useEffect(() => {
     if (view.kind === "verify") {
@@ -277,12 +65,9 @@ export function ArenaPage() {
       void (async () => {
         try {
           const r = await arena<{ user?: Member }>("POST", "auth/verify", { token });
-          if (r.status === 200 && r.data.user) {
-            setMe(r.data.user);
-            void load();
-          }
+          if (r.status === 200 && r.data.user) void load();
           else {
-            setNotice(r.data.error ?? "This link is invalid, expired or already used.");
+            setNotice(t("signin.badLink"));
             setMe(null);
           }
         } catch {
@@ -292,51 +77,73 @@ export function ArenaPage() {
           verifying.current = false;
           // The token is spent either way: take it out of the address bar and the history.
           history.replaceState(null, "", "#/arena");
-          setView({ kind: "account" });
+          setView({ kind: "home" });
         }
       })();
     } else void load();
   }, [view, load]);
 
-  return (
-    <div className="page">
-      <PageNav current="arena" />
-      <div className="page-inner arena-page">
-        <h1>Arena</h1>
-        <p className="lead">Bring your own bunnies and race them on real prices with simulated money.</p>
-        <nav className="arena-tabs" aria-label="Arena">
-          <a href="#/arena" className={view.kind !== "ranking" ? "on" : ""}>
-            My bunnies
-          </a>
-          <a href="#/arena/ranking" className={view.kind === "ranking" ? "on" : ""}>
-            Leaderboard
-          </a>
-        </nav>
-        {view.kind === "ranking" ? (
-          <ArenaRanking />
-        ) : me === "loading" || (me && !limits) || (view.kind === "verify" && me === null && !notice) ? (
-          <div className="pcard arena-card dim">{view.kind === "verify" ? "Signing you in…" : "Loading…"}</div>
-        ) : down ? (
-          <div className="pcard arena-card">
-            <p className="bad">{DOWN}</p>
-            <button className="pbtn ghost" onClick={() => void load()}>
-              Try again
-            </button>
-          </div>
-        ) : me && limits ? (
-          <Account
-            me={me}
-            limits={limits}
-            onHandle={(handle) => setMe({ ...me, handle })}
-            onOut={() => {
-              setNotice("");
-              setMe(null);
-            }}
-          />
-        ) : (
-          <SignIn notice={notice} />
-        )}
+  const pickLocale = (l: Locale) => {
+    choose(l);
+    if (me && me !== "loading") void arena("POST", "account/locale", { locale: l }).catch(() => {});
+  };
+
+  const member = me !== "loading" && me !== null ? me : null;
+  const gated = !!member && !!consent?.needed;
+  const mode: Mode = member ? (gated ? "gate" : "in") : "out";
+  const tab: Tab = view.kind === "ranking" ? "board" : view.kind === "me" ? "me" : view.kind === "new" ? "new" : view.kind === "home" ? "home" : null;
+  const signOut = () => {
+    setNotice("");
+    setMe(null);
+    setConsent(null);
+    history.replaceState(null, "", "#/arena");
+    setView({ kind: "home" });
+  };
+
+  // The create form was opened by the centre button and is now done or cancelled: go back to plain home.
+  const closeNew = useCallback(() => {
+    if (location.hash.startsWith("#/arena/new")) {
+      history.replaceState(null, "", "#/arena");
+      setView({ kind: "home" });
+    }
+  }, []);
+
+  let body: React.ReactNode;
+  if (view.kind === "legal") body = <ArenaLegal doc={view.doc} />;
+  else if (view.kind === "ranking")
+    body = (
+      <>
+        <h1 className="as-title">{t("nav.board")}</h1>
+        <ArenaRanking />
+      </>
+    );
+  else if (me === "loading" || (view.kind === "verify" && me === null && !notice)) body = <div className="pcard arena-card dim">{view.kind === "verify" ? t("common.signingIn") : t("common.loading")}</div>;
+  else if (down)
+    body = (
+      <div className="pcard arena-card">
+        <p className="bad">{t("common.down")}</p>
+        <button className="pbtn ghost" onClick={() => void load()}>
+          {t("common.tryAgain")}
+        </button>
       </div>
-    </div>
+    );
+  else if (!member) body = <ArenaLanding notice={notice} />;
+  else if (gated) body = <ArenaConsent email={member.email} onDone={() => void load()} onSignOut={() => void arena("POST", "auth/logout").finally(signOut)} />;
+  else if (view.kind === "me") body = <ArenaMe me={member} onOut={signOut} onHandle={(handle) => setMe({ ...member, handle })} onPickLocale={pickLocale} />;
+  else if (!limits) body = <div className="pcard arena-card dim">{t("common.loading")}</div>;
+  else body = <ArenaBots limits={limits} openNew={view.kind === "new"} onCloseNew={closeNew} />;
+
+  return (
+    <ArenaShell tab={tab} mode={mode} onPickLocale={pickLocale}>
+      {body}
+    </ArenaShell>
+  );
+}
+
+export function ArenaPage() {
+  return (
+    <I18nProvider>
+      <Arena />
+    </I18nProvider>
   );
 }

@@ -2,15 +2,20 @@ import { humanLabel } from "./tickerModel.js";
 
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
-export type ArenaView = { kind: "account" } | { kind: "verify"; token: string } | { kind: "ranking" };
+export type LegalDocId = "terms" | "privacy" | "risk" | "cookies";
+export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
 
-/** #/arena is the account page; #/arena/verify?token=... is the page the e-mailed link opens. */
+/** #/arena is home (or the landing page when signed out); #/arena/verify?token=... is the page the e-mailed link opens. */
 export function arenaView(hash: string): ArenaView {
   const [path = "", query = ""] = hash.replace(/^#\/?/, "").split("?");
-  const token = new URLSearchParams(query).get("token");
-  const sub = path.split("/")[1];
+  const parts = path.split("/");
+  const sub = parts[1];
   if (sub === "ranking") return { kind: "ranking" };
-  return sub === "verify" && token ? { kind: "verify", token } : { kind: "account" };
+  if (sub === "me") return { kind: "me" };
+  if (sub === "new") return { kind: "new" };
+  if (sub === "legal" && (["terms", "privacy", "risk", "cookies"] as string[]).includes(parts[2] ?? "")) return { kind: "legal", doc: parts[2] as LegalDocId };
+  const token = new URLSearchParams(query).get("token");
+  return sub === "verify" && token ? { kind: "verify", token } : { kind: "home" };
 }
 
 /** A member-since line such as "Member since 30 Sep 2026". */
@@ -94,10 +99,10 @@ export interface RunStatus {
 const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const signed = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
 
-/** What to show under a bunny: one headline, one detail line, and whether the news is good, bad or neutral. */
+/** What to show under an agent: one headline, one detail line, and whether the news is good, bad or neutral. */
 export function runSummary(enabled: boolean, run: RunStatus | undefined): { headline: string; detail: string; tone: "good" | "bad" | "flat" } {
-  if (!enabled) return { headline: "Saved, not trading yet", detail: "The race track is not open yet. Your bunny is stored and ready.", tone: "flat" };
-  if (!run || run.state === "queued") return { headline: "Waiting for a place on the track", detail: "The track is full. It starts on its own when a place frees up.", tone: "flat" };
+  if (!enabled) return { headline: "Saved, not trading yet", detail: "Trading is not switched on yet. Your agent is saved and ready.", tone: "flat" };
+  if (!run || run.state === "queued") return { headline: "Waiting for a free slot", detail: "All slots are in use. It starts on its own when one frees up.", tone: "flat" };
   if (run.state === "error") return { headline: "Could not start", detail: run.error ?? "It will be retried.", tone: "bad" };
   const pnl = run.pnlUsd ?? 0;
   const pos = run.position;

@@ -1,6 +1,6 @@
-// "Your bunnies" on the Arena page: the member's bots, and the form to make or change one. Plan limits are enforced by
+// "Your agents" on the Arena home: the member's agents, and the form to make or change one. Plan limits are enforced by
 // the server; the page shows what the plan leaves out as locked, with the reason, instead of hiding it.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { draftProblem, runSummary, STYLE_LABEL, toggleCoin, type BotDraft, type RunStatus } from "./arenaModel";
 
 interface Avatar {
@@ -119,13 +119,13 @@ function Form({ cat, limits, ai, initial, editing, onDone, onCancel }: { cat: Ca
         void save();
       }}
     >
-      <h3>{editing ? `Edit ${editing.name}` : "Create a bunny"}</h3>
+      <h3>{editing ? `Edit ${editing.name}` : "Create an agent"}</h3>
 
       {!editing && ai?.canDesign && left > 0 && (
         <div className="ab-ai">
           <div className="eyebrow">Let the Arena design it</div>
-          <p className="dim small">Describe your bunny in a sentence. The Arena writes its name, rules, coins and look for you, free for your first bunny ({left} {left === 1 ? "try" : "tries"} left). You can change everything before creating it.</p>
-          <textarea className="pinput ab-rules" rows={2} maxLength={400} placeholder="e.g. a patient bunny that only buys sharp dips in BTC and ETH, and never trades on weekends" value={idea} onChange={(e) => setIdea(e.target.value)} />
+          <p className="dim small">Describe your agent in a sentence. The Arena writes its name, rules, coins and look for you, free for your first agent ({left} {left === 1 ? "try" : "tries"} left). You can change everything before creating it.</p>
+          <textarea className="pinput ab-rules" rows={2} maxLength={400} placeholder="e.g. a patient agent that only buys sharp dips in BTC and ETH, and never trades on weekends" value={idea} onChange={(e) => setIdea(e.target.value)} />
           <div className="arena-actions">
             <button type="button" className="pbtn" disabled={designing || idea.trim().length < 8} onClick={() => void design()}>
               {designing ? "Designing…" : "Design it for me"}
@@ -180,7 +180,7 @@ function Form({ cat, limits, ai, initial, editing, onDone, onCancel }: { cat: Ca
       <label className="eyebrow" htmlFor="ab-look">
         What it looks like <span className="dim">(for its portrait, optional)</span>
       </label>
-      <input id="ab-look" className="pinput" maxLength={400} placeholder="a sleepy bunny in a nightcap, holding a tiny chart" value={d.look} onChange={(e) => setD({ ...d, look: e.target.value })} />
+      <input id="ab-look" className="pinput" maxLength={400} placeholder="a sleepy cartoon character in a nightcap, holding a tiny chart" value={d.look} onChange={(e) => setD({ ...d, look: e.target.value })} />
 
       <div className="eyebrow">Trading style</div>
       <div className="ab-styles">
@@ -213,12 +213,12 @@ function Form({ cat, limits, ai, initial, editing, onDone, onCancel }: { cat: Ca
         Rules, in your own words
       </label>
       <textarea id="ab-rules" className="pinput ab-rules" rows={4} maxLength={500} placeholder="How should it trade? When should it stay out? What must it never do?" value={d.rules} onChange={(e) => setD({ ...d, rules: e.target.value })} />
-      <div className="dim small">{d.rules.trim().length} / 500{editing ? ". Changing style, coins or rules starts a new version of this bunny, with a fresh paper account." : ""}</div>
+      <div className="dim small">{d.rules.trim().length} / 500{editing ? ". Changing style, coins or rules starts a new version of this agent, with a fresh paper account." : ""}</div>
 
       {error && <p className="bad">{error}</p>}
       <div className="arena-actions">
         <button className="pbtn" disabled={busy || problem !== null} title={problem ?? undefined}>
-          {busy ? "Saving…" : editing ? "Save changes" : "Create bunny"}
+          {busy ? "Saving…" : editing ? "Save changes" : "Create agent"}
         </button>
         <button type="button" className="pbtn ghost" onClick={onCancel}>
           Cancel
@@ -229,10 +229,11 @@ function Form({ cat, limits, ai, initial, editing, onDone, onCancel }: { cat: Ca
   );
 }
 
-export function ArenaBots({ limits }: { limits: Limits }) {
+export function ArenaBots({ limits, openNew = false, onCloseNew }: { limits: Limits; openNew?: boolean; onCloseNew?: () => void }) {
   const [cat, setCat] = useState<Catalogue | null>(null);
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [mode, setMode] = useState<"list" | "new" | Bot>("list");
+  const opened = useRef(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [ai, setAi] = useState<AiStatus | null>(null);
@@ -248,20 +249,28 @@ export function ArenaBots({ limits }: { limits: Limits }) {
         setBots(b.data.bots);
         setRunner(b.data.runner);
         setAi(a.status === 200 ? a.data : null);
-      } else setError("Could not load your bunnies.");
+      } else setError("Could not load your agents.");
     } catch {
       setError("The Arena is not reachable right now.");
     }
   }, []);
   useEffect(() => {
     void load();
-    // A running bunny's account moves: look again every 15 seconds while the list is showing.
+    // A running agent's account moves: look again every 15 seconds while the list is showing.
     const id = setInterval(() => void load(), 15_000);
     return () => clearInterval(id);
   }, [load]);
 
+  // The centre "+" of the tab bar lands here: open the form once, unless the plan is already full.
+  useEffect(() => {
+    if (!openNew || opened.current || !bots || !cat) return;
+    opened.current = true;
+    if (bots.length < limits.bots) setMode("new");
+    else onCloseNew?.();
+  }, [openNew, bots, cat, limits.bots, onCloseNew]);
+
   if (error) return <div className="pcard arena-card"><p className="bad">{error}</p></div>;
-  if (!cat || !bots) return <div className="pcard arena-card dim">Loading your bunnies…</div>;
+  if (!cat || !bots) return <div className="pcard arena-card dim">Loading your agents…</div>;
 
   if (mode !== "list")
     return (
@@ -272,9 +281,13 @@ export function ArenaBots({ limits }: { limits: Limits }) {
           ai={ai}
           editing={mode === "new" ? null : mode}
           initial={mode === "new" ? EMPTY : { name: mode.name, theme: mode.theme, avatar: mode.avatar, style: mode.style, coins: mode.coins, rules: mode.rules, tagline: mode.tagline, look: mode.look, listed: mode.listed }}
-          onCancel={() => setMode("list")}
+          onCancel={() => {
+            setMode("list");
+            onCloseNew?.();
+          }}
           onDone={() => {
             setMode("list");
+            onCloseNew?.();
             void load();
           }}
         />
@@ -285,12 +298,12 @@ export function ArenaBots({ limits }: { limits: Limits }) {
   return (
     <div className="pcard arena-card">
       <div className="arena-who">
-        <h3>Your bunnies</h3>
+        <h3>Your agents</h3>
         <span className="dim small">
           {bots.length} / {limits.bots}
         </span>
       </div>
-      {bots.length === 0 && <p className="dim">You have no bunny yet. Make one, give it rules, and it will race on real prices with simulated money.</p>}
+      {bots.length === 0 && <p className="dim">You have no agent yet. Make one, give it rules, and it will race on real prices with simulated money.</p>}
       {bots.map((b) => (
         <div className="ab-bot" key={b.id}>
           <Portrait cat={cat} theme={b.theme} avatar={b.avatar} botId={b.image ? b.id : undefined} />
@@ -317,7 +330,7 @@ export function ArenaBots({ limits }: { limits: Limits }) {
                 <button
                   className="pbtn ghost small"
                   disabled={painting !== null}
-                  title="Painted with the Arena's own image model, free for your first bunny"
+                  title="Painted with the Arena's own image model, free for your first agent"
                   onClick={async () => {
                     setPainting(b.id);
                     setPaintError("");
@@ -363,11 +376,11 @@ export function ArenaBots({ limits }: { limits: Limits }) {
       {paintError && <p className="bad">{paintError}</p>}
       <div className="arena-actions">
         <button className="pbtn" disabled={full} onClick={() => setMode("new")}>
-          Create a bunny
+          Create an agent
         </button>
-        {full && <span className="dim small">{limits.bots === 1 ? "The Free plan has one bunny. Upgrade to Pro for more." : "You have reached your plan's limit."}</span>}
+        {full && <span className="dim small">{limits.bots === 1 ? "The Free plan has one agent. Upgrade to Pro for more." : "You have reached your plan's limit."}</span>}
       </div>
-      <p className="dim small">Your bunnies and their paper accounts live in your own private space. Simulated money only.</p>
+      <p className="dim small">Your agents and their paper accounts live in your own private space. Simulated money only.</p>
     </div>
   );
 }

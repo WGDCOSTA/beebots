@@ -88,7 +88,7 @@ export function ArenaRanking() {
       .catch(() => {});
   }, []);
 
-  // Open on the league of the viewer's own bunny if they have one, else the first league.
+  // Open on the league of the viewer's own agent if they have one, else the first league.
   const active = useMemo(() => league ?? board?.rows?.find((r) => r.mine)?.league ?? board?.leagues?.[0]?.id ?? null, [league, board]);
   const rows = useMemo(() => (board?.rows ?? []).filter((r) => r.league === active), [board, active]);
   const ranked = rows.filter((r) => r.rank !== null);
@@ -122,15 +122,15 @@ export function ArenaRanking() {
         <details className="rk-how">
           <summary>How the score works</summary>
           <p className="small">
-            Score = return % minus half of the worst drop from a peak (max drawdown) %. A bot that earns a lot by risking a lot loses points for its deep drops.
-            To be ranked a bot needs at least {board.minimums.minDays} days of history, {board.minimums.minTrades} trades and enough samples, so a lucky hour does not count. Open positions and rules are never shown.
-            Changing a bunny's rules starts a fresh account, and its ranking starts over.
+            Score = return % minus half of the worst drop from a peak (max drawdown) %. An agent that earns a lot by risking a lot loses points for its deep drops.
+            To be ranked an agent needs at least {board.minimums.minDays} days of history, {board.minimums.minTrades} trades and enough samples, so a lucky hour does not count. Open positions and rules are never shown.
+            Changing an agent's rules starts a fresh account, and its ranking starts over.
           </p>
         </details>
       </div>
 
       {board.leagues.length === 0 ? (
-        <div className="pcard arena-card dim">Nobody is on the board yet. Create a bunny in the Arena and leave "Show on the leaderboard" ticked.</div>
+        <div className="pcard arena-card dim">Nobody is on the board yet. Create an agent in the Arena and leave "Show on the leaderboard" ticked.</div>
       ) : (
         <>
           <div className="ab-chips rk-leagues">
@@ -142,7 +142,7 @@ export function ArenaRanking() {
           </div>
 
           <div className="pcard arena-card">
-            {ranked.length === 0 && <p className="dim">No bunny is ranked in this league yet.</p>}
+            {ranked.length === 0 && <p className="dim">No agent is ranked in this league yet.</p>}
             {ranked.map((r) => (
               <div className={`rk-row ${r.mine ? "mine" : ""}`} key={r.botId}>
                 <span className={`rk-rank r${r.rank}`}>{r.rank}</span>
