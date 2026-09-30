@@ -36,7 +36,7 @@ describe("memberSince", () => {
 });
 
 describe("draftProblem", () => {
-  const ok = { name: "Fluffy", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "Trade carefully always." };
+  const ok = { name: "Fluffy", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "Trade carefully always.", tagline: "", look: "" };
   it("accepts a complete draft", () => expect(draftProblem(ok, 3)).toBeNull());
   it("says what is missing, one thing at a time", () => {
     expect(draftProblem({ ...ok, name: " a " }, 3)).toMatch(/name/);
@@ -44,6 +44,8 @@ describe("draftProblem", () => {
     expect(draftProblem({ ...ok, style: "" }, 3)).toMatch(/style/);
     expect(draftProblem({ ...ok, coins: [] }, 3)).toMatch(/coin/);
     expect(draftProblem({ ...ok, coins: ["BTC", "ETH", "SOL", "HYPE"] }, 3)).toMatch(/up to 3/);
+    expect(draftProblem({ ...ok, coins: ["BTC", "SOL"] }, 3)).toMatch(/only trades BTC, ETH/);
+    expect(draftProblem({ ...ok, style: "boozy", coins: ["XRP"] }, 3)).toBeNull();
     expect(draftProblem({ ...ok, rules: "short" }, 3)).toMatch(/8 characters/);
     expect(draftProblem({ ...ok, rules: "x".repeat(2001) }, 3)).toMatch(/2000/);
   });

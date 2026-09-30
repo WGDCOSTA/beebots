@@ -103,7 +103,7 @@ describe("editing and deleting", () => {
     expect(v2.version).toBe(2);
     expect(bots.versions(b.id).map((v) => v.version)).toEqual([2, 1]);
     expect(bots.versions(b.id)[1]!.rules).toBe(good.rules);
-    expect(bots.update(b.id, { ...good, name: "Renamed", coins: ["SOL"], rules: v2.rules }).version).toBe(3);
+    expect(bots.update(b.id, { ...good, name: "Renamed", coins: ["ETH"], rules: v2.rules }).version).toBe(3);
   });
 
   it("a bot may keep its own name on edit", () => {

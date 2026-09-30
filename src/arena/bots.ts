@@ -2,7 +2,10 @@
 // which theme packs; rules and style changes create a new version so a bot's record is never rewritten behind its history.
 import { randomBytes } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { STYLES, isReservedName, type StyleId } from "../settings.js";
+import { BIZZY_BREAKOUT_COINS } from "../bees/bizzy.js";
+import { BREEZY_COINS } from "../bees/breezy.js";
+import { MAX_BEES } from "../config.js";
+import { STYLES, STYLE_INFO, isReservedName, type StyleId } from "../settings.js";
 import type { Tier } from "./store.js";
 import { avatarOf, themeById } from "./themes.js";
 
@@ -14,10 +17,10 @@ export interface PlanLimits {
   proThemes: boolean;
 }
 
-/** Free: one bot, simple styles, three coins. Pro: more bots, every style, more coins and every pack. */
+/** Free: one bot, simple styles, three coins. Pro: up to the engine's nine slots, every style, more coins and every pack. */
 export const LIMITS: Record<Tier, PlanLimits> = {
   free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false },
-  pro: { bots: 10, maxCoins: 8, styles: STYLES, proThemes: true },
+  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true },
 };
 
 export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] as const;
@@ -30,11 +33,17 @@ export interface BotView {
   style: StyleId;
   coins: string[];
   rules: string;
+  tagline: string;
+  look: string;
+  /** A portrait has been painted for this bot. */
+  image: boolean;
   version: number;
   createdAt: number;
 }
 
 export interface BotInput {
+  tagline?: unknown;
+  look?: unknown;
   name?: unknown;
   theme?: unknown;
   avatar?: unknown;
@@ -61,10 +70,23 @@ interface Row {
   style: string;
   coins: string;
   rules: string;
+  tagline: string;
+  look: string;
+  image: number;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, version: r.version, createdAt: r.created_at });
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, version: r.version, createdAt: r.created_at });
+
+/** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
+export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
+
+/** Says why a style cannot take these coins, or null when it can. */
+export function styleCoinProblem(style: StyleId, coins: readonly string[]): string | null {
+  const only = STYLE_COINS[style];
+  if (!only || coins.every((c) => only.includes(c))) return null;
+  return `${STYLE_INFO[style].label} only trades ${only.join(", ")}. Pick those coins, or another style.`;
+}
 
 interface Clean {
   name: string;
@@ -73,6 +95,8 @@ interface Clean {
   style: StyleId;
   coins: string[];
   rules: string;
+  tagline: string;
+  look: string;
 }
 
 export class Bots {
@@ -111,9 +135,16 @@ export class Bots {
     if (coins.length === 0 || coins.some((c) => !(COINS as readonly string[]).includes(c))) throw new BotError("Pick at least one coin from the list.");
     if (coins.length > lim.maxCoins) throw new BotError(`Your plan allows up to ${lim.maxCoins} coins per bot.`, 403);
 
+    const mismatch = styleCoinProblem(style, coins);
+    if (mismatch) throw new BotError(mismatch);
+
     const rules = typeof i.rules === "string" ? i.rules.trim() : "";
     if (rules.length < MIN_RULES || rules.length > MAX_RULES) throw new BotError(`Rules: ${MIN_RULES} to ${MAX_RULES} characters.`);
-    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules };
+    // A tagline like "the sleepy dip hunter" and a few words on its looks (for the portrait), as in the admin panel.
+    let tagline = typeof i.tagline === "string" ? i.tagline.replace(/\s+/g, " ").trim().slice(0, 40) : "";
+    if (tagline && !/^the\b/i.test(tagline)) tagline = `the ${tagline}`.slice(0, 40);
+    const look = typeof i.look === "string" ? i.look.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look };
   }
 
   create(i: BotInput): BotView {
@@ -125,14 +156,28 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, t);
+      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, t);
       this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, 1, ?, ?, ?, ?)").run(id, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {
       this.db.exec("ROLLBACK");
       throw e;
     }
+    // The member's first bot is remembered for good: the platform's free AI help is for it alone.
+    this.db.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES ('first_bot', ?)").run(id);
     return toView(this.get(id));
+  }
+
+  get firstBotId(): string | null {
+    return (this.db.prepare("SELECT value FROM meta WHERE key = 'first_bot'").get() as { value: string } | undefined)?.value ?? null;
+  }
+
+  find(id: unknown): BotView {
+    return toView(this.get(id));
+  }
+
+  setImage(id: unknown, has: boolean): void {
+    this.db.prepare("UPDATE bots SET image = ? WHERE id = ?").run(has ? 1 : 0, this.get(id).id);
   }
 
   /** Name, theme and avatar change in place; a new style, coin set or rules text is a new version. */
@@ -144,7 +189,7 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, version, cur.id);
+      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, version, cur.id);
       if (!same) this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(cur.id, version, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {

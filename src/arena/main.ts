@@ -4,9 +4,11 @@
 //   ARENA_BASE_URL     the public address of the sign-in page (default http://localhost:5173)
 //   ARENA_PORT / ARENA_BIND   (default 8090 / 127.0.0.1)
 //   ARENA_MAIL_API_KEY + ARENA_MAIL_FROM   send real e-mail through Resend; without them links are printed to the log
+//   ARENA_OPENAI_KEY   the platform's own OpenAI key for the free AI design and portrait of a member's first bunny (ARENA_TEXT_MODEL, ARENA_IMAGE_MODEL, ARENA_AI_DAILY_LIMIT)
 import { createServer } from "node:http";
 import { log } from "../log.js";
 import { ArenaApi } from "./api.js";
+import { PlatformAi } from "./ai.js";
 import { ArenaAuth } from "./auth.js";
 import { ConsoleMailer, ResendMailer, type Mailer } from "./mailer.js";
 import { ArenaStore } from "./store.js";
@@ -16,8 +18,14 @@ const baseUrl = env.ARENA_BASE_URL ?? "http://localhost:5173";
 const mailer: Mailer = env.ARENA_MAIL_API_KEY && env.ARENA_MAIL_FROM ? new ResendMailer(env.ARENA_MAIL_API_KEY, env.ARENA_MAIL_FROM) : new ConsoleMailer();
 if (mailer instanceof ConsoleMailer) log.warn("arena: no mail provider configured, sign-in links are printed to the log (development only)");
 
+// The platform's own AI, for a member's first bunny: a sentence becomes a bunny and gets a portrait. Its own key, never the owner's.
+const ai = env.ARENA_OPENAI_KEY
+  ? new PlatformAi({ apiKey: env.ARENA_OPENAI_KEY, textModel: env.ARENA_TEXT_MODEL ?? "gpt-5.4-nano", imageModel: env.ARENA_IMAGE_MODEL ?? "gpt-image-2", refDir: env.REF_DIR ?? "./dashboard/public/bees" })
+  : null;
+if (!ai) log.warn("arena: ARENA_OPENAI_KEY is not set, the free AI design and portrait are off");
+
 const store = new ArenaStore(env.ARENA_DIR ?? "./data/arena");
-const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://") });
+const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100) });
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;

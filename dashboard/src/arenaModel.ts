@@ -41,7 +41,12 @@ export interface BotDraft {
   style: string;
   coins: string[];
   rules: string;
+  tagline: string;
+  look: string;
 }
+
+/** The coins a style can trade at all (Momentum takes any). Mirrors the server's check, which has the last word. */
+export const STYLE_COINS: Record<string, string[]> = { breezy: ["BTC", "ETH"], bizzy: ["BTC", "ETH", "SOL", "HYPE"] };
 
 /** The first thing wrong with a draft, in words, or null when it can be sent. The server checks everything again. */
 export function draftProblem(d: BotDraft, maxCoins: number): string | null {
@@ -51,6 +56,8 @@ export function draftProblem(d: BotDraft, maxCoins: number): string | null {
   if (!d.style) return "Pick a trading style.";
   if (d.coins.length === 0) return "Pick at least one coin.";
   if (d.coins.length > maxCoins) return `Your plan allows up to ${maxCoins} coins.`;
+  const only = STYLE_COINS[d.style];
+  if (only && d.coins.some((c) => !only.includes(c))) return `${STYLE_LABEL[d.style]?.label ?? d.style} only trades ${only.join(", ")}. Pick those coins, or another style.`;
   const n = d.rules.trim().length;
   if (n < 8) return "Write a few words about how it should trade (8 characters or more).";
   if (n > 2000) return "Keep the rules under 2000 characters.";

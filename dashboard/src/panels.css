@@ -2164,3 +2164,14 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.ab-photo {
+  object-fit: cover;
+  padding: 0;
+  background: var(--card-2);
+}
+.ab-ai {
+  border: 1px dashed color-mix(in srgb, var(--bizzy) 55%, var(--line));
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bizzy) 6%, var(--card));
+}
