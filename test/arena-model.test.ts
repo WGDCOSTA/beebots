@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { arenaView, draftProblem, looksLikeEmail, memberSince, resendIn, runSummary, toggleCoin } from "../dashboard/src/arenaModel.js";
+import { arenaView, draftProblem, handleProblem, leagueLabel, looksLikeEmail, memberSince, pctText, resendIn, runSummary, seasonEnds, toggleCoin } from "../dashboard/src/arenaModel.js";
 
 describe("arenaView", () => {
   it("reads the e-mailed link", () => {
     expect(arenaView("#/arena/verify?token=abc123")).toEqual({ kind: "verify", token: "abc123" });
+  });
+  it("knows the leaderboard page", () => {
+    expect(arenaView("#/arena/ranking")).toEqual({ kind: "ranking" });
   });
   it("falls back to the account page", () => {
     expect(arenaView("#/arena")).toEqual({ kind: "account" });
@@ -36,7 +39,7 @@ describe("memberSince", () => {
 });
 
 describe("draftProblem", () => {
-  const ok = { name: "Fluffy", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "Trade carefully always.", tagline: "", look: "" };
+  const ok = { name: "Fluffy", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "Trade carefully always.", tagline: "", look: "", listed: true };
   it("accepts a complete draft", () => expect(draftProblem(ok, 3)).toBeNull());
   it("says what is missing, one thing at a time", () => {
     expect(draftProblem({ ...ok, name: " a " }, 3)).toMatch(/name/);
@@ -79,3 +82,25 @@ describe("runSummary", () => {
   });
 });
 
+
+describe("leaderboard words", () => {
+  it("names a league by plan and style", () => {
+    expect(leagueLabel("free:breezy")).toBe("Free · Trend");
+    expect(leagueLabel("pro:boozy")).toBe("Pro · Momentum");
+  });
+  it("says when a season ends", () => {
+    const now = Date.UTC(2026, 8, 30, 12);
+    expect(seasonEnds(now + 2 * 86_400_000 + 5 * 3_600_000, now)).toBe("Ends in 2d 5h");
+    expect(seasonEnds(now + 3 * 3_600_000, now)).toBe("Ends in 3h");
+    expect(seasonEnds(now + 60_000, now)).toBe("Ends in 1h");
+    expect(seasonEnds(now - 1, now)).toBe("Ended");
+  });
+  it("signs percentages", () => {
+    expect(pctText(3.456)).toBe("+3.46%");
+    expect(pctText(-0.5)).toBe("-0.50%");
+  });
+  it("checks a public name the way the server does", () => {
+    expect(handleProblem("fast-ana")).toBeNull();
+    for (const bad of ["", "ab", "a".repeat(21), "no spaces", "-x-"]) expect(handleProblem(bad)).not.toBeNull();
+  });
+});

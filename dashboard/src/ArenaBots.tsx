@@ -52,7 +52,7 @@ interface AiStatus {
   portraitBotId: string | null;
 }
 
-const EMPTY: BotDraft = { name: "", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "", tagline: "", look: "" };
+const EMPTY: BotDraft = { name: "", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "", tagline: "", look: "", listed: true };
 
 function Portrait({ cat, theme, avatar, size = 44, botId }: { cat: Catalogue; theme: string; avatar: string; size?: number; botId?: string }) {
   const a = cat.themes.find((t) => t.id === theme)?.avatars.find((x) => x.id === avatar);
@@ -164,6 +164,14 @@ function Form({ cat, limits, ai, initial, editing, onDone, onCancel }: { cat: Ca
       </label>
       <input id="ab-name" className="pinput" maxLength={24} placeholder="e.g. Fluffy Quant" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
 
+      <label className="ab-listed">
+        <input type="checkbox" checked={d.listed} onChange={(e) => setD({ ...d, listed: e.target.checked })} />
+        <span>
+          <strong>Show on the public leaderboard</strong>
+          <span className="dim small"> Others see its name, style, results and your public name. Never your e-mail, rules or open positions. You can turn this off any time.</span>
+        </span>
+      </label>
+
       <label className="eyebrow" htmlFor="ab-tag">
         Tagline <span className="dim">(optional)</span>
       </label>
@@ -263,7 +271,7 @@ export function ArenaBots({ limits }: { limits: Limits }) {
           limits={limits}
           ai={ai}
           editing={mode === "new" ? null : mode}
-          initial={mode === "new" ? EMPTY : { name: mode.name, theme: mode.theme, avatar: mode.avatar, style: mode.style, coins: mode.coins, rules: mode.rules, tagline: mode.tagline, look: mode.look }}
+          initial={mode === "new" ? EMPTY : { name: mode.name, theme: mode.theme, avatar: mode.avatar, style: mode.style, coins: mode.coins, rules: mode.rules, tagline: mode.tagline, look: mode.look, listed: mode.listed }}
           onCancel={() => setMode("list")}
           onDone={() => {
             setMode("list");
@@ -288,7 +296,7 @@ export function ArenaBots({ limits }: { limits: Limits }) {
           <Portrait cat={cat} theme={b.theme} avatar={b.avatar} botId={b.image ? b.id : undefined} />
           <div className="ab-bot-main">
             <div>
-              <strong>{b.name}</strong> {b.tagline && <span className="dim small">{b.tagline} </span>}<span className="badge">{STYLE_LABEL[b.style]?.label ?? b.style}</span> <span className="dim small">v{b.version}</span>
+              <strong>{b.name}</strong> {b.tagline && <span className="dim small">{b.tagline} </span>}<span className="badge">{STYLE_LABEL[b.style]?.label ?? b.style}</span> <span className="dim small">v{b.version}</span> <span className={`badge ${b.listed ? "ok" : ""}`}>{b.listed ? "On the leaderboard" : "Private"}</span>
             </div>
             <div className="dim small">{b.coins.join(" · ")}</div>
             <div className="ab-rules-preview small">{b.rules}</div>

@@ -2,12 +2,14 @@
 // owner's engine and admin panel: nothing on this page can reach them, and they cannot reach a member's data.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArenaBots } from "./ArenaBots";
+import { ArenaRanking } from "./ArenaRanking";
 import { PageNav } from "./LabPage";
-import { arenaView, looksLikeEmail, memberSince, resendIn, TIER_LABEL } from "./arenaModel";
+import { arenaView, handleProblem, looksLikeEmail, memberSince, resendIn, TIER_LABEL } from "./arenaModel";
 
 interface Member {
   id: string;
   email: string;
+  handle: string;
   tier: "free" | "pro";
   createdAt: number;
 }
@@ -110,7 +112,61 @@ function SignIn({ notice }: { notice?: string }) {
   );
 }
 
-function Account({ me, limits, onOut }: { me: Member; limits: Limits; onOut: () => void }) {
+function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(me.handle);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const problem = handleProblem(value);
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await arena<{ handle?: string }>("POST", "account/handle", { handle: value });
+      if (r.status === 200 && r.data.handle) {
+        onChange(r.data.handle);
+        setEditing(false);
+      } else setError(r.data.error ?? "Could not change it.");
+    } catch {
+      setError(DOWN);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="arena-handle">
+      <div className="eyebrow">Public name</div>
+      {!editing ? (
+        <div className="arena-actions">
+          <span className="mono strong">@{me.handle}</span>
+          <button className="pbtn ghost small" onClick={() => setEditing(true)}>
+            Change
+          </button>
+          <span className="dim small">This is what others see on the leaderboard, never your e-mail.</span>
+        </div>
+      ) : (
+        <form
+          className="arena-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <input className="pinput" value={value} maxLength={20} autoFocus onChange={(e) => setValue(e.target.value)} aria-label="Public name" />
+          <button className="pbtn" disabled={busy || problem !== null} title={problem ?? undefined}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+          <button type="button" className="pbtn ghost" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </form>
+      )}
+      {error && <p className="bad">{error}</p>}
+    </div>
+  );
+}
+
+function Account({ me, limits, onOut, onHandle }: { me: Member; limits: Limits; onOut: () => void; onHandle: (h: string) => void }) {
   const [confirm, setConfirm] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -149,6 +205,7 @@ function Account({ me, limits, onOut }: { me: Member; limits: Limits; onOut: () 
           </div>
           <span className={`badge ${me.tier === "pro" ? "ok" : ""}`}>{TIER_LABEL[me.tier]}</span>
         </div>
+        <PublicName me={me} onChange={onHandle} />
         <div className="arena-actions">
           <button className="pbtn ghost" disabled={busy} onClick={() => void out()}>
             Sign out
@@ -247,7 +304,17 @@ export function ArenaPage() {
       <div className="page-inner arena-page">
         <h1>Arena</h1>
         <p className="lead">Bring your own bunnies and race them on real prices with simulated money.</p>
-        {me === "loading" || (me && !limits) || (view.kind === "verify" && me === null && !notice) ? (
+        <nav className="arena-tabs" aria-label="Arena">
+          <a href="#/arena" className={view.kind !== "ranking" ? "on" : ""}>
+            My bunnies
+          </a>
+          <a href="#/arena/ranking" className={view.kind === "ranking" ? "on" : ""}>
+            Leaderboard
+          </a>
+        </nav>
+        {view.kind === "ranking" ? (
+          <ArenaRanking />
+        ) : me === "loading" || (me && !limits) || (view.kind === "verify" && me === null && !notice) ? (
           <div className="pcard arena-card dim">{view.kind === "verify" ? "Signing you in…" : "Loading…"}</div>
         ) : down ? (
           <div className="pcard arena-card">
@@ -260,6 +327,7 @@ export function ArenaPage() {
           <Account
             me={me}
             limits={limits}
+            onHandle={(handle) => setMe({ ...me, handle })}
             onOut={() => {
               setNotice("");
               setMe(null);

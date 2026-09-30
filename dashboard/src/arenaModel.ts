@@ -2,13 +2,15 @@ import { humanLabel } from "./tickerModel.js";
 
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
-export type ArenaView = { kind: "account" } | { kind: "verify"; token: string };
+export type ArenaView = { kind: "account" } | { kind: "verify"; token: string } | { kind: "ranking" };
 
 /** #/arena is the account page; #/arena/verify?token=... is the page the e-mailed link opens. */
 export function arenaView(hash: string): ArenaView {
   const [path = "", query = ""] = hash.replace(/^#\/?/, "").split("?");
   const token = new URLSearchParams(query).get("token");
-  return path.split("/")[1] === "verify" && token ? { kind: "verify", token } : { kind: "account" };
+  const sub = path.split("/")[1];
+  if (sub === "ranking") return { kind: "ranking" };
+  return sub === "verify" && token ? { kind: "verify", token } : { kind: "account" };
 }
 
 /** A member-since line such as "Member since 30 Sep 2026". */
@@ -45,6 +47,8 @@ export interface BotDraft {
   rules: string;
   tagline: string;
   look: string;
+  /** Shown on the public leaderboard. */
+  listed: boolean;
 }
 
 /** The coins a style can trade at all (Momentum takes any). Mirrors the server's check, which has the last word. */
@@ -105,4 +109,29 @@ export function runSummary(enabled: boolean, run: RunStatus | undefined): { head
     detail: `${where}. ${run.decisions ?? 0} decisions.${last}${cap}`,
     tone: pnl > 0 ? "good" : pnl < 0 ? "bad" : "flat",
   };
+}
+
+
+/** A league id such as "free:breezy" in words. */
+export function leagueLabel(id: string): string {
+  const [tier = "", style = ""] = id.split(":");
+  return `${tier === "pro" ? "Pro" : "Free"} · ${STYLE_LABEL[style]?.label ?? style}`;
+}
+
+const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+export const pctText = pct;
+
+/** "Ends in 2d 5h", "Ends in 3h", "Ended". */
+export function seasonEnds(end: number, now: number): string {
+  const ms = end - now;
+  if (ms <= 0) return "Ended";
+  const h = Math.floor(ms / 3_600_000);
+  return h >= 24 ? `Ends in ${Math.floor(h / 24)}d ${h % 24}h` : `Ends in ${Math.max(1, h)}h`;
+}
+
+/** Mirrors the server's public-name rule (the server has the last word). */
+export function handleProblem(raw: string): string | null {
+  const h = raw.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9_-]{2,19}$/.test(h)) return "3 to 20 letters, numbers, - or _.";
+  return null;
 }

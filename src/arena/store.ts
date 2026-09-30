@@ -10,14 +10,29 @@ export interface ArenaUser {
   id: string;
   email: string;
   tier: Tier;
+  /** The public name on the leaderboard. Never the e-mail address. */
+  handle: string;
   createdAt: number;
+}
+
+export const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{2,19}$/;
+const RESERVED_HANDLES = new Set(["admin", "administrator", "arena", "warren", "official", "support", "staff", "moderator", "mod", "system", "root", "bizzy", "breezy", "boozy", "jev", "null", "undefined", "anonymous"]);
+
+/** Says what is wrong with a wished-for public name, or null when it is fine (before uniqueness). */
+export function handleProblem(raw: unknown): string | null {
+  if (typeof raw !== "string") return "Pick a public name.";
+  const h = raw.trim().toLowerCase();
+  if (!HANDLE_RE.test(h)) return "Public name: 3 to 20 letters, numbers, - or _, starting with a letter or number.";
+  if (RESERVED_HANDLES.has(h)) return "That name is reserved. Pick another.";
+  return null;
 }
 
 const ID_RE = /^[0-9a-f]{32}$/;
 
 const DIRECTORY = `
 CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, tier TEXT NOT NULL DEFAULT 'free', created_at INTEGER NOT NULL
+  id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, tier TEXT NOT NULL DEFAULT 'free', created_at INTEGER NOT NULL,
+  handle TEXT
 );
 CREATE TABLE IF NOT EXISTS login_tokens (
   hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER
@@ -30,6 +45,16 @@ CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS attempts_key ON attempts(key, ts);
 CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, user_id TEXT, event TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ai_usage (day TEXT PRIMARY KEY, n INTEGER NOT NULL);
+-- The public leaderboard: only bots their owners chose to list, and only what is shown there (ranking.ts).
+CREATE TABLE IF NOT EXISTS lb_bots (
+  bot_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, handle TEXT NOT NULL, name TEXT NOT NULL, theme TEXT NOT NULL,
+  avatar TEXT NOT NULL, style TEXT NOT NULL, tier TEXT NOT NULL, version INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS lb_bots_user ON lb_bots(user_id);
+CREATE TABLE IF NOT EXISTS lb_points (
+  season TEXT NOT NULL, bot_id TEXT NOT NULL, version INTEGER NOT NULL, ts INTEGER NOT NULL, equity REAL NOT NULL,
+  orders INTEGER NOT NULL, PRIMARY KEY (season, bot_id, version, ts)
+);
 `;
 
 const TENANT = `
@@ -37,7 +62,8 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS bots (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, theme TEXT NOT NULL, avatar TEXT NOT NULL, style TEXT NOT NULL,
   coins TEXT NOT NULL, rules TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
-  tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0
+  tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0,
+  listed INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS bot_versions (
   bot_id TEXT NOT NULL, version INTEGER NOT NULL, style TEXT NOT NULL, coins TEXT NOT NULL, rules TEXT NOT NULL,
@@ -50,9 +76,10 @@ interface UserRow {
   email: string;
   tier: string;
   created_at: number;
+  handle: string | null;
 }
 
-const toUser = (r: UserRow): ArenaUser => ({ id: r.id, email: r.email, tier: r.tier === "pro" ? "pro" : "free", createdAt: r.created_at });
+const toUser = (r: UserRow): ArenaUser => ({ id: r.id, email: r.email, tier: r.tier === "pro" ? "pro" : "free", handle: r.handle ?? `bunny-${r.id.slice(0, 4)}`, createdAt: r.created_at });
 
 export class ArenaStore {
   readonly dir: DatabaseSync;
@@ -63,6 +90,30 @@ export class ArenaStore {
     this.dir = new DatabaseSync(join(root, "arena.db"));
     this.dir.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
     this.dir.exec(DIRECTORY);
+    // Directories made before public names existed: add the column and give everyone a neutral name (never their e-mail).
+    if (!(this.dir.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>).some((c) => c.name === "handle")) this.dir.exec("ALTER TABLE users ADD COLUMN handle TEXT");
+    this.dir.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_handle ON users(handle)");
+    for (const r of this.dir.prepare("SELECT id FROM users WHERE handle IS NULL").all() as Array<{ id: string }>) this.dir.prepare("UPDATE users SET handle = ? WHERE id = ?").run(this.freeHandle(r.id), r.id);
+  }
+
+  /** A neutral default public name that nobody has taken. */
+  private freeHandle(id: string): string {
+    for (let n = 4; n <= 32; n++) {
+      const h = `bunny-${id.slice(0, n)}`.slice(0, 20);
+      if (!this.dir.prepare("SELECT 1 FROM users WHERE handle = ?").get(h)) return h;
+    }
+    return `bunny-${id.slice(0, 12)}`;
+  }
+
+  /** Changes a member's public name. Returns a message when it cannot, or null on success. */
+  setHandle(userId: string, raw: unknown): string | null {
+    const bad = handleProblem(raw);
+    if (bad) return bad;
+    const h = String(raw).trim().toLowerCase();
+    const taken = this.dir.prepare("SELECT id FROM users WHERE handle = ?").get(h) as { id: string } | undefined;
+    if (taken && taken.id !== userId) return "That name is taken. Pick another.";
+    this.dir.prepare("UPDATE users SET handle = ? WHERE id = ?").run(h, userId);
+    return null;
   }
 
   userByEmail(email: string): ArenaUser | null {
@@ -77,8 +128,9 @@ export class ArenaStore {
   }
 
   createUser(id: string, email: string, now: number): ArenaUser {
-    this.dir.prepare("INSERT INTO users (id, email, tier, created_at) VALUES (?, ?, 'free', ?)").run(id, email, now);
-    return { id, email, tier: "free", createdAt: now };
+    const handle = this.freeHandle(id);
+    this.dir.prepare("INSERT INTO users (id, email, tier, created_at, handle) VALUES (?, ?, 'free', ?, ?)").run(id, email, now, handle);
+    return { id, email, tier: "free", handle, createdAt: now };
   }
 
   /** This user's own database. Throws for an id that is not a current user, so a path can never be chosen by a caller. */
@@ -91,7 +143,7 @@ export class ArenaStore {
       db.exec(TENANT);
       // Databases made before a column existed get it here (CREATE TABLE IF NOT EXISTS does not add columns).
       const have = new Set((db.prepare("PRAGMA table_info(bots)").all() as Array<{ name: string }>).map((c) => c.name));
-      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"]] as const)
+      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"]] as const)
         if (!have.has(col)) db.exec(`ALTER TABLE bots ADD COLUMN ${col} ${ddl}`);
       this.tenants.set(userId, db);
     }
@@ -135,6 +187,9 @@ export class ArenaStore {
     this.tenants.get(userId)?.close();
     this.tenants.delete(userId);
     this.dir.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    // Their bots leave the public leaderboard with them.
+    this.dir.prepare("DELETE FROM lb_points WHERE bot_id IN (SELECT bot_id FROM lb_bots WHERE user_id = ?)").run(userId);
+    this.dir.prepare("DELETE FROM lb_bots WHERE user_id = ?").run(userId);
     this.dir.prepare("DELETE FROM users WHERE id = ?").run(userId);
     for (const ext of ["", "-wal", "-shm"]) rmSync(join(this.root, "tenants", `${userId}.db${ext}`), { force: true });
     rmSync(join(this.root, "tenants", userId), { recursive: true, force: true });

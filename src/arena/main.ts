@@ -4,7 +4,7 @@
 //   ARENA_BASE_URL     the public address of the sign-in page (default http://localhost:5173)
 //   ARENA_PORT / ARENA_BIND   (default 8090 / 127.0.0.1)
 //   ARENA_MAIL_API_KEY + ARENA_MAIL_FROM   send real e-mail through Resend; without them links are printed to the log
-//   ARENA_RUN=1        open the race track: run members' bunnies on paper (needs ARENA_OPENAI_KEY; ARENA_MAX_RUNNERS, ARENA_TICK_MS, ARENA_START_USD, ARENA_BOT_DAILY_USD, ARENA_LLM_MODEL, ARENA_LLM_USD_PER_MTOK)
+//   ARENA_RUN=1        open the race track: run members' bunnies on paper (needs ARENA_OPENAI_KEY; ARENA_MAX_RUNNERS, ARENA_TICK_MS, ARENA_START_USD, ARENA_BOT_DAILY_USD, ARENA_LLM_MODEL, ARENA_LLM_USD_PER_MTOK, ARENA_SAMPLE_MS for the leaderboard samples)
 //   ARENA_OPENAI_KEY   the platform's own OpenAI key for the free AI design and portrait of a member's first bunny (ARENA_TEXT_MODEL, ARENA_IMAGE_MODEL, ARENA_AI_DAILY_LIMIT)
 import { createServer } from "node:http";
 import { log } from "../log.js";
@@ -18,6 +18,7 @@ import { createPublicApi } from "../okx/public.js";
 import { STYLES } from "../settings.js";
 import { LlmSystemOne } from "./decider.js";
 import { sharedFeed } from "./feed.js";
+import { Leaderboard } from "./ranking.js";
 import { ArenaRunner } from "./runner.js";
 import { ArenaAuth } from "./auth.js";
 import { ConsoleMailer, ResendMailer, type Mailer } from "./mailer.js";
@@ -37,6 +38,7 @@ if (!ai) log.warn("arena: ARENA_OPENAI_KEY is not set, the free AI design and po
 const store = new ArenaStore(env.ARENA_DIR ?? "./data/arena");
 
 // The race track: runs every member's bunnies on paper (runner.ts). Needs the platform's model key and is off by default.
+const leaderboard = new Leaderboard(store.dir);
 let runner: ArenaRunner | null = null;
 if (env.ARENA_RUN === "1") {
   if (!env.ARENA_OPENAI_KEY) log.warn("arena: ARENA_RUN=1 needs ARENA_OPENAI_KEY (the platform's decision model). Bots are only stored.");
@@ -54,13 +56,15 @@ if (env.ARENA_RUN === "1") {
       startUsd: Number(env.ARENA_START_USD ?? 1000),
       dailyUsd: Number(env.ARENA_BOT_DAILY_USD ?? 0.5),
       usdPerMTok: Number(env.ARENA_LLM_USD_PER_MTOK ?? 0.3),
+      leaderboard,
+      sampleMs: Number(env.ARENA_SAMPLE_MS ?? 600_000),
     });
     runner.begin();
     log.info("arena: race track open (paper trading only)", { maxRunners: Number(env.ARENA_MAX_RUNNERS ?? 25) });
   }
 }
 
-const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner });
+const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner, leaderboard });
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;

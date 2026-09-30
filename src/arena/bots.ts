@@ -37,11 +37,14 @@ export interface BotView {
   look: string;
   /** A portrait has been painted for this bot. */
   image: boolean;
+  /** Shown on the public leaderboard (name, style and results only; never positions or rules). */
+  listed: boolean;
   version: number;
   createdAt: number;
 }
 
 export interface BotInput {
+  listed?: unknown;
   tagline?: unknown;
   look?: unknown;
   name?: unknown;
@@ -73,10 +76,11 @@ interface Row {
   tagline: string;
   look: string;
   image: number;
+  listed: number;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, version: r.version, createdAt: r.created_at });
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, version: r.version, createdAt: r.created_at });
 
 /** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
 export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
@@ -97,6 +101,7 @@ interface Clean {
   rules: string;
   tagline: string;
   look: string;
+  listed: boolean | undefined;
 }
 
 export class Bots {
@@ -144,7 +149,7 @@ export class Bots {
     let tagline = typeof i.tagline === "string" ? i.tagline.replace(/\s+/g, " ").trim().slice(0, 40) : "";
     if (tagline && !/^the\b/i.test(tagline)) tagline = `the ${tagline}`.slice(0, 40);
     const look = typeof i.look === "string" ? i.look.replace(/\s+/g, " ").trim().slice(0, 400) : "";
-    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look };
+    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined };
   }
 
   create(i: BotInput): BotView {
@@ -156,7 +161,7 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, t);
+      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, t);
       this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, 1, ?, ?, ?, ?)").run(id, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {
@@ -189,7 +194,7 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, version, cur.id);
+      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, listed = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === undefined ? cur.listed : c.listed ? 1 : 0, version, cur.id);
       if (!same) this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(cur.id, version, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {

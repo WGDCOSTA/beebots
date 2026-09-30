@@ -16,6 +16,7 @@ import type { MarketFeed } from "../market/data.js";
 import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, type BotView } from "./bots.js";
+import type { Leaderboard } from "./ranking.js";
 import type { ArenaStore } from "./store.js";
 
 const SLOT: BeeId = "bee1";
@@ -36,6 +37,10 @@ export interface RunnerOpts {
   /** Estimated cost per million tokens (input and output together), for the cap. */
   usdPerMTok?: number;
   now?: () => number;
+  /** Where listed bots' equity samples go (ranking.ts). Without it nothing is ranked. */
+  leaderboard?: Leaderboard;
+  /** How often a running bot's paper equity is sampled for the ranking. */
+  sampleMs?: number;
 }
 
 export type RunState = "running" | "queued" | "error";
@@ -50,6 +55,8 @@ export interface RunStatus {
   position?: { coin: string; side: string; sizeUsd: number | null; uplUsd: number; minutesHeld: number } | null;
   tradesToday?: number;
   decisions?: number;
+  /** Orders the paper account has sent (the ranking's "trades"). */
+  orders?: number;
   spentUsd?: number;
   capped?: boolean;
   last?: { choice: string | null; confidence: number | null; status: string; ts: number } | null;
@@ -59,6 +66,8 @@ interface Run {
   botId: string;
   userId: string;
   version: number;
+  /** The bot as the member last saved it (name, avatar, listed...), kept fresh by update(). */
+  bot: BotView;
   engine: Engine;
   db: Db;
   jev: Jev;
@@ -70,11 +79,12 @@ export class ArenaRunner {
   private runs = new Map<string, Run>();
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
-  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider">;
+  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard">;
   private timer: NodeJS.Timeout | null = null;
+  private sampler: NodeJS.Timeout | null = null;
 
   constructor(opts: RunnerOpts) {
-    this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, now: Date.now, ...opts };
+    this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, now: Date.now, ...opts };
   }
 
   /** The positions every running bot holds, so the shared feed keeps their coins fresh. */
@@ -135,7 +145,7 @@ export class ArenaRunner {
         now: this.o.now,
       });
       await engine.start();
-      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, engine, db, jev, file, startedAt: this.o.now() });
+      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, file, startedAt: this.o.now() });
       this.errors.delete(bot.id);
     } catch (e) {
       db.close();
@@ -160,7 +170,10 @@ export class ArenaRunner {
       for (const r of [...this.runs.values()].filter((x) => x.userId === userId)) {
         const b = byId.get(r.botId);
         if (!b || b.version !== r.version) this.stopRun(r, true);
+        else r.bot = b; // a cosmetic edit keeps the account, and the ranking shows the new name and avatar
       }
+      // A bot that is gone, or that its owner took off the leaderboard, leaves it with every sample.
+      for (const id of this.o.leaderboard?.listedBots(userId) ?? []) if (!byId.get(id)?.listed) this.o.leaderboard?.remove(id);
       // Old versions' files are not needed once their engine is gone.
       if (user) this.prune(userId, bots);
       for (const b of bots) {
@@ -193,7 +206,22 @@ export class ArenaRunner {
   forget(userId: string): Promise<void> {
     return this.serial(async () => {
       for (const r of [...this.runs.values()].filter((x) => x.userId === userId)) this.stopRun(r, true);
+      for (const id of this.o.leaderboard?.listedBots(userId) ?? []) this.o.leaderboard?.remove(id);
     });
+  }
+
+  /** One sample of every running, listed bot's paper account for the ranking. */
+  sample(ts = this.o.now()): void {
+    const lb = this.o.leaderboard;
+    if (!lb) return;
+    for (const r of this.runs.values()) {
+      if (!r.bot.listed) continue;
+      const user = this.o.store.userById(r.userId);
+      const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
+      if (!user || !b) continue;
+      lb.record({ botId: r.botId, userId: r.userId, handle: user.handle, name: r.bot.name, theme: r.bot.theme, avatar: r.bot.avatar, style: r.bot.style, tier: user.tier, version: r.version }, b.equityUsd, b.totals.orders, ts);
+    }
+    lb.prune(ts);
   }
 
   /** Every member with a bot: the periodic safety net, and the first pass at start-up. */
@@ -205,10 +233,12 @@ export class ArenaRunner {
   begin(everyMs = 60_000): void {
     void this.syncAll();
     this.timer = setInterval(() => void this.syncAll(), everyMs);
+    if (this.o.leaderboard) this.sampler = setInterval(() => this.sample(), this.o.sampleMs);
   }
 
   stopAll(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.sampler) clearInterval(this.sampler);
     for (const r of [...this.runs.values()]) this.stopRun(r, false);
   }
 
@@ -246,6 +276,7 @@ export class ArenaRunner {
         position: b.position ? { coin: b.position.coin, side: b.position.side, sizeUsd: b.position.sizeUsd, uplUsd: b.position.uplUsd, minutesHeld: b.position.minutesHeld } : null,
         tradesToday: b.tradesToday,
         decisions: b.totals.decisions,
+        orders: b.totals.orders,
         spentUsd: Number(r.jev.spentTodayUsd.toFixed(4)),
         capped: r.jev.capTripped,
         last: b.last ? { choice: b.last.choice, confidence: b.last.confidence, status: b.last.status, ts: b.last.ts } : null,

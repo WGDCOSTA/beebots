@@ -7,6 +7,7 @@ import { clientAddr } from "../visitors.js";
 import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
 import { AiError, MemberAi, type AiService } from "./ai.js";
 import { BotError, Bots, COINS, LIMITS } from "./bots.js";
+import type { Leaderboard } from "./ranking.js";
 import type { RunStatus } from "./runner.js";
 import { THEMES } from "./themes.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
@@ -22,6 +23,8 @@ export interface ApiOpts {
   ai?: AiService | null;
   /** AI calls the whole platform may spend in a day. */
   aiDailyLimit?: number;
+  /** The public leaderboard (null = none). */
+  leaderboard?: Leaderboard | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
   runner?: {
     update(userId: string): Promise<void>;
@@ -30,7 +33,7 @@ export interface ApiOpts {
   } | null;
 }
 
-const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, createdAt: u.createdAt });
+const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, handle: u.handle, createdAt: u.createdAt });
 
 function reply(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
   res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
@@ -93,6 +96,19 @@ export class ArenaApi {
       res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "private, max-age=300" });
       res.end(jpg);
       return true;
+    }
+    if (req.method === "GET" && route === "/leaderboard") {
+      // Public: anyone can read the standings. A signed-in member also gets their own bots marked.
+      const lb = this.opts.leaderboard;
+      if (!lb) return this.send(res, 200, { enabled: false });
+      const q = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const season = q.get("season");
+      const league = q.get("league");
+      const st = lb.standings(season && /^\d{4}-W\d{2}$/.test(season) ? season : undefined);
+      const me = this.auth.user(sessionOf(req));
+      const mine = me ? lb.ownedBy(me.id) : new Set<string>();
+      const rows = st.rows.filter((r) => !league || r.league === league).map((r) => ({ ...r, mine: mine.has(r.botId) }));
+      return this.send(res, 200, { enabled: true, ...st, rows });
     }
     if (req.method === "GET" && route === "/ai/status") {
       const u = this.auth.user(sessionOf(req));
@@ -163,13 +179,17 @@ export class ArenaApi {
             reply(res, 200, { bot: bots.create(body) });
             void this.opts.runner?.update(u.id);
           } else if (route === "/bots/update") {
-            reply(res, 200, { bot: bots.update(body.id, body) });
+            const bot = bots.update(body.id, body);
+            // Taking a bot off the leaderboard is immediate, not at the next sample.
+            if (!bot.listed) this.opts.leaderboard?.remove(bot.id);
+            reply(res, 200, { bot });
             void this.opts.runner?.update(u.id);
           }
           else if (route === "/bots/versions") reply(res, 200, { versions: bots.versions(body.id) });
           else {
             const gone = bots.find(body.id);
             bots.remove(gone.id);
+            this.opts.leaderboard?.remove(gone.id);
             this.store.removePortrait(u.id, gone.id);
             reply(res, 200, { ok: true });
             void this.opts.runner?.update(u.id);
@@ -196,6 +216,15 @@ export class ArenaApi {
           if (e instanceof AiError || e instanceof BotError) return this.send(res, e.status, { error: e.message });
           throw e;
         }
+      }
+      case "/account/handle": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        const bad = this.store.setHandle(u.id, body.handle);
+        if (bad) return this.send(res, 400, { error: bad });
+        const handle = this.store.userById(u.id)!.handle;
+        this.opts.leaderboard?.rename(u.id, handle);
+        return this.send(res, 200, { handle });
       }
       case "/account/delete": {
         const u = this.auth.user(sessionOf(req));
