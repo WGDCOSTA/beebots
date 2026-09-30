@@ -2062,3 +2062,105 @@
     width: 100%;
   }
 }
+
+/* Arena: bots */
+.ab-portrait {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--av) 22%, var(--card-2));
+  border: 2px solid var(--av);
+}
+.ab-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ab-form .eyebrow {
+  margin-top: 8px;
+}
+.ab-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ab-chip,
+.ab-avatar,
+.ab-style {
+  font: inherit;
+  color: var(--text-2);
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.ab-chip {
+  padding: 6px 12px;
+  font-weight: 600;
+}
+.ab-chip small,
+.ab-style small {
+  color: var(--warning);
+  font-weight: 700;
+}
+.ab-chip.on,
+.ab-avatar.on,
+.ab-style.on {
+  color: var(--text);
+  border-color: var(--bizzy);
+  background: color-mix(in srgb, var(--bizzy) 16%, var(--card-2));
+}
+.ab-chip:disabled,
+.ab-style:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ab-avatars {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+.ab-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+}
+.ab-styles {
+  display: grid;
+  gap: 8px;
+}
+.ab-style {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.ab-rules {
+  resize: vertical;
+  min-height: 96px;
+  font: inherit;
+}
+.ab-bot {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.ab-bot-main {
+  min-width: 0;
+  flex: 1;
+}
+.ab-rules-preview {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

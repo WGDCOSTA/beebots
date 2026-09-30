@@ -27,3 +27,38 @@ export function looksLikeEmail(v: string): boolean {
 export function resendIn(sentAt: number, now: number, cooldownMs = 30_000): number {
   return Math.max(0, Math.ceil((sentAt + cooldownMs - now) / 1000));
 }
+
+export const STYLE_LABEL: Record<string, { label: string; blurb: string }> = {
+  breezy: { label: "Trend", blurb: "Follows BTC and ETH trends. Few trades, calm." },
+  bizzy: { label: "Breakout", blurb: "One volatility breakout a day, ridden to the close." },
+  boozy: { label: "Momentum", blurb: "Chases fast moves. Busier and riskier." },
+};
+
+export interface BotDraft {
+  name: string;
+  theme: string;
+  avatar: string;
+  style: string;
+  coins: string[];
+  rules: string;
+}
+
+/** The first thing wrong with a draft, in words, or null when it can be sent. The server checks everything again. */
+export function draftProblem(d: BotDraft, maxCoins: number): string | null {
+  const name = d.name.trim();
+  if (name.length < 2 || name.length > 24) return "Give it a name of 2 to 24 characters.";
+  if (!d.theme || !d.avatar) return "Pick a theme and an avatar.";
+  if (!d.style) return "Pick a trading style.";
+  if (d.coins.length === 0) return "Pick at least one coin.";
+  if (d.coins.length > maxCoins) return `Your plan allows up to ${maxCoins} coins.`;
+  const n = d.rules.trim().length;
+  if (n < 8) return "Write a few words about how it should trade (8 characters or more).";
+  if (n > 2000) return "Keep the rules under 2000 characters.";
+  return null;
+}
+
+/** Toggles a coin, refusing to go past the plan's limit. */
+export function toggleCoin(coins: string[], coin: string, max: number): string[] {
+  if (coins.includes(coin)) return coins.filter((c) => c !== coin);
+  return coins.length >= max ? coins : [...coins, coin];
+}

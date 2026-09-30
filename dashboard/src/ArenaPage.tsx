@@ -1,6 +1,7 @@
 // #/arena: sign in with an e-mailed link, and the account page. The Arena is its own service (/arena/*), separate from the
 // owner's engine and admin panel: nothing on this page can reach them, and they cannot reach a member's data.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ArenaBots } from "./ArenaBots";
 import { PageNav } from "./LabPage";
 import { arenaView, looksLikeEmail, memberSince, resendIn, TIER_LABEL } from "./arenaModel";
 
@@ -9,6 +10,13 @@ interface Member {
   email: string;
   tier: "free" | "pro";
   createdAt: number;
+}
+
+export interface Limits {
+  bots: number;
+  maxCoins: number;
+  styles: string[];
+  proThemes: boolean;
 }
 
 async function arena<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: T & { error?: string } }> {
@@ -102,7 +110,7 @@ function SignIn({ notice }: { notice?: string }) {
   );
 }
 
-function Account({ me, onOut }: { me: Member; onOut: () => void }) {
+function Account({ me, limits, onOut }: { me: Member; limits: Limits; onOut: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -148,10 +156,7 @@ function Account({ me, onOut }: { me: Member; onOut: () => void }) {
         </div>
       </div>
 
-      <div className="pcard arena-card">
-        <h3>Your bunnies</h3>
-        <p className="dim">Creating and running your own bunny is the next step. Your account is ready: it has its own private database that nobody else, including the platform's owner, has a route to.</p>
-      </div>
+      <ArenaBots limits={limits} />
 
       <div className="pcard arena-card arena-danger">
         <h3>Delete my account</h3>
@@ -183,6 +188,7 @@ function Account({ me, onOut }: { me: Member; onOut: () => void }) {
 export function ArenaPage() {
   const [view, setView] = useState(() => arenaView(location.hash));
   const [me, setMe] = useState<Member | null | "loading">("loading");
+  const [limits, setLimits] = useState<Limits | null>(null);
   const [notice, setNotice] = useState("");
   const [down, setDown] = useState(false);
   const verifying = useRef(false);
@@ -195,8 +201,9 @@ export function ArenaPage() {
 
   const load = useCallback(async () => {
     try {
-      const r = await arena<{ user?: Member }>("GET", "me");
+      const r = await arena<{ user?: Member; limits?: Limits }>("GET", "me");
       setDown(false);
+      if (r.data.limits) setLimits(r.data.limits);
       setMe(r.status === 200 && r.data.user ? r.data.user : null);
     } catch {
       setDown(true);
@@ -213,7 +220,10 @@ export function ArenaPage() {
       void (async () => {
         try {
           const r = await arena<{ user?: Member }>("POST", "auth/verify", { token });
-          if (r.status === 200 && r.data.user) setMe(r.data.user);
+          if (r.status === 200 && r.data.user) {
+            setMe(r.data.user);
+            void load();
+          }
           else {
             setNotice(r.data.error ?? "This link is invalid, expired or already used.");
             setMe(null);
@@ -237,7 +247,7 @@ export function ArenaPage() {
       <div className="page-inner arena-page">
         <h1>Arena</h1>
         <p className="lead">Bring your own bunnies and race them on real prices with simulated money.</p>
-        {me === "loading" || (view.kind === "verify" && me === null && !notice) ? (
+        {me === "loading" || (me && !limits) || (view.kind === "verify" && me === null && !notice) ? (
           <div className="pcard arena-card dim">{view.kind === "verify" ? "Signing you in…" : "Loading…"}</div>
         ) : down ? (
           <div className="pcard arena-card">
@@ -246,9 +256,10 @@ export function ArenaPage() {
               Try again
             </button>
           </div>
-        ) : me ? (
+        ) : me && limits ? (
           <Account
             me={me}
+            limits={limits}
             onOut={() => {
               setNotice("");
               setMe(null);

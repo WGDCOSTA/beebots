@@ -5,6 +5,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { readJson } from "../gate.js";
 import { clientAddr } from "../visitors.js";
 import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
+import { BotError, Bots, COINS, LIMITS } from "./bots.js";
+import { THEMES } from "./themes.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
 const COOKIE = "arena_session";
@@ -49,7 +51,17 @@ export class ArenaApi {
     if (req.method === "GET" && route === "/me") {
       const u = this.auth.user(sessionOf(req));
       if (!u) reply(res, 401, { error: "not signed in" });
-      else reply(res, 200, { user: view(u) });
+      else reply(res, 200, { user: view(u), limits: LIMITS[u.tier] });
+      return true;
+    }
+    if (req.method === "GET" && route === "/catalogue") {
+      reply(res, 200, { themes: THEMES, coins: COINS, limits: LIMITS });
+      return true;
+    }
+    if (req.method === "GET" && route === "/bots") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) reply(res, 401, { error: "not signed in" });
+      else reply(res, 200, { bots: new Bots(this.store.tenant(u.id), u.tier, this.now).list() });
       return true;
     }
     if (req.method !== "POST") {
@@ -86,6 +98,30 @@ export class ArenaApi {
       case "/auth/logout": {
         this.auth.logout(sessionOf(req));
         reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
+        return true;
+      }
+      case "/bots/create":
+      case "/bots/update":
+      case "/bots/delete":
+      case "/bots/versions": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) {
+          reply(res, 401, { error: "not signed in" });
+          return true;
+        }
+        const bots = new Bots(this.store.tenant(u.id), u.tier, this.now);
+        try {
+          if (route === "/bots/create") reply(res, 200, { bot: bots.create(body) });
+          else if (route === "/bots/update") reply(res, 200, { bot: bots.update(body.id, body) });
+          else if (route === "/bots/versions") reply(res, 200, { versions: bots.versions(body.id) });
+          else {
+            bots.remove(body.id);
+            reply(res, 200, { ok: true });
+          }
+        } catch (e) {
+          if (e instanceof BotError) reply(res, e.status, { error: e.message });
+          else throw e;
+        }
         return true;
       }
       case "/account/delete": {
