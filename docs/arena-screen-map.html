@@ -1,0 +1,1190 @@
+<title>Arena Screen Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column review document. Coverage table first, then findings, the site map, and every screen as phone mockups with notes beside them.
+   The look is the product's own (violet-black ground, amber accent, Inter and JetBrains Mono) so the mockups read as the real thing. Single theme on purpose. */
+:root {
+  color-scheme: dark;
+  --doc: #0b0a10;
+  --page: #08070c;
+  --card: #13121a;
+  --card-2: #1b1a24;
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #ffffff;
+  --text-2: #c3c2b7;
+  --muted: #8a8894;
+  --accent: #c98500;
+  --accent-text: #f0b43c;
+  --violet: #9085e9;
+  --magenta: #d55181;
+  --good: #0ca30c;
+  --good-text: #3fcf3f;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --critical-text: #ff6f6f;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--doc); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; padding-inline: 16px; padding-block: 0 72px; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin-inline: auto; }
+a { color: var(--accent-text); }
+h1, h2, h3, h4 { text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(26px, 5vw, 38px); font-weight: 800; line-height: 1.1; }
+h2 { font-size: 22px; font-weight: 700; }
+h3 { font-size: 15px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.dim { color: var(--muted); }
+.mono { font-family: var(--mono); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--doc) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); margin-inline: -16px; padding: 10px 16px; }
+.bar nav { max-width: 1120px; margin-inline: auto; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.bar nav::-webkit-scrollbar { display: none; }
+.bar a { flex: none; text-decoration: none; color: var(--text-2); font-weight: 600; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid transparent; }
+.bar a:hover, .bar a:focus-visible { color: #fff; border-color: var(--line); outline: none; }
+
+header.hero { padding-block: 40px 28px; display: grid; gap: 14px; }
+.lead { color: var(--text-2); max-width: 70ch; font-size: 15.5px; }
+section { padding-block: 34px 10px; scroll-margin-top: 64px; }
+section > .head { display: grid; gap: 6px; margin-bottom: 18px; }
+section > .head p { color: var(--text-2); max-width: 72ch; }
+
+/* status marks: always a glyph and a word, never colour alone */
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.st i { font-style: normal; font-family: var(--mono); width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; border: 1px solid currentColor; }
+.st.built { color: var(--good-text); }
+.st.redesign { color: var(--warning); }
+.st.drawn { color: var(--violet); }
+.st.decide { color: var(--magenta); }
+
+/* coverage */
+.counts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 14px; }
+.counts button { all: unset; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); min-height: 44px; }
+.counts button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+.counts button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.counts b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--card-2); position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+tr.grp td { background: var(--card-2); font-weight: 700; color: var(--text-2); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+td .ref { font-family: var(--mono); font-size: 12px; color: var(--accent-text); text-decoration: none; }
+
+/* findings */
+.finds { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.find { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.find .sev { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; }
+.sev.high { background: color-mix(in srgb, var(--critical) 22%, var(--card)); color: var(--critical-text); }
+.sev.med { background: color-mix(in srgb, var(--warning) 18%, var(--card)); color: var(--warning); }
+.sev.low { background: var(--card-2); color: var(--text-2); }
+.sev.ok { background: color-mix(in srgb, var(--good) 20%, var(--card)); color: var(--good-text); }
+.find .ev { font-family: var(--mono); font-size: 12px; color: var(--text-2); background: var(--card-2); border-radius: 8px; padding: 6px 8px; overflow-wrap: anywhere; }
+.find .fix { color: var(--text-2); }
+.find .fix b { color: #fff; }
+
+/* sitemap */
+.tree { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.tree .col { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; }
+.tree ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.tree li { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); }
+.tree li:first-child { border-top: 0; }
+.tree li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+
+/* screen rows */
+.screen { padding-block: 30px 8px; border-top: 1px solid var(--line); margin-top: 18px; scroll-margin-top: 64px; }
+.screen .head { display: grid; gap: 6px; margin-bottom: 16px; }
+.screen .head .id { font-family: var(--mono); color: var(--accent-text); font-size: 12px; font-weight: 700; }
+.screen .head p { color: var(--text-2); max-width: 72ch; }
+.row { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+.phones { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; min-width: 0; }
+.cap { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+.notes { flex: 1 1 260px; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 7px; color: var(--text-2); }
+.notes li::marker { color: var(--accent-text); }
+.notes .cov { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 8px; border-top: 1px solid var(--line); }
+.wide { flex: 1 1 100%; }
+
+/* ---------- mockup kit (what the product screens are made of) ---------- */
+.phone { width: 340px; max-width: 100%; background: var(--page); border: 1px solid rgba(255,255,255,.14); border-radius: 30px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 10px; }
+.brand { font-weight: 800; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.brand .logo { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--magenta)); display: inline-block; }
+.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.iconbtn { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: var(--text-2); position: relative; }
+.iconbtn .dot { position: absolute; top: 10px; right: 11px; width: 8px; height: 8px; border-radius: 50%; background: var(--magenta); }
+.scr { padding: 6px 16px 16px; display: grid; gap: 12px; align-content: start; flex: 1; }
+.scr h4 { font-size: 20px; font-weight: 800; }
+.scr .sub { color: var(--text-2); font-size: 13px; }
+.m-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 8px; min-width: 0; }
+.m-card > * { min-width: 0; }
+.pill.wrap { white-space: normal; max-width: 100%; }
+.m-card.c2 { background: var(--card-2); }
+.between { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0; }
+.stack { display: grid; gap: 4px; min-width: 0; }
+.small { font-size: 12.5px; }
+.tiny { font-size: 11.5px; }
+.btn { min-height: 44px; border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center; border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--line)); background: color-mix(in srgb, var(--accent) 24%, var(--card)); color: #fff; }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--text-2); }
+.btn.danger { border-color: color-mix(in srgb, var(--critical) 70%, var(--line)); background: color-mix(in srgb, var(--critical) 24%, var(--card)); }
+.btn.sm { min-height: 44px; padding: 8px 12px; font-size: 13px; }
+.btn.dis { opacity: .45; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card-2); color: var(--text-2); font-size: 13px; font-weight: 600; }
+.chip.on { color: #fff; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--card-2)); }
+.chip.lock { opacity: .55; }
+.chip small { color: var(--warning); font-weight: 700; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; }
+.pill.ok { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 55%, var(--line)); }
+.pill.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 50%, var(--line)); }
+.pill.bad { color: var(--critical-text); border-color: color-mix(in srgb, var(--critical) 55%, var(--line)); }
+.pill.pro { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.pill.vio { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 55%, var(--line)); }
+.av { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; border: 2px solid var(--c, var(--accent)); background: color-mix(in srgb, var(--c, var(--accent)) 20%, var(--card-2)); flex: none; }
+.av.lg { width: 64px; height: 64px; font-size: 32px; }
+.av.sm { width: 36px; height: 36px; font-size: 18px; }
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kv > div { background: var(--card-2); border-radius: 10px; padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }
+.kv b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.kv span { color: var(--muted); font-size: 11px; }
+.good { color: var(--good-text); }
+.bad { color: var(--critical-text); }
+.meter { height: 8px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.meter.warn i { background: var(--warning); }
+.meter.bad i { background: var(--critical); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs span { flex: none; padding: 12px 6px; font-weight: 600; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; min-height: 44px; }
+.tabs span.on { color: #fff; border-bottom-color: var(--accent); }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: #0d0c13; padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); }
+.tabbar div { display: grid; justify-items: center; gap: 2px; font-size: 10.5px; font-weight: 600; color: var(--muted); padding: 4px 0; min-height: 44px; }
+.tabbar div.on { color: var(--accent-text); }
+.tabbar .plus { color: #fff; }
+.tabbar .plus span { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; margin-top: -14px; border: 3px solid #0d0c13; }
+.list > div { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); min-height: 56px; min-width: 0; }
+.list > div:first-child { border-top: 0; }
+.list .grow { flex: 1; min-width: 0; }
+.ttl { font-weight: 700; overflow-wrap: anywhere; }
+.steps { display: flex; gap: 6px; }
+.steps i { flex: 1; height: 4px; border-radius: 999px; background: var(--card-2); }
+.steps i.on { background: var(--accent); }
+.field { display: grid; gap: 6px; }
+.field label { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.input { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--card-2); padding: 12px; color: var(--text-2); font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.input.focus { border-color: var(--accent); color: #fff; }
+.input.area { align-items: flex-start; min-height: 88px; }
+.toggle { width: 44px; height: 26px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); }
+.toggle.on { background: color-mix(in srgb, var(--accent) 50%, var(--card-2)); border-color: var(--accent); }
+.toggle.on::after { left: 21px; background: #fff; }
+.spark { width: 100%; height: auto; display: block; }
+.sheet { position: relative; background: var(--card); border-top: 1px solid rgba(255,255,255,.16); border-radius: 22px 22px 0 0; padding: 14px 16px 18px; display: grid; gap: 10px; margin-top: auto; box-shadow: 0 -16px 30px rgba(0,0,0,.5); }
+.sheet::before { content: ""; width: 38px; height: 4px; border-radius: 999px; background: var(--line); justify-self: center; }
+.scrim { flex: 1; background: rgba(0,0,0,.5); display: flex; flex-direction: column; }
+.scrim .behind { padding: 14px 16px; display: grid; gap: 10px; opacity: .5; }
+.skel { background: linear-gradient(90deg, var(--card-2), #24232d, var(--card-2)); background-size: 200% 100%; border-radius: 8px; height: 14px; animation: sk 1.6s linear infinite; }
+@keyframes sk { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.lock-panel { border: 1px dashed color-mix(in srgb, var(--critical) 55%, var(--line)); border-radius: 12px; padding: 10px 12px; color: var(--text-2); background: color-mix(in srgb, var(--critical) 6%, var(--card)); }
+.desk { width: 100%; background: var(--page); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; overflow: hidden; display: grid; grid-template-columns: 190px minmax(0, 1fr); min-height: 300px; }
+.desk .side { background: #0d0c13; border-right: 1px solid var(--line); padding: 14px 10px; display: grid; gap: 4px; align-content: start; }
+.desk .side div { padding: 9px 10px; border-radius: 10px; color: var(--text-2); font-weight: 600; display: flex; gap: 10px; align-items: center; }
+.desk .side div.on { background: color-mix(in srgb, var(--accent) 16%, var(--card-2)); color: #fff; }
+.desk .main { padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+@media (max-width: 560px) { .desk { grid-template-columns: 1fr; } .desk .side { display: none; } }
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><path d="M7 7h10v10H7z M9 3v4 M15 3v4 M9 17v4 M15 17v4 M3 9h4 M3 15h4 M17 9h4 M17 15h4"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z M8 6H4v2a3 3 0 0 0 4 2.8 M16 6h4v2a3 3 0 0 1-4 2.8 M12 13v4 M8 21h8 M10 17h4"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9 M4 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 M5 12v8h14v-8 M10 20v-5h4v5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z M10 21h4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14 M5 12h14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><path d="M6 11h12v9H6z M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9 M16 7l3 3"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1 M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4 M5 4h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14 M16 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M16 16l5 5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3 M5 5l2 2 M17 17l2 2 M19 5l-2 2 M7 17l-2 2"/></symbol>
+  </defs>
+</svg>
+<div class="wrap">
+<div class="bar"><nav aria-label="Sections">
+  <a href="#coverage">Coverage</a><a href="#review">Review</a><a href="#map">Site map</a><a href="#s1">Shell</a><a href="#s2">Landing</a><a href="#s4">Home</a><a href="#s5">Create</a><a href="#s6">Bot detail</a><a href="#s8">Leaderboard</a><a href="#s10">Plans</a><a href="#s11">Keys</a><a href="#s12">Market</a><a href="#s14">Affiliates</a><a href="#s16">Ops</a><a href="#s17">States</a><a href="#decide">Decisions</a>
+</nav></div>
+
+<header class="hero">
+  <span class="eyebrow">Arena · UX review · 30 Sep 2026</span>
+  <h1>Every screen the plan promises, and whether it is drawn</h1>
+  <p class="lead">The plan and the conversations so far add up to 47 functions. Two are built and work as they are, eight are built and need a redesign, 34 are drawn on this page, and three wait on a decision from you. This page checks each function against a screen, reviews what is live today on a phone, and draws the rest in the product's own look. Sample data is marked as such. Nothing drawn here is built.</p>
+</header>
+
+<section id="coverage">
+  <div class="head"><span class="eyebrow">1 · Coverage</span><h2>Plan versus screens</h2><p>Tap a status to filter. A function is "drawn" when a mockup below shows it and its rules; "needs decision" means a choice from you blocks the design.</p></div>
+  <div class="counts" id="counts" role="group" aria-label="Filter by status"></div>
+  <div class="tablebox"><table><thead><tr><th>Function</th><th>Status</th><th>Screen</th><th>Note</th></tr></thead><tbody id="cov"></tbody></table></div>
+</section>
+
+<section id="review">
+  <div class="head"><span class="eyebrow">2 · Review of what is live</span><h2>Fourteen findings on the screens that exist, and what already works</h2><p>Measured on a 390 px phone against the running Arena, not guessed. Severity reflects what stops a new member from reaching or understanding something.</p></div>
+  <div class="finds">
+    <article class="find"><span class="sev high">HIGH</span><h3>The Arena sits inside the owner's navigation</h3><div class="ev">nav at 390 px: Live, Bunnies, Lab &amp; warren memory, Arena (x 430–476), Admin. Screen is 390 wide.</div><p class="fix">Members see operator links, and the Arena tab is off screen with no hint that the bar scrolls. <b>Fix:</b> a separate Arena shell with its own brand and a bottom tab bar (S1).</p></article>
+    <article class="find"><span class="sev high">HIGH</span><h3>Locked options lead nowhere</h3><div class="ev">Zombies, Gods, Momentum, extra bots: all say "Pro", none is tappable.</div><p class="fix">A member who wants more hits a dead end, and there is no plan page at all. <b>Fix:</b> a paywall sheet that explains the pack or limit and links to plans (S10).</p></article>
+    <article class="find"><span class="sev high">HIGH</span><h3>New members land on an empty card</h3><div class="ev">First screen after the link: "You have no bunny yet". The free AI design is one tap deeper, inside the form.</div><p class="fix">The best feature is hidden at the moment it matters. <b>Fix:</b> landing, consent, then a three-step first run that starts with the AI (S2, S3).</p></article>
+    <article class="find"><span class="sev high">HIGH</span><h3>No consent or legal entry points</h3><div class="ev">Sign-in has a "paper trading only" line. No terms, privacy notice or age and risk acknowledgement.</div><p class="fix">Needed before public launch, and before the leaderboard shows other people's names. <b>Fix:</b> consent asked once after the first link, so the form still cannot reveal who has an account (S2). Text needs a lawyer.</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>Creating a bot is one very long page</h3><div class="ev">form height 1,927 px at 390 px wide: nine groups, about 2.4 screens.</div><p class="fix">People lose their place and cannot see what they are building. <b>Fix:</b> a five-step flow with a live preview card, and options a plan cannot use greyed with the reason, not an error afterwards (S5).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>A bot card is a dead end</h3><div class="ev">No detail view. Version history exists in the API with no screen. Rules clip at three lines. No pause.</div><p class="fix"><b>Fix:</b> a bot page with performance, decisions, versions and settings (S6), and Pause and Stop in reach (S4, S17).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>One product, four names, wrong nouns</h3><div class="ev">"Create a bunny" appears for Cats, Robots and Zombies. The same thing is called bunny, bot, Warren, race track, Arena and beebots.</div><p class="fix"><b>Fix:</b> "bot" in the product's chrome, the theme's own noun on the card ("Cat · Trend"), one name for the place. Needs your call (see Decisions).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>Leaderboard rows go nowhere</h3><div class="ev">Rows are not tappable. League chips show a bare count with no label. No search. The member's own row can be far down the page.</div><p class="fix"><b>Fix:</b> tappable rows to public profiles, a pinned "You" row, labelled leagues, handle search, season archive (S7, S8).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>Touch targets below a comfortable size</h3><div class="ev">primary button 41 px, chips 37, tabs 37, Edit and Delete 30 px tall and side by side. (WCAG 2.2 minimum is 24 px, so these pass it; 44 px is the usual phone guideline.)</div><p class="fix"><b>Fix:</b> 44 px minimum everywhere, destructive actions moved away from edit (S6, S15).</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>The product speaks English only</h3><div class="ev">The owner and likely first members write Portuguese. No language setting exists.</div><p class="fix">A decision before copy is final, since every string in these mockups would be translated. <b>Fix:</b> language setting in S15; pt-BR first is the likely call.</p></article>
+    <article class="find"><span class="sev med">MED</span><h3>"Why did it do that?" has no honest answer yet</h3><div class="ev">The decision model returns a choice and odds. It returns no sentence.</div><p class="fix">Showing invented reasoning would be wrong. <b>Fix:</b> show what really exists: the inputs, the odds for each move, and any risk rule that changed the outcome (S6).</p></article>
+    <article class="find"><span class="sev low">LOW</span><h3>Loading, empty and error states are plain text</h3><div class="ev">"Loading…" and "The Arena is not reachable right now." in a card, often with no retry.</div><p class="fix"><b>Fix:</b> skeletons, designed empties and errors with a retry and a cause (S17).</p></article>
+    <article class="find"><span class="sev low">LOW</span><h3>Avatar glyphs differ by device</h3><div class="ev">Avatars are system emoji on a coloured ring.</div><p class="fix">Fine as a placeholder. The painted packs replace them; the layouts here already leave the space.</p></article>
+    <article class="find"><span class="sev low">LOW</span><h3>Status copy is dense</h3><div class="ev">"LONG BTC $622.00, -$0.03 open. 3 decisions. Last call: Hold the winner (82% sure)."</div><p class="fix"><b>Fix:</b> split into a state pill, three figures and one secondary line (S4, S6).</p></article>
+    <article class="find"><span class="sev ok">PASSES</span><h3>What already works</h3><div class="ev">contrast: body 10.4:1, muted text 5.3:1, status colours 4.7 to 9.0:1, all above 4.5:1. No horizontal scroll at 390 px.</div><p class="fix">Keep: locked options shown rather than hidden, status always paired with a glyph or word, private-by-default wording, the anti-enumeration sign-in.</p></article>
+  </div>
+</section>
+
+<section id="map">
+  <div class="head"><span class="eyebrow">3 · Site map</span><h2>One shell, four tabs and a create button</h2><p>Public pages work without signing in. The owner's Warren and admin stay in their own app; the platform console is a third, separate service that cannot open member data.</p></div>
+  <div class="tree">
+    <div class="col"><h3>Public</h3><ul>
+      <li><span>Landing</span><span class="st drawn"><i>◆</i>S2</span></li>
+      <li><span>Sign-in and consent</span><span class="st built"><i>✓</i>built</span></li>
+      <li><span>Leaderboard and seasons</span><span class="st redesign"><i>◐</i>S8</span></li>
+      <li><span>Public bot profile</span><span class="st drawn"><i>◆</i>S7</span></li>
+      <li><span>Public member profile</span><span class="st drawn"><i>◆</i>S7</span></li>
+      <li><span>Marketplace browse</span><span class="st drawn"><i>◆</i>S12</span></li>
+      <li><span>Terms, privacy, risk notice</span><span class="st decide"><i>?</i>text</span></li>
+    </ul></div>
+    <div class="col"><h3>Tab · Home</h3><ul>
+      <li><span>First run</span><span class="st drawn"><i>◆</i>S3</span></li>
+      <li><span>Season strip and my bots</span><span class="st redesign"><i>◐</i>S4</span></li>
+      <li><span>Bot page: performance</span><span class="st drawn"><i>◆</i>S6</span></li>
+      <li><span>Bot page: decisions</span><span class="st drawn"><i>◆</i>S6</span></li>
+      <li><span>Bot page: versions</span><span class="st drawn"><i>◆</i>S6</span></li>
+      <li><span>Bot page: settings</span><span class="st redesign"><i>◐</i>S6</span></li>
+      <li><span>Create a bot (centre +)</span><span class="st redesign"><i>◐</i>S5</span></li>
+    </ul></div>
+    <div class="col"><h3>Tab · Board and Market</h3><ul>
+      <li><span>Leaderboard</span><span class="st redesign"><i>◐</i>S8</span></li>
+      <li><span>Season archive</span><span class="st drawn"><i>◆</i>S8</span></li>
+      <li><span>Season recap</span><span class="st drawn"><i>◆</i>S9</span></li>
+      <li><span>Skill browse and detail</span><span class="st drawn"><i>◆</i>S12</span></li>
+      <li><span>Install on a bot</span><span class="st drawn"><i>◆</i>S12</span></li>
+      <li><span>My skills (studio)</span><span class="st drawn"><i>◆</i>S13</span></li>
+      <li><span>Seller dashboard</span><span class="st drawn"><i>◆</i>S13</span></li>
+    </ul></div>
+    <div class="col"><h3>Tab · Me</h3><ul>
+      <li><span>Account and security</span><span class="st redesign"><i>◐</i>S15</span></li>
+      <li><span>Plan and billing</span><span class="st drawn"><i>◆</i>S10</span></li>
+      <li><span>Keys and usage</span><span class="st drawn"><i>◆</i>S11</span></li>
+      <li><span>Badges</span><span class="st drawn"><i>◆</i>S9</span></li>
+      <li><span>Notifications</span><span class="st drawn"><i>◆</i>S15</span></li>
+      <li><span>Affiliates</span><span class="st drawn"><i>◆</i>S14</span></li>
+      <li><span>Help</span><span class="st drawn"><i>◆</i>S17</span></li>
+    </ul></div>
+    <div class="col"><h3>Separate apps</h3><ul>
+      <li><span>Owner Warren and admin (today)</span><span class="st built"><i>✓</i>built</span></li>
+      <li><span>Platform console: health, costs, reports</span><span class="st drawn"><i>◆</i>S16</span></li>
+      <li><span>Skill moderation and kill switch</span><span class="st drawn"><i>◆</i>S16</span></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============ S1 ============ -->
+<div class="screen" id="s1">
+  <div class="head"><span class="id">S1</span><h2>Shell and navigation</h2><p>One frame for every signed-in screen. Four destinations and one action, in reach of a thumb.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Home with the tab bar</div>
+        <div class="phone">
+          <div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg><span class="dot"></span></div></div>
+          <div class="scr">
+            <div class="m-card"><span class="eyebrow">2026-W40 · ends in 4d 2h</span><div class="ttl">You are #2 in Free · Trend</div></div>
+            <div class="m-card c2"><div class="skel" style="width:60%"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:40%"></div></div>
+            <div class="m-card c2"><div class="skel" style="width:70%"></div><div class="skel" style="width:50%"></div></div>
+          </div>
+          <div class="tabbar">
+            <div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div>
+            <div><svg class="ic"><use href="#i-trophy"/></svg>Board</div>
+            <div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div>
+            <div><svg class="ic"><use href="#i-store"/></svg>Market</div>
+            <div><svg class="ic"><use href="#i-user"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+      <div><div class="cap">Me tab</div>
+        <div class="phone">
+          <div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg></div></div>
+          <div class="scr">
+            <h4>Me</h4>
+            <div class="m-card"><div class="between"><div class="stack"><span class="ttl mono">@fast-ana</span><span class="dim small">Member since 30 Sep 2026</span></div><span class="pill">Free</span></div></div>
+            <div class="m-card list">
+              <div><svg class="ic"><use href="#i-shield"/></svg><div class="grow">Account and security</div><svg class="ic"><use href="#i-chev"/></svg></div>
+              <div><svg class="ic"><use href="#i-trophy"/></svg><div class="grow">Plan and billing</div><span class="pill pro">Upgrade</span></div>
+              <div><svg class="ic"><use href="#i-key"/></svg><div class="grow">Keys and usage</div><svg class="ic"><use href="#i-chev"/></svg></div>
+              <div><svg class="ic"><use href="#i-flag"/></svg><div class="grow">Badges</div><span class="dim small">3 of 18</span></div>
+              <div><svg class="ic"><use href="#i-link"/></svg><div class="grow">Affiliates</div><svg class="ic"><use href="#i-chev"/></svg></div>
+              <div><svg class="ic"><use href="#i-bell"/></svg><div class="grow">Notifications</div><svg class="ic"><use href="#i-chev"/></svg></div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div><svg class="ic"><use href="#i-home"/></svg>Home</div>
+            <div><svg class="ic"><use href="#i-trophy"/></svg>Board</div>
+            <div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div>
+            <div><svg class="ic"><use href="#i-store"/></svg>Market</div>
+            <div class="on"><svg class="ic"><use href="#i-user"/></svg>Me</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The Arena gets its own shell, brand and footer. The owner's Live, Lab and Admin links never appear for members.</li>
+        <li>Board, Market and Me are the destinations. Home is the member's own bots. The centre button creates a bot from anywhere.</li>
+        <li>When the plan is full the centre button stays visible and opens the paywall sheet (S10) instead of a dead control.</li>
+        <li>The bell holds notifications (S15). The dot means unread, never a count.</li>
+        <li>On a desktop the same five items become a left sidebar (below).</li>
+      </ul>
+      <div class="cov"><span class="st redesign"><i>◐</i>Navigation</span><span class="st drawn"><i>◆</i>Me menu</span></div>
+    </div>
+  </div>
+  <div style="margin-top:16px"><div class="cap">Desktop layout, same content</div>
+    <div class="desk">
+      <div class="side"><div class="brand" style="padding:6px 10px 12px"><span class="logo"></span>Arena</div><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Leaderboard</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div><div style="margin-top:10px" class="btn" ><svg class="ic"><use href="#i-plus"/></svg>New bot</div></div>
+      <div class="main"><div class="between"><h4 style="font-size:20px">Home</h4><span class="pill">Free</span></div><div class="grid2"><div class="m-card"><span class="eyebrow">Season</span><div class="ttl">2026-W40 · #2 in Free · Trend</div></div><div class="m-card"><span class="eyebrow">My bots</span><div class="ttl">Sleepy Quant · running</div></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S2 ============ -->
+<div class="screen" id="s2">
+  <div class="head"><span class="id">S2</span><h2>Landing and first consent</h2><p>What a visitor sees before signing in, and the one place a new member accepts the terms.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Landing, signed out</div>
+        <div class="phone">
+          <div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="btn sm ghost" style="min-height:44px">Sign in</div></div>
+          <div class="scr">
+            <span class="eyebrow">Paper trading, real prices</span>
+            <h4 style="font-size:26px;line-height:1.1">Build a trading bot. Race it every week.</h4>
+            <p class="sub">Describe how it should trade. It runs on real market prices with simulated money, and climbs a public leaderboard.</p>
+            <div class="btn">Start free</div>
+            <div class="m-card"><div class="between"><span class="eyebrow">This week · Free · Trend</span><span class="pill ok">Live</span></div>
+              <div class="list">
+                <div><b class="mono" style="width:18px">1</b><span class="av sm" style="--c:#9085e9">🌙</span><div class="grow"><div class="ttl">Lunar Hop</div><span class="dim tiny">@moonrabbit</span></div><b class="good num">+7.78%</b></div>
+                <div><b class="mono" style="width:18px">2</b><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant</div><span class="dim tiny">@fast-ana</span></div><b class="good num">+4.19%</b></div>
+                <div><b class="mono" style="width:18px">3</b><span class="av sm" style="--c:#eab308">🐆</span><div class="grow"><div class="ttl">Whiskers</div><span class="dim tiny">@cat-lady</span></div><b class="good num">+0.72%</b></div>
+              </div><span class="dim tiny">Sample rows</span></div>
+            <div class="m-card"><div class="list">
+              <div><b class="mono">1</b><div class="grow"><div class="ttl">Describe it</div><span class="dim small">One sentence. We write the rules.</span></div></div>
+              <div><b class="mono">2</b><div class="grow"><div class="ttl">It trades on paper</div><span class="dim small">Real prices, $1,000 of simulated money.</span></div></div>
+              <div><b class="mono">3</b><div class="grow"><div class="ttl">Climb the board</div><span class="dim small">Ranked by return and how deep it dropped.</span></div></div>
+            </div></div>
+            <p class="dim tiny">Simulated money only. Not financial advice. Terms · Privacy · Risk notice</p>
+          </div>
+        </div>
+      </div>
+      <div><div class="cap">After the first link, new accounts only</div>
+        <div class="phone">
+          <div class="top"><div class="brand"><span class="logo"></span>Arena</div></div>
+          <div class="scr">
+            <h4>One last step</h4>
+            <p class="sub">You are signed in as <span class="mono">ana@example.com</span>.</p>
+            <div class="m-card">
+              <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I accept the Terms and the Privacy notice</span><span class="dim small">Your e-mail is never shown to anyone. Others see only your public name.</span></div></div>
+              <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I understand this is simulated money</span><span class="dim small">Results are not advice and say nothing about real trading.</span></div></div>
+              <div class="between" style="align-items:flex-start;gap:12px"><div class="toggle on" style="margin-top:2px"></div><div class="stack"><span class="ttl">I am 18 or older</span></div></div>
+            </div>
+            <div class="btn">Continue</div>
+            <p class="dim tiny">Cookies: one session cookie to keep you signed in. No tracking.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The landing is the signed-out home. It shows the real leaderboard so a visitor sees people, not promises.</li>
+        <li>Consent is asked after the first link, not on the sign-in form. The form keeps answering the same way for every address, so it cannot reveal who has an account.</li>
+        <li>Three statements, each its own switch, all off until the member turns them on. The text is placeholder. A lawyer writes the real terms and the age line.</li>
+        <li>The cookie line is true today: one functional session cookie. If analytics are ever added this line changes.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Landing</span><span class="st drawn"><i>◆</i>Consent</span><span class="st decide"><i>?</i>Legal text</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S3 ============ -->
+<div class="screen" id="s3">
+  <div class="head"><span class="id">S3</span><h2>First run</h2><p>Three steps from a new account to a bot on the track. The platform pays for the AI here, for the first bot only.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Step 1 of 3 · Public name</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><span class="dim small">Skip</span></div>
+          <div class="scr"><div class="steps"><i class="on"></i><i></i><i></i></div>
+            <h4>Pick your public name</h4><p class="sub">This is what others see on the leaderboard. Never your e-mail.</p>
+            <div class="field"><label>Public name</label><div class="input focus"><span class="mono">@fast-ana</span><svg class="ic good"><use href="#i-check"/></svg></div><span class="good small">Available</span></div>
+            <div class="chips"><span class="chip">@ana-quant</span><span class="chip">@night-ana</span><span class="chip">@bunny-9d29</span></div>
+            <p class="dim small">3 to 20 letters, numbers, - or _. You can change it later.</p>
+            <div class="btn" style="margin-top:auto">Next</div></div></div></div>
+      <div><div class="cap">Step 2 of 3 · Describe your bot</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><span class="dim small">Back</span></div>
+          <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+            <h4>Describe your first bot</h4><p class="sub">One sentence is enough. We write the name, rules and look. You review everything.</p>
+            <div class="input area focus"><span>A patient bunny that only buys sharp dips in BTC and ETH and never trades on weekends</span></div>
+            <div class="chips"><span class="chip">Dip buyer</span><span class="chip">Trend follower</span><span class="chip">Breakout hunter</span></div>
+            <div class="btn">Design it for me</div>
+            <p class="dim small">Free for your first bot. 3 tries, 3 left.</p>
+            <div class="between"><span class="small" style="color:var(--accent-text)">Start from a template</span><span class="small" style="color:var(--accent-text)">Build it myself</span></div></div></div></div>
+      <div><div class="cap">Step 3 of 3 · Meet your bot</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><span class="dim small">Back</span></div>
+          <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+            <div class="m-card"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl" style="font-size:17px">Sleepy Quant</span><span class="dim small">the sleepy dip hunter</span><span class="pill">Bunny · Trend</span></div></div>
+              <span class="small" style="color:var(--text-2)">Buy sharp dips in BTC and ETH, stay flat when unsure, never trade on weekends.</span>
+              <div class="chips"><span class="pill">BTC</span><span class="pill">ETH</span></div></div>
+            <div class="m-card c2"><div class="between"><div class="stack"><span class="ttl">Paint its portrait</span><span class="dim small">Free once, for your first bot</span></div><div class="toggle on"></div></div>
+              <div class="between"><div class="stack"><span class="ttl">Show on the leaderboard</span><span class="dim small">Name, style and results. Never rules.</span></div><div class="toggle on"></div></div></div>
+            <div class="btn">Start racing</div>
+            <p class="dim tiny">Starts with $1,000 of simulated money. Nothing real can happen.</p></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Name first, because it is the only thing that has to exist before anyone can see the bot.</li>
+        <li>The AI box is the first thing on step 2, with the tries left stated. Template and manual are the two quiet alternatives.</li>
+        <li>The review step is a preview of the real card, so people see what others will see.</li>
+        <li>Skip is always allowed. A member who skips lands on Home with the checklist (S4).</li>
+        <li>The platform's AI is for the first bot only. The next bot uses the member's own keys (S11) or templates.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>First run</span><span class="st redesign"><i>◐</i>AI design</span><span class="st drawn"><i>◆</i>Public name</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S4 ============ -->
+<div class="screen" id="s4">
+  <div class="head"><span class="id">S4</span><h2>Home: season and my bots</h2><p>The screen a member opens every day. The summary first, then each bot with its state in form, then what to do next.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">A member with a running bot (sample data)</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg><span class="dot"></span></div></div>
+          <div class="scr">
+            <div class="m-card"><div class="between"><span class="eyebrow">2026-W40</span><span class="small dim">Ends in 4d 2h</span></div>
+              <div class="between"><div class="stack"><span class="ttl" style="font-size:17px">#2 in Free · Trend</span><span class="dim small">of 4 ranked · 1 waiting</span></div><span class="pill vio">Score 4.19</span></div>
+              <div class="meter"><i style="width:36%"></i></div><span class="dim tiny">Season is 36% done</span></div>
+            <div class="between"><h3>My bots</h3><div class="btn sm ghost"><svg class="ic"><use href="#i-pause"/></svg>Pause all</div></div>
+            <div class="m-card">
+              <div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av">🐰</span><div class="stack"><span class="ttl">Sleepy Quant</span><span class="dim small">Bunny · Trend · v1</span></div></div><span class="pill ok">● Running</span></div>
+              <svg class="spark" data-v="0,.3,.2,.9,1.4,1.1,1.8,2.4,2.2,3.1,3.6,3.3,4.2" data-x="Mon,Wed,Fri,Sun" viewBox="0 0 320 96"></svg>
+              <div class="kv"><div><b class="good">+4.19%</b><span>Return</span></div><div><b>0.0%</b><span>Drawdown</span></div><div><b>14</b><span>Trades</span></div></div>
+              <div class="between"><span class="small" style="color:var(--text-2)">Long BTC $622 · <span class="bad">-$0.03</span></span><span class="small" style="color:var(--accent-text)">Open ›</span></div>
+            </div>
+          </div>
+          <div class="tabbar"><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
+        </div></div>
+      <div><div class="cap">A new member, checklist and quota</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg></div></div>
+          <div class="scr">
+            <div class="m-card"><div class="between"><h3>Getting started</h3><span class="dim small">2 of 5</span></div><div class="meter"><i style="width:40%"></i></div>
+              <div class="list">
+                <div><svg class="ic good"><use href="#i-check"/></svg><div class="grow dim" style="text-decoration:line-through">Pick a public name</div></div>
+                <div><svg class="ic good"><use href="#i-check"/></svg><div class="grow dim" style="text-decoration:line-through">Create your first bot</div></div>
+                <div><span class="av sm" style="--c:#8a8894;width:24px;height:24px;font-size:0"></span><div class="grow"><div class="ttl">Paint its portrait</div><span class="dim small">1 free try left</span></div><svg class="ic"><use href="#i-chev"/></svg></div>
+                <div><span class="av sm" style="--c:#8a8894;width:24px;height:24px;font-size:0"></span><div class="grow"><div class="ttl">Leave it racing for 3 days</div><span class="dim small">Then it gets ranked</span></div></div>
+                <div><span class="av sm" style="--c:#8a8894;width:24px;height:24px;font-size:0"></span><div class="grow"><div class="ttl">Look at the leaderboard</div></div><svg class="ic"><use href="#i-chev"/></svg></div>
+              </div></div>
+            <div class="m-card c2"><div class="between"><span class="ttl">Free plan</span><span class="pill pro">Upgrade</span></div>
+              <div class="stack"><div class="between small"><span class="dim">Bots</span><span>1 of 1</span></div><div class="meter bad"><i style="width:100%"></i></div></div>
+              <div class="stack"><div class="between small"><span class="dim">Decision budget today</span><span class="num">$0.12 of $0.50</span></div><div class="meter"><i style="width:24%"></i></div></div></div>
+          </div>
+          <div class="tabbar"><div class="on"><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
+        </div></div>
+      <div><div class="cap">The other bot states</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div></div>
+          <div class="scr">
+            <div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av sm">🐱</span><span class="ttl">Whiskers</span></div><span class="pill warn">❚❚ Paused</span></div><span class="dim small">No new trades. Its stop still protects the open position.</span><div class="btn sm">Resume</div></div>
+            <div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av sm">🤖</span><span class="ttl">Unit 7</span></div><span class="pill warn">Budget used</span></div><span class="dim small">Today's decision budget is spent. It holds until 00:00 UTC.</span><div class="between"><span class="small" style="color:var(--accent-text)">Why is there a limit?</span><span class="small" style="color:var(--accent-text)">Add your own key ›</span></div></div>
+            <div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av sm">🐶</span><span class="ttl">Pup</span></div><span class="pill">Waiting</span></div><span class="dim small">The track is full. It starts on its own when a place frees up.</span></div>
+            <div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><span class="av sm">🐰</span><span class="ttl">Hopper</span></div><span class="pill bad">Could not start</span></div><span class="dim small">We will retry in a minute. Nothing was lost.</span><div class="btn sm ghost">Retry now</div></div>
+          </div>
+        </div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The season strip is always first: where I stand and how long is left.</li>
+        <li>A bot card carries one state pill, the season curve, three figures and one line about the open position. The curve, not a sentence, shows how it is doing.</li>
+        <li>"Pause all" is on Home. It needs a confirmation (S17).</li>
+        <li>Every non-running state says what it means and what the member can do, in the card.</li>
+        <li>The checklist disappears once finished. The quota card names the real limits: bots and today's decision budget.</li>
+      </ul>
+      <div class="cov"><span class="st redesign"><i>◐</i>My bots</span><span class="st drawn"><i>◆</i>Pause and stop</span><span class="st drawn"><i>◆</i>Quota meters</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S5 ============ -->
+<div class="screen" id="s5">
+  <div class="head"><span class="id">S5</span><h2>Create a bot</h2><p>Five short steps with a live preview, replacing one long form. Anything the plan cannot do is shown greyed with the reason, before the member tries it.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Step 1 of 5 · Start</div>
+        <div class="phone"><div class="top"><span class="dim small">Cancel</span><span class="dim small">1 / 5</span></div>
+          <div class="scr"><div class="steps"><i class="on"></i><i></i><i></i><i></i><i></i></div><h4>How do you want to start?</h4>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl">Describe it</span><span class="pill ok">Free for your first bot</span></div><span class="dim small">One sentence. We write name, rules, coins and look.</span></div>
+            <div class="m-card"><span class="ttl">Start from a template</span><span class="dim small">Tested setups you can change.</span>
+              <div class="chips"><span class="chip">Steady trend</span><span class="chip">Dip buyer</span><span class="chip">Daily breakout</span></div></div>
+            <div class="m-card"><span class="ttl">Build it myself</span><span class="dim small">Pick every setting.</span></div>
+            <div class="m-card c2"><span class="ttl">Use someone's rules</span><span class="dim small">Open a public bot whose owner shares its rules, then tap "Use these rules".</span></div></div></div></div>
+      <div><div class="cap">Step 3 of 5 · Trading</div>
+        <div class="phone"><div class="top"><span class="dim small">Back</span><span class="dim small">3 / 5</span></div>
+          <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div><h4>How does it trade?</h4>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl">Trend</span><span class="pill ok">✓ Selected</span></div><span class="dim small">Follows BTC and ETH trends. Few trades, calm.</span></div>
+            <div class="m-card"><span class="ttl">Breakout</span><span class="dim small">One volatility breakout a day, ridden to the close.</span></div>
+            <div class="m-card" style="opacity:.6"><div class="between"><span class="ttl">Momentum</span><span class="pill pro"><svg class="ic" style="width:12px;height:12px"><use href="#i-lock"/></svg>Pro</span></div><span class="dim small">Chases fast moves. Busier and riskier.</span></div>
+            <div class="between"><span class="eyebrow">Coins</span><span class="dim small">2 of 3</span></div>
+            <div class="chips"><span class="chip on">BTC</span><span class="chip on">ETH</span><span class="chip lock">SOL</span><span class="chip lock">HYPE</span><span class="chip lock">XRP</span></div>
+            <p class="dim small">Trend trades BTC and ETH only. Other coins are off for this style.</p></div></div></div>
+      <div><div class="cap">Step 5 of 5 · Review</div>
+        <div class="phone"><div class="top"><span class="dim small">Back</span><span class="dim small">5 / 5</span></div>
+          <div class="scr"><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div><h4>Ready?</h4>
+            <div class="eyebrow">This is what others see</div>
+            <div class="m-card"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl" style="font-size:17px">Sleepy Quant</span><span class="dim small">@fast-ana · Bunny · Trend</span></div></div></div>
+            <div class="m-card c2">
+              <div class="between"><div class="stack"><span class="ttl">Show on the leaderboard</span><span class="dim small">Results only.</span></div><div class="toggle on"></div></div>
+              <div class="between"><div class="stack"><span class="ttl">Let others use my rules</span><span class="dim small">Off. They can copy the text into their own bot, never your trades.</span></div><div class="toggle"></div></div></div>
+            <p class="dim small">Plan: 1 of 1 bots. Changing style, coins or rules later starts a fresh paper account.</p>
+            <div class="btn">Create bot</div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Steps: Start, Look (theme, avatar, name, tagline), Trading, Rules, Review. Steps 2 and 4 are not shown; they reuse today's fields.</li>
+        <li>The top strip shows progress. A live preview card appears from step 2 and is the review screen.</li>
+        <li>Coins a style cannot trade are greyed, not allowed and rejected later. Plan limits are shown as "Pro" with a tap that opens the paywall sheet (S10).</li>
+        <li>Two separate switches: listed on the leaderboard (default on, as built) and rules shareable (default off). They are different promises and stay apart.</li>
+        <li>Templates need content. Three to start, written by us and labelled as examples, not advice.</li>
+      </ul>
+      <div class="cov"><span class="st redesign"><i>◐</i>Create flow</span><span class="st drawn"><i>◆</i>Templates</span><span class="st drawn"><i>◆</i>Rule sharing</span><span class="st redesign"><i>◐</i>Upsell</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S6 ============ -->
+<div class="screen" id="s6">
+  <div class="head"><span class="id">S6</span><h2>Bot page</h2><p>Where a member learns what their bot is doing and why. Four tabs: performance, decisions, versions, settings.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Performance</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Home</span><div class="iconbtn"><svg class="ic"><use href="#i-gear"/></svg></div></div>
+          <div class="scr">
+            <div class="between"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl" style="font-size:18px">Sleepy Quant</span><span class="dim small">the sleepy dip hunter</span></div></div><span class="pill ok">● Running</span></div>
+            <div class="tabs"><span class="on">Performance</span><span>Decisions</span><span>Versions</span><span>Settings</span></div>
+            <div class="m-card"><div class="between"><span class="eyebrow">Paper account</span><div class="chips" style="gap:4px"><span class="pill vio">Season</span><span class="pill">All</span></div></div>
+              <div class="between" style="align-items:baseline"><b class="num" style="font-size:24px">$1,041.90</b><b class="good num">+4.19%</b></div>
+              <svg class="spark big" data-v="0,.3,.2,.9,1.4,1.1,1.8,2.4,2.2,3.1,3.6,3.3,4.2" data-x="Mon,Wed,Fri,Sun" data-fmt="pct" viewBox="0 0 320 150"></svg></div>
+            <div class="kv"><div><b class="good">4.19</b><span>Score</span></div><div><b>0.0%</b><span>Max drawdown</span></div><div><b>14</b><span>Trades</span></div></div>
+            <div class="m-card c2"><div class="between"><span class="ttl">Open now</span><span class="pill">Long</span></div><div class="between"><span>BTC · $622</span><span class="bad num">-$0.03</span></div><span class="dim small">Held 6 min · stop $97,388</span></div>
+            <div class="m-card c2"><div class="between small"><span class="dim">Decision budget today</span><span class="num">$0.12 of $0.50</span></div><div class="meter"><i style="width:24%"></i></div></div>
+          </div></div></div>
+      <div><div class="cap">Decisions</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Home</span><div class="iconbtn"><svg class="ic"><use href="#i-gear"/></svg></div></div>
+          <div class="scr"><div class="tabs"><span>Performance</span><span class="on">Decisions</span><span>Versions</span><span>Settings</span></div>
+            <div class="chips"><span class="chip on">All</span><span class="chip">Trades</span><span class="chip">Holds</span><span class="chip">Blocked</span></div>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl">Bought BTC</span><span class="dim small">12 min ago</span></div><span class="dim small">Chose <b style="color:#fff">Long BTC</b> · 86% sure</span>
+              <div class="eyebrow" style="margin-top:4px">What it saw</div>
+              <div class="kv"><div><b>+8 / 9</b><span>Trend score</span></div><div><b>+3.0%</b><span>24h move</span></div><div><b>0.01%</b><span>Funding</span></div></div>
+              <div class="eyebrow">Odds it gave each move</div>
+              <div class="stack small"><div class="between"><span>Long BTC</span><span class="num">86%</span></div><div class="meter"><i style="width:86%"></i></div><div class="between"><span class="dim">Wait</span><span class="dim num">9%</span></div><div class="meter"><i style="width:9%;background:var(--muted)"></i></div></div>
+              <div class="pill warn wrap" style="width:fit-content">✋ Risk rule: size capped to 60% of the limit</div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Held the winner</span><span class="dim small">31 min ago</span></div><span class="dim small">82% sure · +0.04%</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Waited</span><span class="dim small">1 h ago</span></div><span class="dim small">No setup · 91% sure</span></div>
+          </div></div></div>
+      <div><div class="cap">Versions</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Home</span><div class="iconbtn"><svg class="ic"><use href="#i-gear"/></svg></div></div>
+          <div class="scr"><div class="tabs"><span>Performance</span><span>Decisions</span><span class="on">Versions</span><span>Settings</span></div>
+            <p class="sub">Changing style, coins or rules starts a fresh paper account. Each version keeps its own record.</p>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl">v3 · current</span><span class="pill ok">Running</span></div><span class="dim small">Today · stay flat on weekends</span><div class="kv"><div><b class="good">+0.8%</b><span>Return</span></div><div><b>0.4%</b><span>Drawdown</span></div><div><b>2 d</b><span>Age</span></div></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">v2</span><span class="dim small">4 days</span></div><span class="dim small">Coins: BTC, ETH, SOL → BTC, ETH</span><div class="kv"><div><b class="bad">-2.1%</b><span>Return</span></div><div><b>3.3%</b><span>Drawdown</span></div><div><b>9</b><span>Trades</span></div></div><div class="btn sm ghost">Start a new version from this</div></div>
+            <div class="m-card"><div class="between"><span class="ttl">v1</span><span class="dim small">9 days</span></div><span class="dim small">First version</span><div class="kv"><div><b class="good">+3.4%</b><span>Return</span></div><div><b>1.0%</b><span>Drawdown</span></div><div><b>21</b><span>Trades</span></div></div></div>
+          </div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Performance shows the season curve on a real scale with the endpoint marked, then the three figures the ranking uses.</li>
+        <li><b>"Why" is shown as facts, not as a story.</b> The decision model returns a choice and odds, not a sentence. So the card lists what it saw, the odds it gave each move, and any risk rule that changed the result. We do not invent reasoning.</li>
+        <li>Versions make the "fresh account" rule visible and explain why the ranking restarted.</li>
+        <li>Pause, Stop and Delete live under Settings, away from Edit. Delete asks for the bot's name (S17).</li>
+        <li>Settings holds what the old form held: name, look, listing, rule sharing, and the free portrait.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Bot detail</span><span class="st drawn"><i>◆</i>Decisions</span><span class="st drawn"><i>◆</i>Versions</span><span class="st redesign"><i>◐</i>Edit</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S7 ============ -->
+<div class="screen" id="s7">
+  <div class="head"><span class="id">S7</span><h2>Public profiles</h2><p>What anyone sees when they tap a row on the leaderboard. Only what the owner chose to show.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Public bot (rules shared)</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Leaderboard</span><span class="dim small">Report</span></div>
+          <div class="scr"><div class="between"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg" style="--c:#9085e9">🌙</span><div class="stack"><span class="ttl" style="font-size:18px">Lunar Hop</span><span class="dim small">@moonrabbit · Bunny · Trend · v2</span></div></div></div>
+            <div class="chips" style="gap:6px"><span class="pill vio">#1 Free · Trend</span><span class="pill">Top 10%</span><span class="pill">3 weeks</span></div>
+            <div class="m-card"><span class="eyebrow">2026-W40</span><svg class="spark" data-v="0,.6,1.1,.8,2.4,3.2,2.9,4.6,5.4,5.0,6.8,7.4,7.8" data-x="Mon,Wed,Fri,Sun" viewBox="0 0 320 96"></svg>
+              <div class="kv"><div><b class="good">+7.78%</b><span>Return</span></div><div><b>1.6%</b><span>Drawdown</span></div><div><b>6.95</b><span>Score</span></div></div></div>
+            <div class="m-card c2"><div class="between"><span class="ttl">Its rules</span><span class="pill ok">Shared by the owner</span></div><span class="small" style="color:var(--text-2)">Follow the trend on BTC and ETH, cut losses fast, stay flat on weekends.</span><div class="btn">Use these rules</div><span class="dim tiny">Starts a new bot with this text. You get the words, never the trades.</span></div>
+            <p class="dim tiny">Open positions are never shown. Past results say nothing about the future. Simulated money.</p></div></div></div>
+      <div><div class="cap">Public member</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Back</span><span class="dim small">Report</span></div>
+          <div class="scr"><div class="between" style="justify-content:flex-start;gap:12px"><span class="av lg">🐰</span><div class="stack"><span class="ttl mono" style="font-size:17px">@fast-ana</span><span class="dim small">Member since Sep 2026 · Pro</span></div></div>
+            <div class="eyebrow">Badges</div>
+            <div class="chips"><span class="pill vio">First bot</span><span class="pill vio">Top 10% · W39</span><span class="pill vio">3-day streak</span></div>
+            <div class="eyebrow">Listed bots</div>
+            <div class="m-card list"><div><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant</div><span class="dim tiny">Trend · #2 this week</span></div><b class="good num">+4.19%</b></div><div><span class="av sm" style="--c:#f97316">🦁</span><div class="grow"><div class="ttl">Pride</div><span class="dim tiny">Momentum · Pro</span></div><b class="good num">+1.30%</b></div></div>
+            <div class="eyebrow">Past seasons</div>
+            <div class="m-card list"><div><b class="mono">W39</b><div class="grow">#3 · Free · Trend</div><b class="good num">+2.4%</b></div><div><b class="mono">W38</b><div class="grow">Not ranked</div><span class="dim">—</span></div></div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The profile is the leaderboard row opened up: the same figures, plus the season curve and the owner's public name.</li>
+        <li>Rules are private unless the owner flips "Let others use my rules". "Use these rules" opens the create flow prefilled, with credit to the original. Text only: no trades, no copy trading.</li>
+        <li>Open positions and recent trades are never shown, which also closes the front-running door the plan worried about.</li>
+        <li>A member profile shows only bots the owner listed. There is no e-mail, no plan detail beyond the badge, no follower count.</li>
+        <li>Report is on both pages. It opens the report sheet (S17).</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Bot profile</span><span class="st drawn"><i>◆</i>Member profile</span><span class="st drawn"><i>◆</i>Use these rules</span><span class="st decide"><i>?</i>Follow and comments</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S8 ============ -->
+<div class="screen" id="s8">
+  <div class="head"><span class="id">S8</span><h2>Leaderboard and seasons</h2><p>The current board, reworked, plus the archive that gives finished seasons somewhere to live.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Board</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg></div></div>
+          <div class="scr" style="padding-bottom:6px"><div class="between"><div class="stack"><span class="eyebrow">Season 2026-W40</span><span class="dim small">Ends in 4d 2h</span></div><span class="pill">Archive ›</span></div>
+            <div class="input"><span>Free · Trend · 4 ranked</span><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="input"><span><svg class="ic" style="vertical-align:-5px;margin-right:6px"><use href="#i-search"/></svg>Find a bot or @name</span></div>
+            <div class="m-card list" style="padding-block:4px">
+              <div><b class="mono" style="width:16px;color:#fbbf24">1</b><span class="av sm" style="--c:#9085e9">🌙</span><div class="grow"><div class="ttl">Lunar Hop</div><span class="dim tiny">@moonrabbit · -1.6% drop</span></div><div class="stack" style="text-align:right"><b class="num">6.95</b><span class="good tiny num">+7.78%</span></div><svg class="ic dim"><use href="#i-chev"/></svg></div>
+              <div><b class="mono" style="width:16px;color:#cbd5e1">2</b><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant <span class="pill ok">You</span></div><span class="dim tiny">@fast-ana · 0.0% drop</span></div><div class="stack" style="text-align:right"><b class="num">4.19</b><span class="good tiny num">+4.19%</span></div><svg class="ic dim"><use href="#i-chev"/></svg></div>
+              <div><b class="mono" style="width:16px;color:#fb923c">3</b><span class="av sm" style="--c:#eab308">🐆</span><div class="grow"><div class="ttl">Whiskers</div><span class="dim tiny">@cat-lady · -5.1% drop</span></div><div class="stack" style="text-align:right"><b class="num bad">-1.83</b><span class="good tiny num">+0.72%</span></div><svg class="ic dim"><use href="#i-chev"/></svg></div>
+            </div>
+            <div class="m-card c2"><span class="ttl">Not ranked yet · 1</span><span class="dim small">Just Hatched needs 2.4 more days and 2 more trades.</span></div>
+          </div>
+          <div class="m-card" style="margin:0 16px 10px;border-color:var(--accent)"><div class="between"><span class="ttl">You · #2 · Sleepy Quant</span><b class="num">4.19</b></div></div>
+          <div class="tabbar"><div><svg class="ic"><use href="#i-home"/></svg>Home</div><div class="on"><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div>
+        </div></div>
+      <div><div class="cap">League picker</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div></div>
+          <div class="scrim"><div class="behind"><div class="skel" style="width:40%"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:140px"></div></div>
+            <div class="sheet"><h3>Choose a league</h3><p class="dim small">Free and Pro race apart. Each style has its own board.</p>
+              <div class="list"><div><div class="grow"><div class="ttl">Free · Trend</div><span class="dim small">4 ranked · 1 waiting</span></div><svg class="ic good"><use href="#i-check"/></svg></div><div><div class="grow"><div class="ttl">Free · Breakout</div><span class="dim small">1 ranked</span></div></div><div><div class="grow"><div class="ttl">Pro · Momentum</div><span class="dim small">1 ranked</span></div></div></div></div></div></div></div>
+      <div><div class="cap">Season archive</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Board</span></div>
+          <div class="scr"><h4>Past seasons</h4>
+            <div class="m-card"><div class="between"><span class="ttl">2026-W39</span><span class="pill">Final</span></div><span class="dim small">Free · Trend · 11 ranked</span>
+              <div class="list"><div><span style="font-size:20px">🥇</span><div class="grow"><div class="ttl">Night Owl</div><span class="dim tiny">@owl-io</span></div><b class="num">9.12</b></div><div><span style="font-size:20px">🥈</span><div class="grow"><div class="ttl">Lunar Hop</div><span class="dim tiny">@moonrabbit</span></div><b class="num">7.40</b></div><div><span style="font-size:20px">🥉</span><div class="grow"><div class="ttl">Sleepy Quant <span class="pill ok">You</span></div><span class="dim tiny">@fast-ana</span></div><b class="num">6.05</b></div></div>
+              <div class="between"><span class="small" style="color:var(--accent-text)">Full standings ›</span><span class="small" style="color:var(--accent-text)">My recap ›</span></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">2026-W38</span><span class="pill">Final</span></div><span class="dim small">You were not ranked that week.</span></div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The league moves into a picker that names what a league is. Today's chips show a bare number.</li>
+        <li>"You" is pinned above the tab bar so the member always sees their own place, wherever it is.</li>
+        <li>Rows are tappable and lead to the public profile (S7). The drop shown under each name is the part of the score people misread, so it is printed, not hidden in a tooltip.</li>
+        <li>A negative score is red with its sign. Not-ranked bots sit below the line with the reason, as built.</li>
+        <li>The archive keeps finished seasons. The data is kept five weeks today; showing "Hall of fame" beyond that means storing final standings permanently, which is a small backend change.</li>
+      </ul>
+      <div class="cov"><span class="st redesign"><i>◐</i>Leaderboard</span><span class="st drawn"><i>◆</i>Archive</span><span class="st drawn"><i>◆</i>Search</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S9 ============ -->
+<div class="screen" id="s9">
+  <div class="head"><span class="id">S9</span><h2>Badges and season recap</h2><p>The moment a season ends, and the collection that builds up over time.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Badges</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Badges</h4><p class="sub">3 of 18 earned. They reward steadiness, not luck alone.</p>
+            <div class="eyebrow">Earned</div>
+            <div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:8px">
+              <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#9085e9">🐣</span><span class="small ttl">First bot</span></div>
+              <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#fbbf24">🏅</span><span class="small ttl">Top 10%</span></div>
+              <div class="m-card" style="text-align:center;justify-items:center"><span class="av" style="--c:#3fcf3f">🔥</span><span class="small ttl">3-day streak</span></div></div>
+            <div class="eyebrow">In progress</div>
+            <div class="m-card"><div class="between"><span class="ttl">30-day streak</span><span class="dim small num">12 / 30</span></div><div class="meter"><i style="width:40%"></i></div><span class="dim small">Keep a bot running every day. Unlocks: a second bot slot.</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Low-drop season</span><span class="dim small num">drop 1.6% · need under 2%</span></div><div class="meter"><i style="width:80%"></i></div><span class="dim small">Finish a ranked season with a drop under 2%.</span></div>
+            <div class="m-card" style="opacity:.6"><div class="between"><span class="ttl">First published skill</span><svg class="ic"><use href="#i-lock"/></svg></div><span class="dim small">Publish a skill in the marketplace. Needs Pro.</span></div></div></div></div>
+      <div><div class="cap">Season recap</div>
+        <div class="phone"><div class="top"><span class="dim small">Close</span></div>
+          <div class="scr" style="text-align:center;justify-items:center;gap:14px"><span class="eyebrow">2026-W39 · final</span>
+            <span class="av lg" style="width:84px;height:84px;font-size:42px;--c:#fb923c">🥉</span>
+            <h4 style="font-size:24px">You finished #3</h4><p class="sub">of 11 in Free · Trend</p>
+            <div class="kv" style="width:100%"><div><b class="good">+6.4%</b><span>Return</span></div><div><b>0.7%</b><span>Drop</span></div><div><b>6.05</b><span>Score</span></div></div>
+            <div class="m-card" style="width:100%;text-align:left"><span class="eyebrow">Earned this week</span><div class="between" style="justify-content:flex-start;gap:10px"><span class="av sm" style="--c:#fbbf24">🏅</span><div class="stack"><span class="ttl">Top 10%</span><span class="dim small">Finish in the top tenth of a league.</span></div></div></div>
+            <div class="btn" style="width:100%">See the new season</div><div class="btn ghost" style="width:100%"><svg class="ic"><use href="#i-link"/></svg>Copy link to my profile</div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Every badge states what earns it and what it unlocks, and shows progress while it is unearned. Locked ones say why, including "needs Pro".</li>
+        <li>Badges that unlock a slot say so. Paid features stay behind the subscription, as in the plan.</li>
+        <li>The recap opens once when a season ends, from the bell and from the archive. Sharing is a link to the public profile. Native share is not available everywhere, so the button copies.</li>
+        <li>No confetti, no streak pressure copy. The numbers are the reward.</li>
+        <li>The eighteen badges are a list to write. This draws three states (earned, in progress, locked).</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Badges</span><span class="st drawn"><i>◆</i>Season recap</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S10 ============ -->
+<div class="screen" id="s10">
+  <div class="head"><span class="id">S10</span><h2>Plans and billing</h2><p>The place every "Pro" label points to. Prices are left open on purpose.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Plans</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Choose your plan</h4>
+            <div class="m-card"><div class="between"><span class="ttl" style="font-size:17px">Free</span><span class="pill">Your plan</span></div><span class="dim small">Start and learn.</span>
+              <div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">1 bot, Trend and Breakout</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 3 coins, 4 theme packs</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Free skills, your own free skills</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Leaderboard and affiliate link</div></div></div></div>
+            <div class="m-card" style="border-color:var(--accent)"><div class="between"><span class="ttl" style="font-size:17px">Pro</span><span class="pill pro">Recommended</span></div><span class="dim small">Run several bots and sell skills.</span>
+              <div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 9 bots, every style</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Up to 8 coins, every theme pack</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Advanced skills, sell your own</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Your own model keys, optional platform credits</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Bonus on affiliate conversions</div></div></div>
+              <div class="between"><b style="font-size:18px">Price to be set</b><span class="dim small">per month</span></div><div class="btn">Upgrade to Pro</div></div>
+            <p class="dim tiny">Cancel any time. Paper trading only. Pro does not change what the money can do.</p></div></div></div>
+      <div><div class="cap">Paywall sheet, from a locked pack</div>
+        <div class="phone"><div class="top"><span class="dim small">Step 2 · Look</span></div>
+          <div class="scrim"><div class="behind"><div class="chips"><span class="chip on">Bunnies</span><span class="chip lock">Zombies</span><span class="chip lock">Gods</span></div><div class="skel" style="height:90px"></div><div class="skel" style="height:44px"></div></div>
+            <div class="sheet"><div class="between"><h3>Zombies pack</h3><span class="pill pro">Pro</span></div>
+              <div class="chips"><span class="av">🧟</span><span class="av">🪦</span><span class="av">💀</span><span class="av">👻</span></div>
+              <p class="dim small">Four characters. Included in Pro with every other pack.</p>
+              <div class="btn">See plans</div><div class="btn ghost">Not now</div></div></div></div></div>
+      <div><div class="cap">Billing (Pro member, sample)</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Plan and billing</h4>
+            <div class="m-card"><div class="between"><span class="ttl">Pro</span><span class="pill ok">Active</span></div><span class="dim small">Renews on 30 Oct 2026</span></div>
+            <div class="m-card"><span class="eyebrow">Payment method</span><div class="between"><span>Card ending 4242</span><span class="small" style="color:var(--accent-text)">Change</span></div></div>
+            <div class="m-card"><span class="eyebrow">Invoices</span><div class="list small"><div style="min-height:44px"><div class="grow">30 Sep 2026</div><span class="num">Paid</span><span style="color:var(--accent-text)">PDF</span></div><div style="min-height:44px"><div class="grow">30 Aug 2026</div><span class="num">Paid</span><span style="color:var(--accent-text)">PDF</span></div></div></div>
+            <div class="m-card c2"><span class="ttl">Cancel Pro</span><span class="dim small">You keep Pro until 30 Oct. After that your extra bots are paused, not deleted, and your data stays for 30 days.</span><div class="btn ghost">Cancel subscription</div></div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Every locked control opens the same sheet: what it is, that it is in Pro, and two buttons. It never blocks a flow that can continue without it.</li>
+        <li>The comparison repeats the plan document's table, in member terms.</li>
+        <li>Billing needs a processor and countries, which are still open. The mockup shows what any processor's portal must expose: method, invoices, cancel.</li>
+        <li>Downgrade policy is a proposal: extra bots are paused, never deleted, and kept 30 days. Needs your call.</li>
+        <li>No price is drawn because none has been chosen.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Plans</span><span class="st drawn"><i>◆</i>Billing</span><span class="st redesign"><i>◐</i>Upsell</span><span class="st decide"><i>?</i>Price, processor</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S11 ============ -->
+<div class="screen" id="s11">
+  <div class="head"><span class="id">S11</span><h2>Keys and usage</h2><p>Where a member connects their own model and sees what their bots cost. The plan says keys are write-only, so the screen can never show one back.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Keys</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Keys and usage</h4>
+            <div class="tabs"><span class="on">Keys</span><span>Usage</span></div>
+            <p class="sub">Your keys let your bots decide with your own model account. We store them encrypted and never show them again.</p>
+            <div class="m-card list"><div><svg class="ic"><use href="#i-key"/></svg><div class="grow"><div class="ttl">OpenAI</div><span class="dim tiny mono">····a91f · verified 2 days ago</span></div><span class="pill ok">Working</span></div><div><svg class="ic"><use href="#i-key"/></svg><div class="grow"><div class="ttl">Anthropic</div><span class="dim tiny mono">····7c2d · failed yesterday</span></div><span class="pill bad">Fix</span></div></div>
+            <div class="btn"><svg class="ic"><use href="#i-plus"/></svg>Add a key</div>
+            <div class="lock-panel small"><b style="color:#fff">What this means.</b> The server has to decrypt a key to call the provider for you. Nobody at the platform has a screen that shows it, and every access is logged.</div></div></div></div>
+      <div><div class="cap">Add a key, sheet</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Keys</span></div>
+          <div class="scrim"><div class="behind"><div class="skel" style="height:60px"></div><div class="skel" style="height:44px"></div></div>
+            <div class="sheet"><h3>Add a key</h3>
+              <div class="chips"><span class="chip on">OpenAI</span><span class="chip">Anthropic</span><span class="chip">Z.ai</span><span class="chip">TypeSafe</span><span class="chip">Other</span></div>
+              <div class="field"><label>Key</label><div class="input focus"><span class="mono">sk-············</span></div></div>
+              <div class="btn">Test and save</div>
+              <div class="pill ok" style="width:fit-content">✓ Key works. Saved as ····b7e3</div>
+              <div class="pill bad" style="width:fit-content;white-space:normal">✕ The provider said the key is not valid. Check it and try again.</div></div></div></div></div>
+      <div><div class="cap">Usage</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Keys and usage</h4><div class="tabs"><span>Keys</span><span class="on">Usage</span></div>
+            <div class="m-card"><span class="eyebrow">Today</span>
+              <div class="stack"><div class="between small"><span class="dim">Decision budget, Sleepy Quant</span><span class="num">$0.12 of $0.50</span></div><div class="meter"><i style="width:24%"></i></div></div>
+              <div class="stack"><div class="between small"><span class="dim">Bots</span><span>1 of 1</span></div><div class="meter bad"><i style="width:100%"></i></div></div>
+              <div class="stack"><div class="between small"><span class="dim">Coins per bot</span><span>2 of 3</span></div><div class="meter"><i style="width:66%"></i></div></div></div>
+            <div class="m-card c2"><span class="ttl">Free AI help for your first bot</span><div class="between small"><span class="dim">Designs</span><span>2 of 3 left</span></div><div class="between small"><span class="dim">Portraits</span><span>1 of 2 left</span></div></div>
+            <p class="dim small">Budgets reset at 00:00 UTC. With your own key the budget is yours to set.</p></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>A key is shown only as its last four characters and its last test result. There is no reveal button and no edit: replace or delete.</li>
+        <li>"Test and save" is one action, as in the owner's admin panel. A failed test says what failed in plain words.</li>
+        <li>The honest note about decryption is on the screen, not hidden in terms.</li>
+        <li>Usage shows every limit the plan enforces, including the free AI tries, so a capped bot is never a surprise.</li>
+        <li>Custom OpenAI-compatible endpoints sit under "Other" with a warning that internal addresses are refused.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Key vault</span><span class="st drawn"><i>◆</i>Usage and quotas</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S12 ============ -->
+<div class="screen" id="s12">
+  <div class="head"><span class="id">S12</span><h2>Skill marketplace</h2><p>Browse, judge and install a skill. The page is built around what a buyer needs to trust: what it can do, how it has behaved, what it may touch.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Browse</div>
+        <div class="phone"><div class="top"><div class="brand"><span class="logo"></span>Arena</div><div class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg></div></div>
+          <div class="scr" style="padding-bottom:6px"><div class="between"><h4>Market</h4><span class="small" style="color:var(--accent-text)">My skills ›</span></div>
+            <div class="input"><span><svg class="ic" style="vertical-align:-5px;margin-right:6px"><use href="#i-search"/></svg>Search skills</span></div>
+            <div class="chips"><span class="chip on">All</span><span class="chip">Trend</span><span class="chip">Breakout</span><span class="chip">Risk</span><span class="chip">Free</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Volatility squeeze</span><span class="pill vio">✓ Verified</span></div><span class="dim small">by @owl-io · v1.2 · 412 installs</span><span class="small" style="color:var(--text-2)">Waits for a tight range, then follows the break.</span><div class="between"><span class="pill ok">Free</span><span class="dim small">★ 4.6 · 38 reviews</span></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Weekend guard</span><span class="pill vio">✓ Verified</span></div><span class="dim small">by @cat-lady · v1.0 · 96 installs</span><span class="small" style="color:var(--text-2)">Keeps a bot flat from Friday night to Monday.</span><div class="between"><span class="pill pro">Pro · $ per month</span><span class="dim small">★ 4.4 · 11 reviews</span></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Dip ladder</span><span class="pill">New</span></div><span class="dim small">by @robo-dan · v0.3 · not verified yet</span><div class="between"><span class="pill ok">Free</span><span class="dim small">No reviews</span></div></div>
+            <span class="dim tiny">Sample listings</span></div>
+          <div class="tabbar"><div><svg class="ic"><use href="#i-home"/></svg>Home</div><div><svg class="ic"><use href="#i-trophy"/></svg>Board</div><div class="plus"><span><svg class="ic"><use href="#i-plus"/></svg></span>New bot</div><div class="on"><svg class="ic"><use href="#i-store"/></svg>Market</div><div><svg class="ic"><use href="#i-user"/></svg>Me</div></div></div></div>
+      <div><div class="cap">Skill detail</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Market</span><span class="dim small">Report</span></div>
+          <div class="scr"><div class="stack"><span class="ttl" style="font-size:19px">Volatility squeeze</span><span class="dim small">by @owl-io · v1.2 · <span class="pill vio" style="vertical-align:1px">✓ Verified</span></span></div>
+            <div class="m-card"><span class="eyebrow">How it behaved when verified</span><div class="kv"><div><b class="good">+3.2%</b><span>14 days paper</span></div><div><b>4.1%</b><span>Max drop</span></div><div><b>17</b><span>Trades</span></div></div><span class="dim tiny">Past results on simulated money. They say nothing about the future. The author cannot edit this record.</span></div>
+            <div class="m-card c2"><span class="eyebrow">What it may do</span><div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Read market data</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">Suggest a move to your bot</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Cannot read your keys</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Cannot place orders. Your bot and its risk limits do.</div></div></div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Versions</span><span class="small" style="color:var(--accent-text)">All ›</span></div><span class="dim small">v1.2 is out. You run v1.1. Updating is your choice.</span></div>
+            <div class="btn">Install on a bot</div></div></div></div>
+      <div><div class="cap">Install sheet</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Skill</span></div>
+          <div class="scrim"><div class="behind"><div class="skel" style="height:70px"></div><div class="skel" style="height:110px"></div></div>
+            <div class="sheet"><h3>Install Volatility squeeze</h3>
+              <div class="eyebrow">On which bot?</div>
+              <div class="list"><div><span class="av sm">🐰</span><div class="grow"><div class="ttl">Sleepy Quant</div><span class="dim tiny">Trend · v3</span></div><svg class="ic good"><use href="#i-check"/></svg></div></div>
+              <p class="dim small">Installing is a rules change. It starts version 4 and a fresh paper account.</p>
+              <div class="btn">Install</div><div class="btn ghost">Cancel</div></div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The figures on a skill page come from the platform's verification period, never from the author. A badge is earned, not claimed.</li>
+        <li>Permissions are a plain list with two "cannot" lines that answer the buyer's real fear.</li>
+        <li>Versions are immutable. A new version never installs itself.</li>
+        <li>Installing changes the bot's rules, so it is a new version with a fresh account. The sheet says so before the tap. That is the part a member would otherwise be surprised by.</li>
+        <li>Reviews and star ratings are drawn but are an extra the plan never listed. Flagged under Decisions.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Browse</span><span class="st drawn"><i>◆</i>Skill detail</span><span class="st drawn"><i>◆</i>Install</span><span class="st drawn"><i>◆</i>Report and refund</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S13 ============ -->
+<div class="screen" id="s13">
+  <div class="head"><span class="id">S13</span><h2>Skill studio and seller dashboard</h2><p>Where a member writes, verifies and publishes a skill, and where a Pro seller sees what it earns without seeing who bought it.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">My skills</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Market</span></div>
+          <div class="scr"><div class="between"><h4>My skills</h4><div class="btn sm"><svg class="ic"><use href="#i-plus"/></svg>New</div></div>
+            <div class="m-card"><div class="between"><span class="ttl">Volatility squeeze</span><span class="pill ok">Live v1.2</span></div><span class="dim small">412 installs · 38 reviews</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Dip ladder</span><span class="pill warn">Verifying 3 of 7 days</span></div><div class="meter"><i style="width:43%"></i></div><span class="dim small">It is running on paper. You cannot edit it during verification.</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Gap fader</span><span class="pill">Draft</span></div><span class="dim small">Not submitted</span></div>
+            <div class="m-card"><div class="between"><span class="ttl">Range rider</span><span class="pill bad">Needs changes</span></div><span class="dim small">The real-data test lost more than it earned. See the report.</span></div></div></div></div>
+      <div><div class="cap">Publish checklist</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Dip ladder</span></div>
+          <div class="scr"><h4>Publish</h4>
+            <div class="m-card list"><div><svg class="ic good"><use href="#i-check"/></svg><div class="grow"><div class="ttl">Real-data test</div><span class="dim small">Passed on 90 days of candles</span></div></div><div><svg class="ic good"><use href="#i-check"/></svg><div class="grow"><div class="ttl">Permissions declared</div><span class="dim small">Market data, suggestions</span></div></div><div><span class="pill warn">3 / 7</span><div class="grow"><div class="ttl">Paper period</div><span class="dim small">4 more days</span></div></div><div><svg class="ic good"><use href="#i-check"/></svg><div class="grow"><div class="ttl">Description and examples</div></div></div></div>
+            <div class="eyebrow">Price</div>
+            <div class="chips"><span class="chip on">Free</span><span class="chip lock">One-off <small>Pro</small></span><span class="chip lock">Monthly <small>Pro</small></span></div>
+            <p class="dim small">Paid skills need Pro. The platform keeps a commission on each sale. The rate is not set yet.</p>
+            <div class="btn dis">Publish after the paper period</div></div></div></div>
+      <div><div class="cap">Seller dashboard (Pro, sample)</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Market</span></div>
+          <div class="scr"><h4>Sales</h4>
+            <div class="m-card"><span class="eyebrow">September</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:24px">$ 184.00</b><span class="dim small">after commission</span></div><div class="kv"><div><b>23</b><span>Sales</span></div><div><b>1</b><span>Refunds</span></div><div><b>412</b><span>Installs</span></div></div></div>
+            <div class="m-card c2"><div class="between"><span class="ttl">Payouts</span><span class="pill ok">Connected</span></div><span class="dim small">Next payout 5 Oct. Identity and tax are checked by the payment provider, not by us.</span></div>
+            <div class="lock-panel small"><b style="color:#fff">Buyers are anonymous to you.</b> You see counts and money. You never see who installed a skill or how their bots do.</div>
+            <span class="dim tiny">Sample figures</span></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Status is the whole list: Draft, Verifying, Live, Needs changes. A member never has to guess what happens next.</li>
+        <li>The checklist mirrors the plan's verification: a real-data test, then a paper period. Steps done are checked; the one that blocks is named with days left.</li>
+        <li>Free skills can be published by anyone. Paid options are visible and locked for Free members, with the same sheet as everywhere (S10).</li>
+        <li>Seller money uses a payment provider's hosted onboarding for identity and tax, so those screens are the provider's, not ours.</li>
+        <li>The studio editor itself is today's Lab workspace. It needs a member-facing skin and a sandbox, which is a build item, not a design gap.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Studio</span><span class="st drawn"><i>◆</i>Publish flow</span><span class="st drawn"><i>◆</i>Seller dashboard</span><span class="st decide"><i>?</i>Commission rate</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S14 ============ -->
+<div class="screen" id="s14">
+  <div class="head"><span class="id">S14</span><h2>Affiliates</h2><p>Single level: a commission on a real purchase by someone who signed up through your link. Never on sign-ups. Pending the lawyer's review.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Dashboard (sample data)</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Affiliates</h4>
+            <div class="m-card"><span class="eyebrow">Your link</span><div class="input"><span class="mono small">arena.example/?ref=fast-ana</span><span style="color:var(--accent-text);font-weight:700">Copy</span></div></div>
+            <div class="m-card"><span class="eyebrow">Last 30 days</span><div class="kv"><div><b>128</b><span>Visits</span></div><div><b>19</b><span>Sign-ups</span></div><div><b>3</b><span>Paying</span></div></div></div>
+            <div class="m-card"><div class="between"><span class="eyebrow">Commissions</span><span class="dim small">Hold: 14 days</span></div>
+              <div class="list small"><div style="min-height:48px"><div class="grow"><div class="ttl">Pro subscription</div><span class="dim tiny">30 Sep · refund window open</span></div><span class="pill warn">Pending</span><b class="num">$ 4.80</b></div><div style="min-height:48px"><div class="grow"><div class="ttl">Skill: Weekend guard</div><span class="dim tiny">12 Sep</span></div><span class="pill ok">Cleared</span><b class="num">$ 1.20</b></div><div style="min-height:48px"><div class="grow"><div class="ttl">Pro subscription</div><span class="dim tiny">2 Sep</span></div><span class="pill vio">Paid</span><b class="num">$ 4.80</b></div></div></div></div></div></div>
+      <div><div class="cap">Rules and disclosure</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Affiliates</span></div>
+          <div class="scr"><h4>Program rules</h4>
+            <div class="m-card"><span class="ttl">What earns a commission</span><div class="list small"><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">A subscription bought by someone who signed up with your link</div></div><div style="min-height:40px"><svg class="ic good"><use href="#i-check"/></svg><div class="grow">A skill bought by them</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Sign-ups alone, never</div></div><div style="min-height:40px"><svg class="ic bad"><use href="#i-stop"/></svg><div class="grow">Anything you buy yourself</div></div></div></div>
+            <div class="m-card c2"><span class="ttl">Say it when you share</span><div class="input area"><span class="small">This is an affiliate link. I earn a commission if you subscribe.</span></div><div class="btn sm ghost">Copy text</div></div>
+            <div class="m-card"><span class="ttl">Never claim</span><span class="dim small">Guaranteed profit, income promises, or that results are real money. Links that do are removed.</span></div></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>One level only, as recommended. The screen has no downline, no tree and no recruitment wording.</li>
+        <li>The ledger shows the hold period in words (refund window) and three states with the money for each.</li>
+        <li>The disclosure text is ready to paste. The banned claims are listed where the member shares, not in a policy page.</li>
+        <li>Payout setup (method, minimum, tax form) is the payment provider's hosted flow, as for sellers.</li>
+        <li>Figures and the rate are sample. The design does not assume a percentage.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Dashboard</span><span class="st drawn"><i>◆</i>Rules and disclosure</span><span class="st decide"><i>?</i>One level, rate</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S15 ============ -->
+<div class="screen" id="s15">
+  <div class="head"><span class="id">S15</span><h2>Account, security and notifications</h2><p>Everything about the person, apart from the bots. Today it is tangled with them.</p></div>
+  <div class="row">
+    <div class="phones">
+      <div><div class="cap">Account and security</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Account</h4>
+            <div class="m-card"><div class="field"><label>Public name</label><div class="input"><span class="mono">@fast-ana</span><span style="color:var(--accent-text);font-weight:700">Change</span></div></div><div class="field"><label>E-mail</label><div class="input"><span>ana@example.com</span><svg class="ic dim"><use href="#i-lock"/></svg></div></div><div class="field"><label>Language</label><div class="input"><span>Português (Brasil)</span><svg class="ic"><use href="#i-chev"/></svg></div></div></div>
+            <div class="m-card"><span class="eyebrow">Signed in on</span><div class="list small"><div style="min-height:48px"><div class="grow"><div class="ttl">This phone</div><span class="dim tiny">Chrome · São Paulo · now</span></div><span class="pill ok">Here</span></div><div style="min-height:48px"><div class="grow"><div class="ttl">Laptop</div><span class="dim tiny">Firefox · 3 days ago</span></div><span style="color:var(--accent-text);font-weight:700">Sign out</span></div></div></div>
+            <div class="m-card"><span class="ttl">Your data</span><span class="dim small">Download everything we hold about you as a file.</span><div class="btn sm ghost">Download my data</div></div>
+            <div class="m-card" style="border-color:color-mix(in srgb,var(--critical) 45%,var(--line))"><span class="ttl">Delete my account</span><span class="dim small">Removes your bots, paper accounts, leaderboard rows and keys. Cannot be undone.</span><div class="btn sm danger">Delete my account…</div></div></div></div></div>
+      <div><div class="cap">Notifications</div>
+        <div class="phone"><div class="top"><span class="dim small">‹ Me</span></div>
+          <div class="scr"><h4>Notifications</h4><p class="sub">Sent by e-mail and shown under the bell. Choose what matters.</p>
+            <div class="m-card list"><div><div class="grow"><div class="ttl">Season results</div><span class="dim small">Your final place and any badge</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Rank changes</div><span class="dim small">When you enter or leave the top three</span></div><div class="toggle"></div></div><div><div class="grow"><div class="ttl">A bot stopped</div><span class="dim small">Budget used, could not start, paused by us</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Skill updates</div><span class="dim small">A new version of a skill you installed</span></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Sales and commissions</div></div><div class="toggle on"></div></div><div><div class="grow"><div class="ttl">Product news</div></div><div class="toggle"></div></div></div>
+            <p class="dim small">Sign-in links and security messages are always sent.</p></div></div></div>
+    </div>
+    <div class="notes">
+      <h3>Decisions</h3>
+      <ul>
+        <li>The account page moves out of the bots page. The E-mail is shown, locked, and is never public anywhere.</li>
+        <li>Active sessions with a per-device sign-out. Sessions are hashed and listed in the database already; the screen is what is missing.</li>
+        <li>"Download my data" is a privacy-law expectation in Brazil and Europe. It needs a small export job, flagged here so it is planned.</li>
+        <li>Delete keeps its typed confirmation. The wording lists what goes, including leaderboard rows.</li>
+        <li>Notifications default to the ones a member would be upset to miss. News is off by default.</li>
+        <li>The language line is drawn to show where the decision lands.</li>
+      </ul>
+      <div class="cov"><span class="st redesign"><i>◐</i>Account</span><span class="st drawn"><i>◆</i>Sessions</span><span class="st drawn"><i>◆</i>Data export</span><span class="st drawn"><i>◆</i>Notifications</span><span class="st decide"><i>?</i>Language</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S16 ============ -->
+<div class="screen" id="s16">
+  <div class="head"><span class="id">S16</span><h2>Platform console</h2><p>For the platform's owner only, in its own app. It shows how the service is doing and lets the owner act on reports. It cannot open a member's bots, rules, positions, keys or e-mail.</p></div>
+  <div class="row">
+    <div class="wide">
+      <div class="cap">Desktop, sample data</div>
+      <div class="desk">
+        <div class="side"><div class="brand" style="padding:6px 10px 12px"><span class="logo"></span>Console</div><div class="on"><svg class="ic"><use href="#i-gear"/></svg>Service</div><div><svg class="ic"><use href="#i-flag"/></svg>Reports <span class="pill bad" style="margin-left:auto">3</span></div><div><svg class="ic"><use href="#i-store"/></svg>Marketplace</div><div><svg class="ic"><use href="#i-user"/></svg>Plans</div></div>
+        <div class="main">
+          <div class="between"><h4 style="font-size:20px">Service</h4><span class="pill ok">● All systems normal</span></div>
+          <div class="grid2">
+            <div class="m-card"><span class="eyebrow">Race track</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:22px">18 of 25</b><span class="dim small">bots running</span></div><div class="meter"><i style="width:72%"></i></div><span class="dim small">Market data 12 s old · 0 bots waiting</span></div>
+            <div class="m-card"><span class="eyebrow">Model spend today</span><div class="between" style="align-items:baseline"><b class="num" style="font-size:22px">$3.42</b><span class="dim small">of $12.00</span></div><div class="meter"><i style="width:28%"></i></div><span class="dim small">Free AI help used 41 of 100</span></div>
+            <div class="m-card"><span class="eyebrow">Accounts</span><div class="kv"><div><b>212</b><span>Free</span></div><div><b>14</b><span>Pro</span></div><div><b>2</b><span>Past due</span></div></div></div>
+          </div>
+          <div class="m-card"><div class="between"><span class="eyebrow">Reports waiting</span><span class="dim small">Skills and profiles</span></div>
+            <div style="overflow-x:auto"><table style="min-width:520px"><thead><tr><th>Skill</th><th>Reason</th><th>Reports</th><th></th></tr></thead><tbody><tr><td>Gap fader v0.4</td><td>Asks for more permissions than declared</td><td class="num">4</td><td><span class="pill bad">Review</span></td></tr><tr><td>Dip ladder v0.3</td><td>Misleading description</td><td class="num">1</td><td><span class="pill warn">Review</span></td></tr></tbody></table></div>
+            <div class="between"><span class="dim small">Review shows the skill's text, permissions and verification record. Kill switch disables a version for everyone.</span><span class="btn sm danger" style="min-height:44px">Disable a version…</span></div></div>
+          <div class="lock-panel small"><b style="color:#fff">Not available here, by design:</b> members' bots, rules, positions, decisions, keys and e-mail addresses. There is no search box for any of them. A build check fails if a console route touches member data.</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" style="flex:1 1 100%">
+      <h3>Decisions</h3>
+      <ul>
+        <li>Separate app and separate sign-in from the Arena, as the plan's boundary requires.</li>
+        <li>It shows counts and health only. Even a report about a skill shows the skill, never its buyers.</li>
+        <li>Disabling a skill version is the one powerful button. It is red, named for what it does, and asks for a reason (logged).</li>
+        <li>The lock panel is visible on purpose, so the limit is a feature the owner can point to.</li>
+      </ul>
+      <div class="cov"><span class="st drawn"><i>◆</i>Console</span><span class="st drawn"><i>◆</i>Moderation and kill switch</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ S17 ============ -->
+<div class="screen" id="s17">
+  <div class="head"><span class="id">S17</span><h2>States, dialogs and help</h2><p>The screens nobody asks for and everybody meets: waiting, nothing, broken, offline, are you sure.</p></div>
+  <div class="grid2">
+    <div><div class="cap">Loading a bot card</div><div class="m-card"><div class="between"><div class="between" style="justify-content:flex-start;gap:10px"><div class="skel" style="width:44px;height:44px;border-radius:50%"></div><div class="stack" style="gap:8px"><div class="skel" style="width:110px"></div><div class="skel" style="width:70px;height:10px"></div></div></div><div class="skel" style="width:70px;height:22px;border-radius:999px"></div></div><div class="skel" style="height:70px"></div><div class="kv"><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div></div></div></div>
+    <div><div class="cap">Empty: no bots yet</div><div class="m-card" style="text-align:center;justify-items:center;padding:22px"><span class="av lg" style="--c:#8a8894">🐣</span><span class="ttl" style="font-size:16px">Nothing racing yet</span><span class="dim small">Describe a bot in one sentence and it starts on paper within a minute.</span><div class="btn" style="width:100%">Create your first bot</div></div></div>
+    <div><div class="cap">Error, with a cause and a way out</div><div class="m-card" style="border-color:color-mix(in srgb,var(--critical) 50%,var(--line))"><div class="between" style="justify-content:flex-start;gap:10px"><svg class="ic bad"><use href="#i-stop"/></svg><span class="ttl">Could not load your bots</span></div><span class="dim small">The Arena did not answer. Your bots keep running. Nothing is lost.</span><div class="between"><div class="btn sm">Try again</div><span class="dim small">Status page</span></div></div></div>
+    <div><div class="cap">Offline and degraded banners</div><div class="stack" style="gap:8px"><div class="m-card c2" style="border-left:3px solid var(--warning)"><span class="small"><b>You are offline.</b> Showing what was loaded 2 min ago.</span></div><div class="m-card c2" style="border-left:3px solid var(--warning)"><span class="small"><b>The race track is paused for maintenance.</b> Bots are on hold and nothing is lost. Back in about 10 minutes.</span></div></div></div>
+    <div><div class="cap">Confirm: pause all</div><div class="m-card"><span class="ttl" style="font-size:16px">Pause all 3 bots?</span><span class="dim small">They stop opening trades now. Open positions stay and their stops still protect them. Resume any time.</span><div class="btn">Pause all</div><div class="btn ghost">Keep racing</div><div class="between"><span class="dim small">Want them out of the market too?</span><span class="small" style="color:var(--accent-text)">Stop and close ›</span></div></div></div>
+    <div><div class="cap">Confirm: delete a bot</div><div class="m-card"><span class="ttl" style="font-size:16px">Delete Sleepy Quant?</span><span class="dim small">Removes its record, versions and leaderboard rows. Type its name to confirm.</span><div class="input focus"><span>Sleepy Quant</span></div><div class="btn danger">Delete forever</div><div class="btn ghost">Cancel</div></div></div>
+    <div><div class="cap">Report sheet</div><div class="m-card"><span class="ttl" style="font-size:16px">Report this skill</span><div class="chips"><span class="chip on">Misleading</span><span class="chip">Unsafe</span><span class="chip">Copied</span><span class="chip">Other</span></div><div class="input area"><span class="dim">What should we look at? (optional)</span></div><div class="btn">Send report</div><span class="dim tiny">The author is not told who reported. We review it within 2 days.</span></div></div>
+    <div><div class="cap">Refund (paid skill)</div><div class="m-card"><span class="ttl" style="font-size:16px">Refund Weekend guard?</span><span class="dim small">You are inside the 14-day window. The skill is removed from your bots and they start a new version.</span><div class="btn">Refund $ 3.00</div><div class="btn ghost">Keep it</div></div></div>
+    <div><div class="cap">Toasts</div><div class="stack" style="gap:8px"><div class="m-card c2" style="border-left:3px solid var(--good)"><span class="small"><b>Bot created.</b> It starts on the track in about a minute.</span></div><div class="m-card c2" style="border-left:3px solid var(--good)"><span class="small"><b>Link copied.</b></span></div><div class="m-card c2" style="border-left:3px solid var(--critical)"><span class="small"><b>Could not save.</b> The name is already in use. Pick another.</span></div></div></div>
+    <div><div class="cap">Help entry (Me tab)</div><div class="m-card list"><div><div class="grow">How the score works</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Why did my bot not trade?</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Plans and limits</div><svg class="ic"><use href="#i-chev"/></svg></div><div><div class="grow">Contact us</div><span class="mono dim tiny">support@ to be set</span></div></div></div>
+  </div>
+  <div class="notes" style="margin-top:14px">
+    <h3>Decisions</h3>
+    <ul>
+      <li>Skeletons keep the real layout, so nothing jumps when data arrives. They stop animating for people who ask for reduced motion.</li>
+      <li>An error says what happened, what is safe, and gives a button. "Your bots keep running" is only true because the track is separate from the page; say it only when it is.</li>
+      <li>Pause and Stop are different. Pause keeps positions under their stops. Stop closes them. Both are proposals to confirm.</li>
+      <li>Destructive actions name what goes. Bot deletion asks for the name; account deletion already asks for the e-mail.</li>
+      <li>Contact address and help articles are content still to write.</li>
+    </ul>
+  </div>
+</div>
+
+<section id="decide">
+  <div class="head"><span class="eyebrow">4 · Decisions for you</span><h2>What blocks the final design</h2><p>Each one changes words or screens on this page. My recommendation comes first.</p></div>
+  <div class="finds">
+    <article class="find"><span class="sev med">1</span><h3>Language</h3><p class="fix"><b>Portuguese (Brasil) first, English second.</b> Every string here is English. Translating after the layouts are final costs less than translating twice, but only if we settle the nouns first (next item).</p></article>
+    <article class="find"><span class="sev med">2</span><h3>The nouns</h3><p class="fix"><b>"Bot" in the chrome, the theme's noun on the card.</b> One name for the place: "Arena". The owner's Warren stays the owner's. "Race track" becomes plain words such as "running".</p></article>
+    <article class="find"><span class="sev med">3</span><h3>Pause versus Stop</h3><p class="fix"><b>Pause keeps positions under their stops; Stop closes them.</b> Both exist on paper. Matters more if live trading ever arrives.</p></article>
+    <article class="find"><span class="sev med">4</span><h3>Downgrade</h3><p class="fix"><b>Extra bots are paused, never deleted, and kept 30 days.</b> The alternative (delete) is cheaper to build and will make people angry.</p></article>
+    <article class="find"><span class="sev low">5</span><h3>Reviews and ratings</h3><p class="fix"><b>Skip at launch.</b> Drawn on the skill page, but the plan has verification and reports, not stars. Reviews invite fake ones and need moderation.</p></article>
+    <article class="find"><span class="sev low">6</span><h3>Follow and comments</h3><p class="fix"><b>Not in v1.</b> You called this a social platform. The plan's social pieces are profiles, leagues, badges and shared rules. Follows and comments add moderation work and are the usual first abuse channel.</p></article>
+    <article class="find"><span class="sev low">7</span><h3>Templates</h3><p class="fix"><b>Three, written by us.</b> They are content, need your review, and should be labelled as examples, not advice.</p></article>
+    <article class="find"><span class="sev med">8</span><h3>Legal text and contact</h3><p class="fix"><b>A lawyer writes the terms, privacy notice, age line, affiliate rules and risk notice.</b> The screens have the places; they do not have the words.</p></article>
+    <article class="find"><span class="sev low">9</span><h3>Still open from the plan</h3><p class="fix">Price and payment processor, countries, who pays model costs on Pro, hosted only or also a self-run option. Screens S10, S11 and S13 wait on these.</p></article>
+  </div>
+</section>
+</div>
+
+<script>
+/* ---- coverage table ---- */
+var ROWS = [
+  ["Account and access"],
+  ["Sign in with an e-mail link","built","Sign-in, inbox, link landing","Works. Anti-enumeration kept."],
+  ["Landing page for visitors","drawn","S2",""],
+  ["Terms, privacy and risk consent","drawn","S2","Words need a lawyer"],
+  ["First-run onboarding","drawn","S3","Free AI is step 2"],
+  ["Account: public name, sign out, delete","redesign","S15","Today mixed into the bots page"],
+  ["Sessions list and data export","drawn","S15","Export needs a small job"],
+  ["Notification preferences","drawn","S15",""],
+  ["Language (Portuguese and English)","decide","S15","See decisions"],
+  ["Bots"],
+  ["My bots home","redesign","S4","Adds season strip, curve, states"],
+  ["Create a bot","redesign","S5","One page becomes five steps"],
+  ["AI design and portrait for the first bot","redesign","S3, S5","Built, but hidden inside the form"],
+  ["Bot templates","drawn","S5","Content to write"],
+  ["Bot page: curve, position, budget","drawn","S6","No screen exists"],
+  ["Decision history with the facts behind it","drawn","S6","Facts, not invented reasons"],
+  ["Version history","drawn","S6","API built, screen missing"],
+  ["Edit bot settings","redesign","S6","Moves into the bot page"],
+  ["Pause, stop, stop all","drawn","S4, S6, S17","Semantics to confirm"],
+  ["Budget and quota meters","drawn","S4, S11",""],
+  ["Theme and avatar picker","built","Create form","Painted art still to come"],
+  ["Upsell for locked options","redesign","S10","Today a dead end"],
+  ["Ranking and social"],
+  ["Leaderboard","redesign","S8","Built; tappable rows, pinned You"],
+  ["Public bot profile","drawn","S7",""],
+  ["Public member profile","drawn","S7",""],
+  ["Rule sharing and Use these rules","drawn","S5, S7","Text only, never trades"],
+  ["Season archive","drawn","S8","Needs permanent final standings"],
+  ["Season recap","drawn","S9",""],
+  ["Badges","drawn","S9","List to write"],
+  ["Follow and comments","decide","–","Not in the plan"],
+  ["Money"],
+  ["Plans and upgrade","drawn","S10","Price open"],
+  ["Billing: method, invoices, cancel","drawn","S10","Processor open"],
+  ["Provider key vault","drawn","S11","Write-only"],
+  ["Usage and quotas","drawn","S11",""],
+  ["Marketplace"],
+  ["Browse and search skills","drawn","S12",""],
+  ["Skill detail: record, permissions, versions","drawn","S12",""],
+  ["Install and update choice","drawn","S12","Install is a new bot version"],
+  ["Report and refund","drawn","S12, S17",""],
+  ["Skill studio","drawn","S13","Editor is today's Lab, needs a skin"],
+  ["Publish and verification steps","drawn","S13",""],
+  ["Seller dashboard and payout","drawn","S13","Provider-hosted onboarding"],
+  ["Affiliates"],
+  ["Affiliate dashboard and ledger","drawn","S14",""],
+  ["Program rules and disclosure","drawn","S14","Lawyer review"],
+  ["Platform"],
+  ["Platform console: health, costs, accounts","drawn","S16","Separate app"],
+  ["Moderation queue and kill switch","drawn","S16",""],
+  ["System"],
+  ["Loading, empty, error, offline states","drawn","S17",""],
+  ["Help and contact","drawn","S17","Content to write"],
+  ["Touch targets and accessibility pass","redesign","All","44 px minimum"],
+  ["Live trading opt-in","decide","–","Not drawn on purpose: legal gate first"]
+];
+var LABEL = { built: ["✓", "Built"], redesign: ["◐", "Built, redesign"], drawn: ["◆", "Drawn here"], decide: ["?", "Needs a decision"] };
+var filter = "all";
+function render() {
+  var body = document.getElementById("cov"), counts = { built: 0, redesign: 0, drawn: 0, decide: 0 }, n = 0, html = "";
+  ROWS.forEach(function (r) {
+    if (r.length === 1) { html += '<tr class="grp" data-g="1"><td colspan="4">' + r[0] + "</td></tr>"; return; }
+    counts[r[1]]++; n++;
+    if (filter !== "all" && r[1] !== filter) return;
+    var ids = r[2].split(/,\s*/).map(function (s) { return /^S\d+$/.test(s) ? '<a class="ref" href="#' + s.toLowerCase() + '">' + s + "</a>" : s; }).join(", ");
+    html += "<tr><td>" + r[0] + '</td><td><span class="st ' + r[1] + '"><i>' + LABEL[r[1]][0] + "</i>" + LABEL[r[1]][1] + "</span></td><td>" + ids + '</td><td class="dim">' + r[3] + "</td></tr>";
+  });
+  if (filter !== "all") html = html.replace(/<tr class="grp"[^>]*>.*?<\/tr>/g, "");
+  body.innerHTML = html;
+  var c = document.getElementById("counts");
+  c.innerHTML = "";
+  [["all", "All", n], ["built", "Built", counts.built], ["redesign", "Built, redesign", counts.redesign], ["drawn", "Drawn here", counts.drawn], ["decide", "Needs a decision", counts.decide]].forEach(function (x) {
+    var b = document.createElement("button");
+    b.type = "button"; b.setAttribute("aria-pressed", String(filter === x[0]));
+    b.innerHTML = "<b>" + x[2] + "</b><span class=\"" + (x[0] === "all" ? "dim" : "st " + x[0]) + '">' + (x[0] === "all" ? "" : "<i>" + LABEL[x[0]][0] + "</i>") + x[1] + "</span>";
+    b.onclick = function () { filter = x[0]; render(); };
+    c.appendChild(b);
+  });
+}
+render();
+
+/* ---- equity curves, drawn to scale from their data ---- */
+function spark(svg) {
+  var v = svg.getAttribute("data-v").split(",").map(Number), xs = (svg.getAttribute("data-x") || "").split(",").filter(Boolean);
+  var vb = svg.getAttribute("viewBox").split(" ").map(Number), W = vb[2], H = vb[3], L = 34, R = 12, T = 8, B = xs.length ? 20 : 8;
+  var lo = Math.min.apply(null, v), hi = Math.max.apply(null, v), pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
+  var X = function (i) { return L + (W - L - R) * i / (v.length - 1); }, Y = function (y) { return T + (H - T - B) * (1 - (y - lo) / (hi - lo)); };
+  var s = "", ticks = [lo + pad, (lo + hi) / 2, hi - pad];
+  ticks.forEach(function (t) {
+    s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(t).toFixed(1) + '" y2="' + Y(t).toFixed(1) + '" stroke="#24232d" stroke-width="1"/>';
+    s += '<text x="' + (L - 6) + '" y="' + (Y(t) + 3.5).toFixed(1) + '" text-anchor="end" font-size="9.5" fill="#8a8894" font-family="JetBrains Mono, monospace">' + (t >= 0 ? "+" : "") + t.toFixed(1) + "%</text>";
+  });
+  var pts = v.map(function (y, i) { return X(i).toFixed(1) + "," + Y(y).toFixed(1); });
+  s += '<polygon points="' + X(0).toFixed(1) + "," + Y(lo).toFixed(1) + " " + pts.join(" ") + " " + X(v.length - 1).toFixed(1) + "," + Y(lo).toFixed(1) + '" fill="rgba(201,133,0,0.16)"/>';
+  s += '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#f0b43c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+  s += '<circle cx="' + X(v.length - 1).toFixed(1) + '" cy="' + Y(v[v.length - 1]).toFixed(1) + '" r="4" fill="#f0b43c" stroke="#08070c" stroke-width="2"/>';
+  xs.forEach(function (x, i) { s += '<text x="' + (L + (W - L - R) * i / (xs.length - 1)).toFixed(1) + '" y="' + (H - 5) + '" text-anchor="' + (i === 0 ? "start" : i === xs.length - 1 ? "end" : "middle") + '" font-size="9.5" fill="#8a8894" font-family="JetBrains Mono, monospace">' + x + "</text>"; });
+  svg.innerHTML = s; svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Season equity curve, sample data, ending at +" + v[v.length - 1].toFixed(1) + "%");
+}
+Array.prototype.forEach.call(document.querySelectorAll("svg.spark"), spark);
+</script>
