@@ -74,6 +74,7 @@
   color: var(--text-2);
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
 }
 .pnav a.on,
 .pnav a:hover {
@@ -870,6 +871,11 @@
     gap: 12px;
     padding: 10px 16px;
     font-size: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pnav::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -1998,5 +2004,61 @@
   }
   .bp-when {
     margin-left: 0;
+  }
+}
+
+/* Arena: sign-in and account */
+.arena-page {
+  max-width: 560px;
+}
+.arena-card h2,
+.arena-card h3 {
+  margin-top: 0;
+}
+.arena-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+.arena-form .pinput {
+  flex: 1;
+  min-width: 0;
+}
+.arena-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.arena-actions .linkbtn {
+  margin-top: 0;
+}
+.arena-who {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.arena-email {
+  font-size: 16px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.arena-danger {
+  border-color: color-mix(in srgb, var(--critical) 35%, var(--line));
+}
+.pbtn.danger {
+  border-color: color-mix(in srgb, var(--critical) 70%, var(--line));
+  background: color-mix(in srgb, var(--critical) 24%, var(--card));
+}
+@media (max-width: 560px) {
+  .arena-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .arena-form .pbtn {
+    width: 100%;
   }
 }

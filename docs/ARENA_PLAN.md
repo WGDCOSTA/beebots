@@ -105,7 +105,8 @@ Final scope of this section is pending the owner's answer and a lawyer's review.
 ## 10b. Build status
 
 - **Phase 1, slice 1 (accounts): built.** `src/arena/` runs as its own process (`pnpm arena`, default port 8090), separate from the engine and the admin panel. Magic-link sign-in (one-time token valid 15 minutes, hashed at rest), sessions (30 days sliding, hashed, HttpOnly SameSite=Lax cookie), one SQLite file per user reachable only through the store, account deletion, per-address and per-network rate limits, and an identical answer for known and unknown addresses. E-mail goes out through Resend when `ARENA_MAIL_API_KEY` and `ARENA_MAIL_FROM` are set; otherwise links print to stderr (development only). The Resend call is written to their documented API but has not been exercised against the real service.
-- Next slices: the sign-in and account pages in the dashboard, then bot creation inside a user's own database, the worker that runs a user's bot, and season ranking.
+- **Phase 1, slice 2 (pages): built.** `#/arena` in the dashboard: e-mail form, "check your inbox" with a resend countdown, the page the e-mailed link opens (the token is removed from the address bar once spent), the account page (sign out, delete account with the e-mail typed back). The Vite dev server proxies `/arena` to `ARENA_URL` (default http://127.0.0.1:8090); in production the reverse proxy must send `/arena/*` to the Arena service.
+- Next slices: bot creation inside a user's own database, the worker that runs a user's bot, and season ranking.
 
 ## 11. Risks
 

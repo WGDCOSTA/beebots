@@ -471,7 +471,7 @@ export function LabPage() {
   );
 }
 
-export function PageNav({ current }: { current: "lab" | "admin" | "bunny" }) {
+export function PageNav({ current }: { current: "lab" | "admin" | "bunny" | "arena" }) {
   return (
     <nav className="pnav">
       <a className="logo" href="#/">
@@ -483,6 +483,9 @@ export function PageNav({ current }: { current: "lab" | "admin" | "bunny" }) {
       </a>
       <a href="#/lab" className={current === "lab" ? "on" : ""}>
         Lab & warren memory
+      </a>
+      <a href="#/arena" className={current === "arena" ? "on" : ""}>
+        Arena
       </a>
       <a href="#/admin" className={current === "admin" ? "on" : ""}>
         Admin
