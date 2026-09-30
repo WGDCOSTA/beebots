@@ -1,3 +1,5 @@
+import { humanLabel } from "./tickerModel.js";
+
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
 export type ArenaView = { kind: "account" } | { kind: "verify"; token: string };
@@ -60,7 +62,7 @@ export function draftProblem(d: BotDraft, maxCoins: number): string | null {
   if (only && d.coins.some((c) => !only.includes(c))) return `${STYLE_LABEL[d.style]?.label ?? d.style} only trades ${only.join(", ")}. Pick those coins, or another style.`;
   const n = d.rules.trim().length;
   if (n < 8) return "Write a few words about how it should trade (8 characters or more).";
-  if (n > 2000) return "Keep the rules under 2000 characters.";
+  if (n > 500) return "Keep the rules under 500 characters.";
   return null;
 }
 
@@ -68,4 +70,39 @@ export function draftProblem(d: BotDraft, maxCoins: number): string | null {
 export function toggleCoin(coins: string[], coin: string, max: number): string[] {
   if (coins.includes(coin)) return coins.filter((c) => c !== coin);
   return coins.length >= max ? coins : [...coins, coin];
+}
+
+export interface RunStatus {
+  state: "running" | "queued" | "error";
+  error?: string;
+  equityUsd?: number;
+  startEquityUsd?: number;
+  pnlUsd?: number;
+  pnlPct?: number;
+  position?: { coin: string; side: string; sizeUsd: number | null; uplUsd: number; minutesHeld: number } | null;
+  tradesToday?: number;
+  decisions?: number;
+  spentUsd?: number;
+  capped?: boolean;
+  last?: { choice: string | null; confidence: number | null; status: string; ts: number } | null;
+}
+
+const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const signed = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
+
+/** What to show under a bunny: one headline, one detail line, and whether the news is good, bad or neutral. */
+export function runSummary(enabled: boolean, run: RunStatus | undefined): { headline: string; detail: string; tone: "good" | "bad" | "flat" } {
+  if (!enabled) return { headline: "Saved, not trading yet", detail: "The race track is not open yet. Your bunny is stored and ready.", tone: "flat" };
+  if (!run || run.state === "queued") return { headline: "Waiting for a place on the track", detail: "The track is full. It starts on its own when a place frees up.", tone: "flat" };
+  if (run.state === "error") return { headline: "Could not start", detail: run.error ?? "It will be retried.", tone: "bad" };
+  const pnl = run.pnlUsd ?? 0;
+  const pos = run.position;
+  const where = pos ? `${pos.side.toUpperCase()} ${pos.coin}${pos.sizeUsd !== null ? ` ${usd(pos.sizeUsd)}` : ""}, ${signed(pos.uplUsd)} open` : "Flat, waiting for a setup";
+  const last = run.last ? ` Last call: ${humanLabel(run.last.choice)}${run.last.confidence !== null ? ` (${Math.round(run.last.confidence * 100)}% sure)` : ""}.` : "";
+  const cap = run.capped ? " Today's decision budget is used up, so it holds until 00:00 UTC." : "";
+  return {
+    headline: `Paper account ${usd(run.equityUsd ?? 0)} (${signed(pnl)}, ${(run.pnlPct ?? 0) >= 0 ? "+" : ""}${(run.pnlPct ?? 0).toFixed(2)}%)`,
+    detail: `${where}. ${run.decisions ?? 0} decisions.${last}${cap}`,
+    tone: pnl > 0 ? "good" : pnl < 0 ? "bad" : "flat",
+  };
 }

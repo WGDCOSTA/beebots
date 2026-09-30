@@ -60,7 +60,7 @@ export class BotError extends Error {
 
 const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} '-]{0,22}[\p{L}\p{N}]$/u;
 const MIN_RULES = 8;
-const MAX_RULES = 2000;
+const MAX_RULES = 500;
 
 interface Row {
   id: string;
@@ -103,7 +103,7 @@ export class Bots {
   constructor(private readonly db: DatabaseSync, private readonly tier: Tier, private readonly now: () => number = Date.now) {}
 
   list(): BotView[] {
-    return (this.db.prepare("SELECT * FROM bots ORDER BY created_at, id").all() as unknown as Row[]).map(toView);
+    return (this.db.prepare("SELECT * FROM bots ORDER BY created_at, rowid").all() as unknown as Row[]).map(toView);
   }
 
   private get(id: unknown): Row {

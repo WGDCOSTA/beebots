@@ -7,6 +7,7 @@ import { clientAddr } from "../visitors.js";
 import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
 import { AiError, MemberAi, type AiService } from "./ai.js";
 import { BotError, Bots, COINS, LIMITS } from "./bots.js";
+import type { RunStatus } from "./runner.js";
 import { THEMES } from "./themes.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
@@ -21,6 +22,12 @@ export interface ApiOpts {
   ai?: AiService | null;
   /** AI calls the whole platform may spend in a day. */
   aiDailyLimit?: number;
+  /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
+  runner?: {
+    update(userId: string): Promise<void>;
+    forget(userId: string): Promise<void>;
+    status(userId: string, botIds: string[]): Record<string, RunStatus>;
+  } | null;
 }
 
 const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, createdAt: u.createdAt });
@@ -99,7 +106,10 @@ export class ArenaApi {
     if (req.method === "GET" && route === "/bots") {
       const u = this.auth.user(sessionOf(req));
       if (!u) reply(res, 401, { error: "not signed in" });
-      else reply(res, 200, { bots: new Bots(this.store.tenant(u.id), u.tier, this.now).list() });
+      else {
+        const bots = new Bots(this.store.tenant(u.id), u.tier, this.now).list();
+        reply(res, 200, { bots, runner: this.opts.runner ? { enabled: true, runs: this.opts.runner.status(u.id, bots.map((b) => b.id)) } : { enabled: false, runs: {} } });
+      }
       return true;
     }
     if (req.method !== "POST") {
@@ -149,14 +159,20 @@ export class ArenaApi {
         }
         const bots = new Bots(this.store.tenant(u.id), u.tier, this.now);
         try {
-          if (route === "/bots/create") reply(res, 200, { bot: bots.create(body) });
-          else if (route === "/bots/update") reply(res, 200, { bot: bots.update(body.id, body) });
+          if (route === "/bots/create") {
+            reply(res, 200, { bot: bots.create(body) });
+            void this.opts.runner?.update(u.id);
+          } else if (route === "/bots/update") {
+            reply(res, 200, { bot: bots.update(body.id, body) });
+            void this.opts.runner?.update(u.id);
+          }
           else if (route === "/bots/versions") reply(res, 200, { versions: bots.versions(body.id) });
           else {
             const gone = bots.find(body.id);
             bots.remove(gone.id);
             this.store.removePortrait(u.id, gone.id);
             reply(res, 200, { ok: true });
+            void this.opts.runner?.update(u.id);
           }
         } catch (e) {
           if (e instanceof BotError) reply(res, e.status, { error: e.message });
@@ -186,6 +202,7 @@ export class ArenaApi {
         if (!u) reply(res, 401, { error: "not signed in" });
         else if (body.confirm !== u.email) reply(res, 400, { error: "Type your e-mail address to confirm." });
         else {
+          await this.opts.runner?.forget(u.id); // close the paper files before they are deleted
           this.store.deleteUser(u.id, this.now());
           reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
         }

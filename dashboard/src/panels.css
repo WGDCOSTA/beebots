@@ -2175,3 +2175,29 @@
   padding: 12px;
   background: color-mix(in srgb, var(--bizzy) 6%, var(--card));
 }
+.ab-run {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--card-2);
+  border-left: 3px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.ab-run.good {
+  border-left-color: var(--good);
+}
+.ab-run.good strong {
+  color: var(--good-text);
+}
+.ab-run.bad {
+  border-left-color: var(--critical);
+}
+.ab-run.bad strong {
+  color: var(--critical-text);
+}
+.ab-run .small {
+  color: var(--text-2);
+}

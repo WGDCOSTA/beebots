@@ -81,7 +81,7 @@ describe("creating a bot", () => {
       { coins: ["BTC", "SCAM"] },
       { coins: "BTC" },
       { rules: "short" },
-      { rules: "x".repeat(2001) },
+      { rules: "x".repeat(501) },
     ])
       fails(() => bots.create({ ...good, ...bad }), 400);
   });

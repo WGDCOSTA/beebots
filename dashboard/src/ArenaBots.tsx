@@ -1,7 +1,7 @@
 // "Your bunnies" on the Arena page: the member's bots, and the form to make or change one. Plan limits are enforced by
 // the server; the page shows what the plan leaves out as locked, with the reason, instead of hiding it.
 import { useCallback, useEffect, useState } from "react";
-import { draftProblem, STYLE_LABEL, toggleCoin, type BotDraft } from "./arenaModel";
+import { draftProblem, runSummary, STYLE_LABEL, toggleCoin, type BotDraft, type RunStatus } from "./arenaModel";
 
 interface Avatar {
   id: string;
@@ -204,8 +204,8 @@ function Form({ cat, limits, ai, initial, editing, onDone, onCancel }: { cat: Ca
       <label className="eyebrow" htmlFor="ab-rules">
         Rules, in your own words
       </label>
-      <textarea id="ab-rules" className="pinput ab-rules" rows={4} maxLength={2000} placeholder="How should it trade? When should it stay out? What must it never do?" value={d.rules} onChange={(e) => setD({ ...d, rules: e.target.value })} />
-      <div className="dim small">{d.rules.trim().length} / 2000{editing ? ". Changing style, coins or rules starts a new version of this bunny." : ""}</div>
+      <textarea id="ab-rules" className="pinput ab-rules" rows={4} maxLength={500} placeholder="How should it trade? When should it stay out? What must it never do?" value={d.rules} onChange={(e) => setD({ ...d, rules: e.target.value })} />
+      <div className="dim small">{d.rules.trim().length} / 500{editing ? ". Changing style, coins or rules starts a new version of this bunny, with a fresh paper account." : ""}</div>
 
       {error && <p className="bad">{error}</p>}
       <div className="arena-actions">
@@ -228,15 +228,17 @@ export function ArenaBots({ limits }: { limits: Limits }) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [ai, setAi] = useState<AiStatus | null>(null);
+  const [runner, setRunner] = useState<{ enabled: boolean; runs: Record<string, RunStatus> }>({ enabled: false, runs: {} });
   const [painting, setPainting] = useState<string | null>(null);
   const [paintError, setPaintError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [c, b, a] = await Promise.all([call<Catalogue>("GET", "catalogue"), call<{ bots: Bot[] }>("GET", "bots"), call<AiStatus>("GET", "ai/status")]);
+      const [c, b, a] = await Promise.all([call<Catalogue>("GET", "catalogue"), call<{ bots: Bot[]; runner: { enabled: boolean; runs: Record<string, RunStatus> } }>("GET", "bots"), call<AiStatus>("GET", "ai/status")]);
       if (c.status === 200 && b.status === 200) {
         setCat(c.data);
         setBots(b.data.bots);
+        setRunner(b.data.runner);
         setAi(a.status === 200 ? a.data : null);
       } else setError("Could not load your bunnies.");
     } catch {
@@ -245,6 +247,9 @@ export function ArenaBots({ limits }: { limits: Limits }) {
   }, []);
   useEffect(() => {
     void load();
+    // A running bunny's account moves: look again every 15 seconds while the list is showing.
+    const id = setInterval(() => void load(), 15_000);
+    return () => clearInterval(id);
   }, [load]);
 
   if (error) return <div className="pcard arena-card"><p className="bad">{error}</p></div>;
@@ -287,6 +292,15 @@ export function ArenaBots({ limits }: { limits: Limits }) {
             </div>
             <div className="dim small">{b.coins.join(" · ")}</div>
             <div className="ab-rules-preview small">{b.rules}</div>
+            {(() => {
+              const sum = runSummary(runner.enabled, runner.runs[b.id]);
+              return (
+                <div className={`ab-run ${sum.tone}`}>
+                  <strong>{sum.headline}</strong>
+                  <span className="small">{sum.detail}</span>
+                </div>
+              );
+            })()}
             <div className="arena-actions">
               <button className="pbtn ghost small" onClick={() => setMode(b)}>
                 Edit
@@ -345,7 +359,7 @@ export function ArenaBots({ limits }: { limits: Limits }) {
         </button>
         {full && <span className="dim small">{limits.bots === 1 ? "The Free plan has one bunny. Upgrade to Pro for more." : "You have reached your plan's limit."}</span>}
       </div>
-      <p className="dim small">Bunnies created here are saved to your private database. Running them on the race track is the next step.</p>
+      <p className="dim small">Your bunnies and their paper accounts live in your own private space. Simulated money only.</p>
     </div>
   );
 }

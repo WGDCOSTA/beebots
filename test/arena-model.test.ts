@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arenaView, draftProblem, looksLikeEmail, memberSince, resendIn, toggleCoin } from "../dashboard/src/arenaModel.js";
+import { arenaView, draftProblem, looksLikeEmail, memberSince, resendIn, runSummary, toggleCoin } from "../dashboard/src/arenaModel.js";
 
 describe("arenaView", () => {
   it("reads the e-mailed link", () => {
@@ -47,7 +47,7 @@ describe("draftProblem", () => {
     expect(draftProblem({ ...ok, coins: ["BTC", "SOL"] }, 3)).toMatch(/only trades BTC, ETH/);
     expect(draftProblem({ ...ok, style: "boozy", coins: ["XRP"] }, 3)).toBeNull();
     expect(draftProblem({ ...ok, rules: "short" }, 3)).toMatch(/8 characters/);
-    expect(draftProblem({ ...ok, rules: "x".repeat(2001) }, 3)).toMatch(/2000/);
+    expect(draftProblem({ ...ok, rules: "x".repeat(501) }, 3)).toMatch(/500/);
   });
 });
 
@@ -58,3 +58,24 @@ describe("toggleCoin", () => {
     expect(toggleCoin(["BTC", "ETH"], "BTC", 2)).toEqual(["ETH"]);
   });
 });
+
+describe("runSummary", () => {
+  const run = { state: "running" as const, equityUsd: 1012.5, pnlUsd: 12.5, pnlPct: 1.25, decisions: 40, position: null, last: { choice: "HOLD_WINNER", confidence: 0.82, status: "ok", ts: 1 } };
+  it("explains a bot that is not trading, in words", () => {
+    expect(runSummary(false, undefined).headline).toMatch(/not trading yet/);
+    expect(runSummary(true, undefined).headline).toMatch(/Waiting for a place/);
+    expect(runSummary(true, { state: "error" })).toMatchObject({ headline: "Could not start", tone: "bad" });
+  });
+  it("shows the paper account, the position and the last call", () => {
+    const s = runSummary(true, run);
+    expect(s.headline).toBe("Paper account $1,012.50 (+$12.50, +1.25%)");
+    expect(s.detail).toBe("Flat, waiting for a setup. 40 decisions. Last call: Hold the winner (82% sure).");
+    expect(s.tone).toBe("good");
+    const p = runSummary(true, { ...run, pnlUsd: -3, pnlPct: -0.3, equityUsd: 997, position: { coin: "BTC", side: "long", sizeUsd: 500, uplUsd: -3, minutesHeld: 5 }, capped: true });
+    expect(p.headline).toBe("Paper account $997.00 (-$3.00, -0.30%)");
+    expect(p.detail).toContain("LONG BTC $500.00, -$3.00 open");
+    expect(p.detail).toContain("holds until 00:00 UTC");
+    expect(p.tone).toBe("bad");
+  });
+});
+
