@@ -31,6 +31,8 @@ services:
       # How often each bunny asks Jev, and the hard daily cap on Jev spend in USD (see docs/COSTS.md).
       TICK_MS: ${TICK_MS:-10000}
       JEV_DAILY_USD_CAP: ${JEV_DAILY_USD_CAP:-2}
+      JEV_SHADOW_ENABLED: ${JEV_SHADOW_ENABLED:-false}
+      JEV_SHADOW_DAILY_USD_CAP: ${JEV_SHADOW_DAILY_USD_CAP:-0.25}
       BEE_START_EQUITY_USD: ${BEE_START_EQUITY_USD:-333}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       # Setup stays open this many minutes after the engine starts; after that, restart the engine to open it again.

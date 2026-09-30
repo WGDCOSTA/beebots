@@ -27,6 +27,57 @@ slower, strategic layer around them:
 
 Nothing here trades by itself, and nothing here can bypass a cap, a stop or the leverage limit.
 
+## J0: attribution and experiment ledger
+
+Before a bunny can safely earn more freedom, every Jev-backed decision now gets an immutable attribution record:
+
+- a content-addressed policy version (method and parameters, strategy and owner rules, Jev model and question schema,
+  conviction rubric, risk limits and live knobs);
+- hashes of the exact state and complete action menu, plus the questions and raw structured answers sent through Jev;
+- requested and answering model ids, selected arm, confidence, raw conviction, entropy, winner margin, latency, tokens
+  and cost already held by the decision record;
+- an optional experiment id and later outcomes at explicit horizons and metrics.
+
+The experiment ledger has an audited lifecycle: `draft → shadow → canary → promoted`, with explicit stop and rollback
+paths. Every transition requires a reason and actor and is appended to an event stream. Policy definitions are immutable,
+and the decision plus its evaluation are committed in one SQLite transaction. Invalid or cross-bunny attribution is
+rejected and rolls the whole decision back.
+
+J0 is intentionally observational: it does not change Jev's questions, thresholds, risk decisions or order execution.
+
+## J1: outcomes and shadow challengers
+
+Every non-trivial Jev answer now schedules counterfactual evaluation at 15 minutes, 1 hour and 4 hours. At each horizon,
+the engine marks every menu option against future mids and records the chosen action's directional markout, regret versus
+the best offered option and multiclass Brier score. Settlement is idempotent, survives restarts and retries temporarily
+missing markets for 24 hours. It evaluates the decision over the same menu; it does not pretend this markout is realised
+trading P&L.
+
+An active `jev_contract` experiment automatically attributes the real answer to its champion. With
+`JEV_SHADOW_ENABLED=true`, a second Jev client evaluates the challenger over the exact same state and menu, using a
+separate `JEV_SHADOW_DAILY_USD_CAP` (default `$0.25`). It runs on a background queue after the real decision is durable.
+The shadow runner has no executor and produces no `Action`, so neither a shadow nor a canary challenger can place an
+order in J1. Only prompt, model and conviction-rubric changes over the same method and risk contract are accepted.
+
+Canary capital and live promotion still belong to later phases. No challenger can promote itself into execution.
+
+## J2: owner control and the evidence gate
+
+Admin → Experiments is the authenticated control plane. The owner can clone an attributed policy into a challenger by
+changing its instructions, Jev model or conviction rubric, choose one primary metric and its thresholds, start shadow,
+or stop/rollback the run. The API deliberately has no `promote` action.
+
+The evidence gate pairs champion and challenger outcomes from the same decisions. To avoid treating ten-second ticks as
+independent evidence, it keeps at most one sample per configured horizon. The default bar is 24 independent 1-hour
+samples, at least `0.01` better Brier score, no more than 5% failed shadow answers, enough elapsed runtime and a positive
+95% lower confidence bound. Thresholds are stored with the experiment, so the decision is reproducible rather than
+silently changing with future defaults.
+
+Passing all gates automatically changes only `shadow → canary`. In J2, canary is intentionally still shadow-only: the
+engine continues attributing and executing the champion, while the challenger receives the same state/menu in the
+isolated shadow runner. An experiment is re-evaluated after outcomes settle and on engine startup. The event, evidence
+snapshot, actor and reason are appended to the ledger.
+
 ## The three brains
 
 | Bunny | Brain | Key | Default model |

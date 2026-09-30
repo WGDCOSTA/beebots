@@ -18,6 +18,9 @@ Cost per day = `3 bees × (86,400,000 / TICK_MS) × tokens_per_call × $0.042 / 
 
 **Recommendation:** start at `TICK_MS=2000` with `JEV_DAILY_USD_CAP=5`. Drop to 1 s for filming sessions if the shot needs more motion. Measure real `usage.input_tokens` in phase 4; the table is only as good as the tokens-per-call guess.
 
+Shadow experiments are off by default. `JEV_SHADOW_ENABLED=true` gives challenger calls their own restored daily counter
+and hard cap (`JEV_SHADOW_DAILY_USD_CAP`, default `$0.25`), so experimentation cannot consume the production Jev budget.
+
 ## 2. OKX trading fees (X-Perps, EEA)
 
 - **Maker 0.020% / taker 0.050%**, read off the EEA fee endpoint and corroborated by the PRIIPs KID (2026-09-23). Bunnies use market orders only, so **every fill is taker**.

@@ -10,6 +10,9 @@ import { safeError } from "./redact.js";
 const require = createRequire(import.meta.url);
 const { TypeSafeClient, choice, score } = require("@typesafe-ai/sdk") as typeof SDK;
 
+/** Changes only when the questions or their semantics change; persisted with every evaluation. */
+export const JEV_QUESTION_SCHEMA_VERSION = "action-conviction-v1";
+
 export interface JevAsk {
   strategy: string;
   state: Record<string, unknown>;
@@ -29,6 +32,7 @@ export interface JevAnswer {
   costUsd: number;
   latencyMs: number;
   model: string;
+  trace: JevTrace;
 }
 
 export interface JevFailure {
@@ -36,9 +40,19 @@ export interface JevFailure {
   reason: "daily_cap" | "backoff" | "error";
   error?: { code: string; message: string };
   latencyMs: number;
+  trace: JevTrace;
 }
 
 export type JevResult = JevAnswer | JevFailure;
+
+/** Reproducible request/response metadata. State is stored once on the decision row, not duplicated here. */
+export interface JevTrace {
+  questionSchemaVersion: typeof JEV_QUESTION_SCHEMA_VERSION;
+  requestedModel: string;
+  answeredModel: string | null;
+  questions: Record<string, unknown>;
+  answers: Record<string, unknown> | null;
+}
 
 /** Anything with the SDK's systemOne shape, so tests can inject a fake. */
 export interface SystemOne {
@@ -97,25 +111,33 @@ export class Jev {
     }
   }
 
-  async decide(ask: JevAsk): Promise<JevResult> {
+  async decide(ask: JevAsk, override: { model?: string } = {}): Promise<JevResult> {
     const t0 = this.now();
-    if (this.capTripped) return { ok: false, reason: "daily_cap", latencyMs: 0 };
-    if (t0 < this.backoffUntil) return { ok: false, reason: "backoff", latencyMs: 0 };
-
+    const requestedModel = override.model ?? this.opts.model;
     const labels = Object.keys(ask.menu);
-    if (labels.length === 0) return { ok: false, reason: "error", error: { code: "EMPTY_MENU", message: "no valid options" }, latencyMs: 0 };
     const criteria = Object.fromEntries(labels.map((l) => [l, ask.menu[l]!.desc]));
     const conv = ask.convictionLabels as unknown as readonly [string, string, ...string[]];
+    const questions = {
+      action: choice(`${ask.strategy} Pick your next move.`, criteria),
+      conviction: score("Signal strength?", conv),
+    };
+    const emptyTrace = (): JevTrace => ({
+      questionSchemaVersion: JEV_QUESTION_SCHEMA_VERSION,
+      requestedModel,
+      answeredModel: null,
+      questions: jsonRecord(questions),
+      answers: null,
+    });
+    if (this.capTripped) return { ok: false, reason: "daily_cap", latencyMs: 0, trace: emptyTrace() };
+    if (t0 < this.backoffUntil) return { ok: false, reason: "backoff", latencyMs: 0, trace: emptyTrace() };
+    if (labels.length === 0) return { ok: false, reason: "error", error: { code: "EMPTY_MENU", message: "no valid options" }, latencyMs: 0, trace: emptyTrace() };
 
     try {
       const r = await this.client.systemOne(
         {
-          model: this.opts.model,
+          model: requestedModel,
           state: ask.state as SDK.EntryType,
-          questions: {
-            action: choice(`${ask.strategy} Pick your next move.`, criteria),
-            conviction: score("Signal strength?", conv),
-          },
+          questions,
         },
         { timeout: this.opts.timeoutMs, retry: { maxRetries: 0 } },
       );
@@ -128,8 +150,15 @@ export class Jev {
       this.spentTodayUsd += costUsd;
       this.backoffStep = 0;
       this.downSince = null;
+      const trace: JevTrace = {
+        questionSchemaVersion: JEV_QUESTION_SCHEMA_VERSION,
+        requestedModel,
+        answeredModel: r.model,
+        questions: jsonRecord(questions),
+        answers: jsonRecord(r.answers),
+      };
       if (!labels.includes(a.choice)) {
-        return { ok: false, reason: "error", error: { code: "OFF_MENU", message: `choice not in menu` }, latencyMs };
+        return { ok: false, reason: "error", error: { code: "OFF_MENU", message: `choice not in menu` }, latencyMs, trace };
       }
       return {
         ok: true,
@@ -142,6 +171,7 @@ export class Jev {
         costUsd,
         latencyMs,
         model: r.model,
+        trace,
       };
     } catch (err) {
       const latencyMs = this.now() - t0;
@@ -151,9 +181,14 @@ export class Jev {
         this.backoffUntil = this.now() + Math.min(60_000, 1000 * 2 ** this.backoffStep);
       }
       this.downSince ??= t0;
-      return { ok: false, reason: "error", error: safeError(err), latencyMs };
+      return { ok: false, reason: "error", error: safeError(err), latencyMs, trace: emptyTrace() };
     }
   }
+}
+
+/** Strip SDK class prototypes/undefined fields so the trace is guaranteed to be JSON-storable. */
+function jsonRecord(value: unknown): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
 }
 
 /** Setup page: one tiny real call proves the key works. Returns an error message, or null when the key is good. */

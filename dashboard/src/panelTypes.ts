@@ -297,6 +297,64 @@ export interface BrainsView {
   canEdit: boolean;
 }
 
+export interface ExperimentPolicyView {
+  id: string;
+  bee: string;
+  createdAt: number;
+  method: { kind: "style" | "skill"; id: string; params: Record<string, number> };
+  strategy: string;
+  requestedModel: string;
+  convictionCriteria: string[];
+  questionSchemaVersion: string;
+}
+
+export interface ExperimentEvidenceView {
+  eligible: boolean;
+  reasons: string[];
+  metric: string;
+  horizon: string;
+  attempts: number;
+  challengerAnswers: number;
+  failureRate: number;
+  rawPairs: number;
+  independentSamples: number;
+  meanImprovement: number | null;
+  standardError: number | null;
+  lowerConfidenceBound: number | null;
+  gate: { horizon: string; minSamples: number; minImprovement: number; maxFailureRate: number; minSampleSpacingMs: number; minRuntimeMs: number };
+  evaluatedAt: number;
+}
+
+export interface ExperimentView {
+  id: string;
+  bee: string;
+  kind: string;
+  status: "draft" | "shadow" | "canary" | "promoted" | "rolled_back" | "stopped";
+  hypothesis: string;
+  primaryMetric: string;
+  championPolicyId: string;
+  challengerPolicyId: string;
+  createdAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  evidence: ExperimentEvidenceView;
+  scorecard: Array<{
+    horizon: string;
+    metric: string;
+    champion: { samples: number; mean: number } | null;
+    challenger: { samples: number; mean: number } | null;
+    challengerImprovement: number | null;
+  }>;
+  events: Array<{ ts: number; type: string; actor: string; data: Record<string, unknown> }>;
+}
+
+export interface ExperimentsState {
+  shadowEnabled: boolean;
+  canExecuteChallenger: false;
+  policies: ExperimentPolicyView[];
+  experiments: ExperimentView[];
+}
+
 export interface AdminState {
   brains: BrainsView;
   /** Alpaca market-data keys for the lab: set?, from where, the feed. Never a key. */
@@ -354,6 +412,7 @@ export interface AdminState {
     }>;
   } | null;
   evolution: { survival: boolean; rewards: boolean; board: import("./types").EvolutionRow[] } | null;
+  experiments: ExperimentsState;
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];

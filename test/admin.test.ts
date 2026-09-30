@@ -11,6 +11,9 @@ import { labArgv, LabJobs } from "../src/admin/jobs.js";
 import { loadConfig, parseEnv, withOverrides, type BeeId } from "../src/config.js";
 import { hashPassword, PasswordGate, verifyPassword } from "../src/gate.js";
 import { adminPath, loadOverrides, loadSettings, saveSettings, type Settings } from "../src/settings.js";
+import { Db } from "../src/db.js";
+import { ExperimentControl } from "../src/experiment-control.js";
+import { POLICY_DESCRIPTOR_VERSION, type PolicyDescriptor } from "../src/experiments.js";
 
 const PW = "correct horse battery";
 const HASH = hashPassword(PW);
@@ -35,7 +38,7 @@ function settingsFile(): string {
 
 const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, alpaca: async (id: string) => (id.includes("bad") ? "Alpaca rejected that key pair." : null), compat: async () => null, coinmarketcap: async () => null };
 
-function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"] } = {}) {
+function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"]; experiments?: ExperimentControl } = {}) {
   const settingsPath = settingsFile();
   const forgotten: string[] = [];
   const revived: string[] = [];
@@ -57,6 +60,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     coachNow: null,
     graphStats: () => ({ skill: 3 }),
     playbook: () => null,
+    experiments: opts.experiments,
     onPasswordChanged: (h) => (hash = h),
     restart: () => restarted++,
     coins: () => ["BTC", "ETH", "SOL", "DOGE"],
@@ -125,6 +129,43 @@ describe("admin API", () => {
     const ok = await h.call("/admin/state");
     expect(ok.status).toBe(200);
     expect(ok.body.mode).toBe("dry");
+  });
+
+  it("controls Jev experiments behind the owner gate without offering live promotion", async () => {
+    const db = new Db(":memory:");
+    const descriptor: PolicyDescriptor = {
+      version: POLICY_DESCRIPTOR_VERSION,
+      bee: "bee1",
+      mode: "dry",
+      method: { kind: "style", id: "bizzy", params: {} },
+      strategy: "champion instructions",
+      ownerRules: "",
+      requestedModel: "jev-1.13.0",
+      questionSchemaVersion: "action-conviction-v1",
+      convictionCriteria: ["weak", "fair", "strong", "overwhelming"],
+      risk: { maxLeverage: 2 },
+    };
+    const champion = db.experiments.ensurePolicy(descriptor);
+    const h = harness({ experiments: new ExperimentControl(db, true) });
+    const created = await h.call("/admin/experiments/create", {
+      bee: "bee1",
+      championPolicyId: champion.id,
+      hypothesis: "clearer instructions improve calibration",
+      primaryMetric: "action_brier",
+      challenger: { strategy: "challenger instructions with clearer priorities" },
+      gate: { horizon: "1h", minSamples: 24, minImprovement: 0.01, maxFailureRate: 0.05 },
+    });
+    expect(created.status).toBe(200);
+    const experiments = created.body.experiments as { experiments: Array<{ id: string; status: string }>; canExecuteChallenger: boolean };
+    expect(experiments.canExecuteChallenger).toBe(false);
+    expect(experiments.experiments[0]).toMatchObject({ status: "draft" });
+    const id = experiments.experiments[0]!.id;
+    expect((await h.call("/admin/experiments/act", { id, action: "start_shadow" })).status).toBe(200);
+    expect(db.experiments.get(id)?.status).toBe("shadow");
+    expect((await h.call("/admin/experiments/act", { id, action: "promote" })).status).toBe(400);
+    expect((await h.call("/admin/experiments/act", { id, action: "rollback" })).status).toBe(200);
+    expect(db.experiments.get(id)?.status).toBe("rolled_back");
+    db.close();
   });
 
   it("never sends a key back, only whether it is set and where from", async () => {

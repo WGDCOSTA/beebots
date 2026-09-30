@@ -26,6 +26,8 @@ describe("Jev client", () => {
     const r = await j.decide(ask);
     expect(r).toMatchObject({ ok: true, choice: "APE_PENGU", conviction: 2, inputTokens: 500 });
     expect(r.ok && r.costUsd).toBeCloseTo((500 * 0.042) / 1e6, 12);
+    expect(r.trace).toMatchObject({ questionSchemaVersion: "action-conviction-v1", requestedModel: "jev-1.13.0", answeredModel: "jev-1.13.0" });
+    expect(r.trace.answers).toMatchObject({ action: { choice: "APE_PENGU" }, conviction: { score: 2.4 } });
     expect(j.spentTodayUsd).toBeCloseTo(0.000021, 12);
   });
 

@@ -91,6 +91,8 @@ const EnvSchema = z.object({
   JEV_MODEL: str("jev-1.13.0"),
   JEV_TIMEOUT_MS: num(2000),
   JEV_DAILY_USD_CAP: num(2),
+  JEV_SHADOW_ENABLED: bool(false),
+  JEV_SHADOW_DAILY_USD_CAP: num(0.25),
   JEV_USD_PER_MTOK: num(0.042),
   TICK_MS: num(10_000),
   DATA_REFRESH_MS: num(60_000),
@@ -324,7 +326,7 @@ export interface Config {
   hive: { url: string };
   update: { enabled: boolean; repo: string; version: string };
   settingsPath: string;
-  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; usdPerMTok: number };
+  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number };
   tickMs: number;
   dataRefreshMs: number;
   okx: { site: "eea"; apiBase: string; cliTimeoutMs: number };
@@ -519,6 +521,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       model: e.JEV_MODEL,
       timeoutMs: e.JEV_TIMEOUT_MS,
       dailyUsdCap: e.JEV_DAILY_USD_CAP,
+      shadowEnabled: e.JEV_SHADOW_ENABLED,
+      shadowDailyUsdCap: Math.max(0, e.JEV_SHADOW_DAILY_USD_CAP),
       usdPerMTok: e.JEV_USD_PER_MTOK,
     },
     tickMs: Math.max(1000, e.TICK_MS),

@@ -4,7 +4,7 @@
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
-import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type KeyName } from "./panelTypes";
+import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type ExperimentView, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
@@ -13,6 +13,7 @@ const TABS = [
   { id: "keys", label: "API keys" },
   { id: "bees", label: "Bunnies" },
   { id: "settings", label: "Settings" },
+  { id: "experiments", label: "Experiments" },
   { id: "lab", label: "Lab, skills & evolution" },
   { id: "security", label: "Security" },
 ] as const;
@@ -1719,6 +1720,137 @@ function McpServerCard({ m, bees, call, onEdit }: { m: McpServerView; bees: Arra
   );
 }
 
+const EXP_STATUS: Record<ExperimentView["status"], { text: string; cls: string }> = {
+  draft: { text: "draft", cls: "" },
+  shadow: { text: "● shadow", cls: "" },
+  canary: { text: "✓ canary (shadow-only)", cls: "ok" },
+  promoted: { text: "promoted", cls: "ok" },
+  rolled_back: { text: "rolled back", cls: "err" },
+  stopped: { text: "stopped", cls: "err" },
+};
+
+function ExperimentsTab({ s, call }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void> }) {
+  const x = s.experiments;
+  const first = x.policies[0];
+  const [champion, setChampion] = useState("");
+  const [hypothesis, setHypothesis] = useState("");
+  const [strategy, setStrategy] = useState("");
+  const [model, setModel] = useState("");
+  const [metric, setMetric] = useState<"action_brier" | "regret_bps" | "chosen_markout_bps">("action_brier");
+  const [horizon, setHorizon] = useState<"15m" | "1h" | "4h">("1h");
+  const [samples, setSamples] = useState(24);
+  const [improvement, setImprovement] = useState(0.01);
+  const [failurePct, setFailurePct] = useState(5);
+  const pick = (id: string) => {
+    const p = x.policies.find((v) => v.id === id);
+    setChampion(id);
+    setStrategy(p?.strategy ?? "");
+    setModel(p?.requestedModel ?? "");
+  };
+  useEffect(() => {
+    if (!champion && first) pick(first.id);
+  }, [champion, first]); // eslint-disable-line react-hooks/exhaustive-deps
+  const policy = x.policies.find((p) => p.id === champion);
+  const create = () => {
+    if (!policy) return;
+    void call(
+      "experiments/create",
+      {
+        bee: policy.bee,
+        championPolicyId: policy.id,
+        hypothesis,
+        primaryMetric: metric,
+        challenger: { strategy, requestedModel: model, convictionCriteria: policy.convictionCriteria },
+        gate: { horizon, minSamples: samples, minImprovement: improvement, maxFailureRate: failurePct / 100 },
+      },
+      "Experiment draft created. Review it, then start shadow evaluation.",
+    );
+  };
+  const act = (id: string, action: "start_shadow" | "stop" | "rollback", note: string) => void call("experiments/act", { id, action }, note);
+  const beeName = (bee: string) => s.bees?.find((b) => b.slot === bee)?.name ?? bee;
+  return (
+    <>
+      <div className="pcard">
+        <h3>Evidence-gated Jev experiments</h3>
+        <p className="dim">
+          A challenger answers the same state and menu as the champion. It cannot reach the risk layer or order executor. Passing evidence advances only to a <strong>shadow-only canary</strong>; there is no live-promotion control in J2.
+        </p>
+        {!x.shadowEnabled && <div className="banner">Shadow calls are off. Set <span className="mono">JEV_SHADOW_ENABLED=true</span> and restart before starting a draft.</div>}
+        <div className="form-grid">
+          <label className="plabel wide">
+            Champion policy
+            <select className="pinput" value={champion} onChange={(e) => pick(e.target.value)}>
+              {x.policies.map((p) => <option key={p.id} value={p.id}>{beeName(p.bee)} · {p.method.kind}:{p.method.id} · {p.id.slice(-8)}</option>)}
+            </select>
+          </label>
+          <label className="plabel wide">
+            Hypothesis
+            <input className="pinput" maxLength={500} value={hypothesis} onChange={(e) => setHypothesis(e.target.value)} placeholder="Why should this challenger make better calibrated decisions?" />
+          </label>
+          <label className="plabel wide">
+            Challenger instructions
+            <textarea className="pinput" rows={6} maxLength={10_000} value={strategy} onChange={(e) => setStrategy(e.target.value)} />
+          </label>
+          <label className="plabel">
+            Challenger model
+            <input className="pinput mono" value={model} onChange={(e) => setModel(e.target.value)} />
+          </label>
+          <label className="plabel">
+            Primary metric
+            <select className="pinput" value={metric} onChange={(e) => setMetric(e.target.value as typeof metric)}>
+              <option value="action_brier">Brier score (lower)</option>
+              <option value="regret_bps">Regret, bp (lower)</option>
+              <option value="chosen_markout_bps">Chosen markout, bp (higher)</option>
+            </select>
+          </label>
+          <label className="plabel">
+            Horizon
+            <select className="pinput" value={horizon} onChange={(e) => setHorizon(e.target.value as typeof horizon)}><option>15m</option><option>1h</option><option>4h</option></select>
+          </label>
+          <label className="plabel">
+            Independent samples
+            <input className="pinput num" type="number" min={8} max={500} value={samples} onChange={(e) => setSamples(Number(e.target.value))} />
+          </label>
+          <label className="plabel">
+            Minimum improvement
+            <input className="pinput num" type="number" min={0} step={metric === "action_brier" ? 0.005 : 0.5} value={improvement} onChange={(e) => setImprovement(Number(e.target.value))} />
+          </label>
+          <label className="plabel">
+            Max shadow failures (%)
+            <input className="pinput num" type="number" min={0} max={50} step={1} value={failurePct} onChange={(e) => setFailurePct(Number(e.target.value))} />
+          </label>
+        </div>
+        <button className="pbtn" disabled={!policy || hypothesis.trim().length < 8 || strategy.trim().length < 8 || (!strategy.trim() && !model.trim())} onClick={create}>Create draft</button>
+        {x.policies.length === 0 && <p className="dim small">No attributed policy exists yet. Let the engine record at least one Jev decision.</p>}
+      </div>
+
+      {x.experiments.map((experiment) => {
+        const ev = experiment.evidence;
+        const badge = EXP_STATUS[experiment.status];
+        return (
+          <div className="pcard" key={experiment.id}>
+            <h3>{beeName(experiment.bee)} · <span className={`badge ${badge.cls}`}>{badge.text}</span></h3>
+            <p>{experiment.hypothesis}</p>
+            <p className="dim small mono">{experiment.id} · champion {experiment.championPolicyId.slice(-8)} · challenger {experiment.challengerPolicyId.slice(-8)}</p>
+            <div className="verdict">
+              <div className="verdict-head"><strong>{ev.metric} · {ev.horizon}</strong> <span className={`badge ${ev.eligible ? "ok" : ""}`}>{ev.eligible ? "evidence passed" : "collecting evidence"}</span></div>
+              <p className="small">{ev.independentSamples}/{ev.gate.minSamples} independent samples ({ev.rawPairs} raw pairs) · shadow answers {ev.challengerAnswers}/{ev.attempts} · failures {(ev.failureRate * 100).toFixed(1)}%</p>
+              <p className="small">Mean improvement {ev.meanImprovement?.toFixed(4) ?? "–"} · 95% lower bound {ev.lowerConfidenceBound?.toFixed(4) ?? "–"} · required improvement {ev.gate.minImprovement}</p>
+              {!ev.eligible && <ul className="dim small">{ev.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
+            </div>
+            {experiment.scorecard.length > 0 && <ul className="checklist">{experiment.scorecard.map((score) => <li key={`${score.horizon}-${score.metric}`}><strong>{score.horizon} · {score.metric}</strong>: champion {score.champion?.mean.toFixed(4) ?? "–"} ({score.champion?.samples ?? 0}) · challenger {score.challenger?.mean.toFixed(4) ?? "–"} ({score.challenger?.samples ?? 0}) · improvement {score.challengerImprovement?.toFixed(4) ?? "–"}</li>)}</ul>}
+            <div className="row-actions">
+              {experiment.status === "draft" && <button className="pbtn" disabled={!x.shadowEnabled} onClick={() => act(experiment.id, "start_shadow", "Shadow experiment started.")}>Start shadow</button>}
+              {(experiment.status === "draft" || experiment.status === "shadow" || experiment.status === "canary") && <button className="pbtn ghost" onClick={() => act(experiment.id, "stop", "Experiment stopped.")}>Stop</button>}
+              {(experiment.status === "shadow" || experiment.status === "canary") && <button className="pbtn ghost" onClick={() => act(experiment.id, "rollback", "Experiment rolled back.")}>Rollback</button>}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; refresh: () => Promise<void>; password: string }) {
   const [cmd, setCmd] = useState<"cycle" | "fetch" | "run" | "council">("cycle");
   const [source, setSource] = useState<"okx" | "ccxt" | "alpaca" | "synthetic">("okx");
@@ -2110,6 +2242,7 @@ export function AdminPage() {
               {tab === "keys" && <KeysTab s={s} call={safeCall} password={pw} />}
               {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} password={pw} />}
               {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
+              {tab === "experiments" && <ExperimentsTab s={s} call={safeCall} />}
               {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}
               {tab === "security" && <SecurityTab call={safeCall} />}
             </div>

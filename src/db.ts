@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { BeeId } from "./config.js";
 import type { BeeState } from "./bees/types.js";
+import { ExperimentLedger, type DecisionEvaluation } from "./experiments.js";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS decisions (
@@ -38,6 +39,51 @@ CREATE TABLE IF NOT EXISTS bee_state (bee TEXT PRIMARY KEY, json TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, type TEXT NOT NULL, json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS policy_versions (
+  id TEXT PRIMARY KEY, bee TEXT NOT NULL, created_ts INTEGER NOT NULL,
+  method TEXT NOT NULL, question_schema_version TEXT NOT NULL, requested_model TEXT NOT NULL,
+  descriptor_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS policy_versions_bee_created ON policy_versions(bee, created_ts DESC);
+CREATE TABLE IF NOT EXISTS experiments (
+  id TEXT PRIMARY KEY, bee TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL,
+  hypothesis TEXT NOT NULL, primary_metric TEXT NOT NULL,
+  champion_policy_id TEXT NOT NULL, challenger_policy_id TEXT NOT NULL,
+  created_ts INTEGER NOT NULL, updated_ts INTEGER NOT NULL, started_ts INTEGER, ended_ts INTEGER,
+  config_json TEXT NOT NULL, result_json TEXT
+);
+CREATE INDEX IF NOT EXISTS experiments_bee_created ON experiments(bee, created_ts DESC);
+CREATE TABLE IF NOT EXISTS experiment_events (
+  id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, ts INTEGER NOT NULL,
+  type TEXT NOT NULL, actor TEXT NOT NULL, data_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS experiment_events_experiment ON experiment_events(experiment_id, id);
+CREATE TABLE IF NOT EXISTS decision_evaluations (
+  id INTEGER PRIMARY KEY, decision_id INTEGER NOT NULL, experiment_id TEXT, arm TEXT NOT NULL,
+  policy_version_id TEXT NOT NULL, ts INTEGER NOT NULL, method TEXT NOT NULL, strategy_id TEXT NOT NULL,
+  state_hash TEXT NOT NULL, menu_hash TEXT NOT NULL, question_schema_version TEXT NOT NULL,
+  requested_model TEXT NOT NULL, answered_model TEXT,
+  questions_json TEXT NOT NULL, answers_json TEXT, metrics_json TEXT NOT NULL,
+  UNIQUE(decision_id, arm, policy_version_id)
+);
+CREATE INDEX IF NOT EXISTS decision_evaluations_policy ON decision_evaluations(policy_version_id, ts DESC);
+CREATE INDEX IF NOT EXISTS decision_evaluations_experiment ON decision_evaluations(experiment_id, ts DESC);
+CREATE TABLE IF NOT EXISTS experiment_outcomes (
+  id INTEGER PRIMARY KEY, experiment_id TEXT, decision_id INTEGER, policy_version_id TEXT NOT NULL,
+  ts INTEGER NOT NULL, horizon TEXT NOT NULL, metric TEXT NOT NULL, value REAL NOT NULL,
+  metadata_json TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS experiment_outcomes_once
+  ON experiment_outcomes(decision_id, policy_version_id, horizon, metric);
+CREATE INDEX IF NOT EXISTS experiment_outcomes_policy ON experiment_outcomes(policy_version_id, metric, ts DESC);
+CREATE INDEX IF NOT EXISTS experiment_outcomes_experiment ON experiment_outcomes(experiment_id, metric, ts DESC);
+CREATE TABLE IF NOT EXISTS decision_outcome_targets (
+  id INTEGER PRIMARY KEY, decision_id INTEGER NOT NULL, bee TEXT NOT NULL,
+  created_ts INTEGER NOT NULL, due_ts INTEGER NOT NULL, horizon TEXT NOT NULL,
+  candidates_json TEXT NOT NULL, settled_ts INTEGER,
+  UNIQUE(decision_id, horizon)
+);
+CREATE INDEX IF NOT EXISTS decision_outcome_targets_due ON decision_outcome_targets(settled_ts, due_ts);
 `;
 
 export interface DecisionRow {
@@ -58,6 +104,8 @@ export interface DecisionRow {
   vetoedBy: string | null;
   forcedBy: string | null;
   status: string;
+  /** J0 attribution, written in the same transaction as the decision. */
+  evaluation?: DecisionEvaluation;
 }
 
 export interface OrderRow {
@@ -99,27 +147,40 @@ export interface HiveFill {
 
 export class Db {
   readonly raw: DatabaseSync;
+  readonly experiments: ExperimentLedger;
 
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.raw = new DatabaseSync(path);
     this.raw.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;");
     this.raw.exec(SCHEMA);
+    this.experiments = new ExperimentLedger(this.raw);
   }
 
   insertDecision(d: DecisionRow): number {
-    const r = this.raw
-      .prepare(
-        `INSERT INTO decisions (bee, ts, state_hash, state_json, menu_json, choice, probabilities_json, confidence, conviction,
-          latency_ms, input_tokens, jev_cost_usd, jev_error, action_json, vetoed_by, forced_by, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(
-        d.bee, d.ts, d.stateHash, d.stateJson, d.menuJson, d.choice, d.probabilities ? JSON.stringify(d.probabilities) : null,
-        d.confidence, d.conviction, d.latencyMs, d.inputTokens, d.jevCostUsd, d.jevError, JSON.stringify(d.action),
-        d.vetoedBy, d.forcedBy, d.status,
-      );
-    return Number(r.lastInsertRowid);
+    if (d.evaluation) this.raw.exec("BEGIN IMMEDIATE");
+    try {
+      const r = this.raw
+        .prepare(
+          `INSERT INTO decisions (bee, ts, state_hash, state_json, menu_json, choice, probabilities_json, confidence, conviction,
+            latency_ms, input_tokens, jev_cost_usd, jev_error, action_json, vetoed_by, forced_by, status)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          d.bee, d.ts, d.stateHash, d.stateJson, d.menuJson, d.choice, d.probabilities ? JSON.stringify(d.probabilities) : null,
+          d.confidence, d.conviction, d.latencyMs, d.inputTokens, d.jevCostUsd, d.jevError, JSON.stringify(d.action),
+          d.vetoedBy, d.forcedBy, d.status,
+        );
+      const id = Number(r.lastInsertRowid);
+      if (d.evaluation) {
+        this.experiments.recordEvaluation(id, d.evaluation);
+        this.raw.exec("COMMIT");
+      }
+      return id;
+    } catch (err) {
+      if (d.evaluation) this.raw.exec("ROLLBACK");
+      throw err;
+    }
   }
 
   insertOrder(o: OrderRow): number {

@@ -14,7 +14,7 @@ import type { Db } from "./db.js";
 import type { EventBus } from "./events.js";
 import type { Executor } from "./exec/executor.js";
 import { contractsFor, roundToLot } from "./exec/sizing.js";
-import type { Jev, JevAnswer, JevResult } from "./jev.js";
+import { JEV_QUESTION_SCHEMA_VERSION, type Jev, type JevAnswer, type JevResult } from "./jev.js";
 import { applyFill, applyFunding, freshBee, mark, promoteLeg, rollDay, sizedRiskUsd } from "./ledger.js";
 import { log } from "./log.js";
 import type { MarketFeed } from "./market/data.js";
@@ -29,6 +29,10 @@ import { marketKinds, mayOpen, sessionInfo, sessionLabel, SESSION_NOTE, type Ses
 import type { MarketView } from "./market/types.js";
 import { applyRisk, type JevStatus, type Proposal } from "./risk.js";
 import { buildSnapshot } from "./snapshot.js";
+import { distributionMetrics, fingerprint, POLICY_DESCRIPTOR_VERSION, type ExperimentArm, type PolicyDescriptor } from "./experiments.js";
+import { OutcomeCollector } from "./outcomes.js";
+import { ShadowRunner } from "./shadow.js";
+import { ExperimentEvaluator } from "./evaluator.js";
 
 const FUNDING_HOURS_UTC = [0, 8, 16];
 const RECON_MS = 5 * 60_000;
@@ -83,6 +87,10 @@ export interface EngineDeps {
    */
   specialization?: (id: BeeId) => { kind: "style" | "skill"; id: string; params?: Record<string, number> } | null | undefined;
   skillById?: (id: string) => Skill | undefined;
+  /** A later phase may attach the real decision to an active experiment. No assignment means the baseline arm. */
+  experiment?: (id: BeeId, policyVersionId: string) => { experimentId: string; arm: ExperimentArm } | null | undefined;
+  /** Separate Jev client and budget for challengers. Shadow answers are recorded but can never reach execution. */
+  shadowJev?: Jev;
 }
 
 /** The method a bee trades right now when its brains chose one (null = its own style). */
@@ -112,8 +120,27 @@ function ratchetStop(p: Position, cand: number): void {
 }
 
 /** The answer when the menu leaves one legal hold: no Jev call, no cost. */
-function requiredAnswer(label: string): JevAnswer {
-  return { ok: true, choice: label, probabilities: { [label]: 1 }, confidence: 1, conviction: 0, convictionRaw: 0, inputTokens: 0, costUsd: 0, latencyMs: 0, model: "rules" };
+function requiredAnswer(label: string, requestedModel: string): JevAnswer {
+  const answer = { type: "choice", choice: label, confidence: 1, probabilities: { [label]: 1 } };
+  return {
+    ok: true,
+    choice: label,
+    probabilities: { [label]: 1 },
+    confidence: 1,
+    conviction: 0,
+    convictionRaw: 0,
+    inputTokens: 0,
+    costUsd: 0,
+    latencyMs: 0,
+    model: "rules",
+    trace: {
+      questionSchemaVersion: JEV_QUESTION_SCHEMA_VERSION,
+      requestedModel,
+      answeredModel: "rules",
+      questions: {},
+      answers: { action: answer, conviction: { type: "score", score: 0, confidence: 1, probabilities: {} } },
+    },
+  };
 }
 
 export class Engine {
@@ -145,6 +172,9 @@ export class Engine {
   private closedAt: number | null = null;
   private closeRetryAt: Partial<Record<BeeId, number>> = {};
   private closeAnnounced = false;
+  private outcomes: OutcomeCollector;
+  private shadow: ShadowRunner | null;
+  private experimentEvaluator: ExperimentEvaluator;
 
   /** Every bee this engine runs (main three plus extras), in slot order. */
   private get ids(): BeeId[] {
@@ -155,6 +185,9 @@ export class Engine {
     this.now = d.now ?? Date.now;
     this.startedAt = this.now();
     this.lastFundingSlot = fundingSlot(this.startedAt);
+    this.outcomes = new OutcomeCollector(d.db);
+    this.shadow = d.shadowJev ? new ShadowRunner(d.db, d.shadowJev) : null;
+    this.experimentEvaluator = new ExperimentEvaluator(d.db);
   }
 
   // ---------- lifecycle ----------
@@ -192,6 +225,7 @@ export class Engine {
     }
 
     await this.refreshMarket();
+    this.advanceExperiments(this.now());
     if (this.d.exec.kind === "okx") await this.reconcile();
 
     this.d.bus.emit("status", { event: "engine_start", mode: cfg.mode, tickMs: cfg.tickMs });
@@ -231,6 +265,10 @@ export class Engine {
     this.stopped = true;
     for (const t of this.timers) clearTimeout(t);
     for (const id of this.ids) this.d.db.saveBee(this.bees[id], this.now());
+  }
+
+  async flushShadow(): Promise<void> {
+    await this.shadow?.flush();
   }
 
   private loop(fn: () => Promise<void>, everyMs: number) {
@@ -274,6 +312,15 @@ export class Engine {
       }
       const now = this.now();
       for (const id of this.ids) this.markBee(id, now);
+      try {
+        const settled = this.outcomes.settle(this.d.feed.view(), now);
+        if (settled.outcomes > 0) {
+          log.info("decision outcomes settled", settled);
+          this.advanceExperiments(now);
+        }
+      } catch (err) {
+        log.warn("decision outcome settlement failed", { err: safeError(err) });
+      }
       if (this.d.evolution?.tick(this.ids.map((id) => [id, this.bees[id]]), now)) this.saveEvolution();
       if (this.d.feed.lastRefreshAt === 0) return; // no market data yet
       if (this.d.exec.kind === "sim") this.simulateFunding(now);
@@ -337,6 +384,13 @@ export class Engine {
       candles1m: (instId: string) => (typeof this.d.feed.candles1m === "function" ? this.d.feed.candles1m(instId) : []),
       ...(this.d.cfg.slots[id].market !== "crypto" ? { session: (coin: string) => sessionInfo(this.d.sessions?.() ?? null, coin, now) } : {}),
     };
+  }
+
+  private advanceExperiments(now: number): void {
+    for (const promoted of this.experimentEvaluator.evaluateActive(now)) {
+      log.info("experiment advanced to shadow-only canary", { experiment: promoted.experiment.id, samples: promoted.evidence.independentSamples });
+      this.d.bus.emit("experiment", { id: promoted.experiment.id, status: "canary", evidence: promoted.evidence }, now);
+    }
   }
 
   /**
@@ -546,6 +600,34 @@ export class Engine {
     const extra = { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}), ...(session ? { session } : {}), ...(mkt ? { mkt } : {}) };
     const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null);
     if (brain.id === "boozy" && bee.top1.coin) snap.state.top1 = `${bee.top1.coin} x${bee.top1.streak}`;
+    const active = this.spec[id];
+    const method: PolicyDescriptor["method"] = active
+      ? { kind: active.kind, id: active.id, params: active.params }
+      : { kind: brain.id === "skill" ? "skill" : "style", id: brain.id, params: {} };
+    const policy = db.experiments.ensurePolicy({
+      version: POLICY_DESCRIPTOR_VERSION,
+      bee: id,
+      mode: cfg.mode,
+      method,
+      strategy: brain.strategy,
+      ownerRules: cfg.slots[id].rules,
+      requestedModel: cfg.jev.model,
+      questionSchemaVersion: JEV_QUESTION_SCHEMA_VERSION,
+      convictionCriteria: brain.convictionLabels,
+      risk: {
+        appVersion: cfg.update.version,
+        maxLeverage: cfg.risk.maxLeverage,
+        maxNotionalUsdPerBee: cfg.risk.maxNotionalUsdPerBee,
+        dailyLossStopPct: cfg.risk.dailyLossStopPct,
+        retireAtPct: cfg.risk.retireAtPct,
+        knobs: ctx.knobs,
+        openGate: brain.openGate ? { minConviction: brain.openGate.minConviction, minProbability: brain.openGate.minProb(ctx) } : null,
+        requiresStrictSetup: !!brain.requiresStrictSetup,
+        neverForce: !!brain.neverForce,
+      },
+    }, now);
+    const activeExperiment = db.experiments.activeFor(id, policy.id);
+    const assignment = this.d.experiment?.(id, policy.id) ?? (activeExperiment ? { experimentId: activeExperiment.id, arm: "champion" as const } : null);
 
     let jevStatus: JevStatus = "ok";
     let r: JevResult | null = null;
@@ -553,11 +635,12 @@ export class Engine {
     // the rules make the call. Only for a hold: a lone open or close still goes to Jev.
     const labels = Object.keys(menu);
     const required = labels.length === 1 && menu[labels[0]!]!.intent.kind === "hold";
+    const instructionSuffix = [lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, mkt ? CMC_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
+    const strategy = [brain.strategy, instructionSuffix].filter(Boolean).join(" ");
     if (jev.capTripped) jevStatus = "daily_cap";
     else if (labels.length === 0) jevStatus = "no_options";
-    else if (required) r = requiredAnswer(labels[0]!);
+    else if (required) r = requiredAnswer(labels[0]!, cfg.jev.model);
     else {
-      const strategy = [brain.strategy, lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, mkt ? CMC_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
       r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
       // Only a real Jev answer: the scalper turns SCALP_ON_* into a mandate, and any answer restarts its ask timer.
@@ -593,12 +676,21 @@ export class Engine {
 
     // Hard rule 10: recorded before it is acted on.
     const costUsd = r && r.ok ? r.costUsd : 0;
+    const dist = r && r.ok ? distributionMetrics(r.probabilities) : null;
+    const evaluationMetrics = {
+      source: required ? "rules" : r?.ok ? "jev" : r ? "jev_failure" : "no_answer",
+      jevStatus,
+      required,
+      actionConfidence: r && r.ok ? r.confidence : null,
+      conviction: r && r.ok ? r.convictionRaw : null,
+      ...(dist ?? { entropy: null, margin: null, topProbability: null, options: labels.length }),
+    };
     const decisionId = db.insertDecision({
       bee: id,
       ts: now,
       stateHash: snap.hash,
       stateJson: JSON.stringify(snap.state),
-      menuJson: JSON.stringify(Object.keys(menu)),
+      menuJson: JSON.stringify(menu),
       choice: r && r.ok ? r.choice : null,
       probabilities: r && r.ok ? r.probabilities : null,
       confidence: r && r.ok ? r.confidence : null,
@@ -611,7 +703,36 @@ export class Engine {
       vetoedBy: risk.vetoedBy,
       forcedBy: risk.forcedBy,
       status,
+      evaluation: {
+        ts: now,
+        experimentId: assignment?.experimentId ?? null,
+        arm: assignment?.arm ?? "baseline",
+        policyVersionId: policy.id,
+        method: `${method.kind}:${method.id}`,
+        strategyId: method.id,
+        stateHash: snap.hash,
+        menuHash: fingerprint(menu, "menu_"),
+        questionSchemaVersion: r?.trace.questionSchemaVersion ?? JEV_QUESTION_SCHEMA_VERSION,
+        requestedModel: r?.trace.requestedModel ?? cfg.jev.model,
+        answeredModel: r?.trace.answeredModel ?? null,
+        questions: r?.trace.questions ?? {},
+        answers: r?.trace.answers ?? null,
+        metrics: evaluationMetrics,
+      },
     });
+    if (r?.ok && !required) {
+      this.outcomes.schedule({ decisionId, bee: id, ts: now, menu, state: bee, view: ctx.view });
+      this.shadow?.enqueue({
+        decisionId,
+        bee: id,
+        ts: now,
+        championPolicyId: policy.id,
+        stateHash: snap.hash,
+        state: snap.state,
+        menu,
+        instructionSuffix,
+      });
+    }
     bee.totals.jevUsd += costUsd;
     bee.totals.decisions++;
 

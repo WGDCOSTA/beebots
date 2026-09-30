@@ -51,6 +51,7 @@ import { contextFor, registerBees } from "./graph/hive-mind.js";
 import { explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "./graph/memory.js";
 import { skillRegistry } from "./lab/skills/index.js";
 import type { Skill } from "./lab/skills/types.js";
+import { ExperimentControl } from "./experiment-control.js";
 
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
 // Reference portraits for generated bunnies: the dashboard's default art (copied into the image by the Dockerfile).
@@ -162,6 +163,9 @@ async function main() {
 
   const startOfDay = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
   const jev = new Jev({ ...cfg.jev, spentTodayUsd: db.jevSpendSince(startOfDay) });
+  const shadowJev = cfg.jev.shadowEnabled
+    ? new Jev({ ...cfg.jev, dailyUsdCap: cfg.jev.shadowDailyUsdCap, spentTodayUsd: db.experiments.shadowSpendSince(startOfDay) })
+    : undefined;
 
   // `deploy/close.sh` drops this file into the data volume to end the experiment cleanly (see Engine.windDown).
   const closeFlag = join(dirname(cfg.dbPath), `close-${cfg.mode}`);
@@ -296,7 +300,7 @@ async function main() {
   const sessionTimers = [setInterval(sampleSessions, 60_000), setInterval(saveSessions, 10 * 60_000)];
 
   engine = new Engine({
-    cfg, db, feed, jev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
+    cfg, db, feed, jev, shadowJev, exec, bus, alerts, closeRequested: () => existsSync(closeFlag), takeResumeRequest, evolution,
     sessions: () => sessions.calendar,
     cmc: cmcState,
     scalpGate: scalpLabGate,
@@ -392,6 +396,7 @@ async function main() {
       rankingCache = { at: 0, body: null };
     },
   );
+  const experimentControl = new ExperimentControl(db, cfg.jev.shadowEnabled);
   const admin = new Admin({
     settingsPath: SETTINGS_PATH,
     env: process.env,
@@ -418,6 +423,7 @@ async function main() {
     coachNow: Object.keys(clients).length ? () => coach.reflectAll() : null,
     graphStats: () => graph.stats(),
     playbook: () => playbook.get(),
+    experiments: experimentControl,
     onPasswordChanged: (hash) => {
       ownerHash = hash;
     },

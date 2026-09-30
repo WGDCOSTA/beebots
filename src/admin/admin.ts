@@ -33,6 +33,8 @@ import { DesignError, finishDesign, imageDir } from "../setup.js";
 import { ADMIN_FIELDS, checkField, FIELD_BY_KEY, FIELD_GROUPS, GROUP_INFO } from "./fields.js";
 import { CHECK_STAGES, goldCsvs, preflight, verdicts } from "./check.js";
 import { LAB_COMMANDS, type LabArgs, type LabJobs } from "./jobs.js";
+import type { ExperimentControl } from "../experiment-control.js";
+import { EXPERIMENT_METRICS } from "../evaluator.js";
 
 const MAX_BODY = 32 * 1024;
 const KEY_NAMES = ["jev", "openai", "anthropic", "kimi", "zai", "coinmarketcap"] as const;
@@ -73,6 +75,8 @@ export interface AdminOpts {
   coachNow: (() => Promise<void>) | null;
   graphStats: () => Record<string, number>;
   playbook: () => unknown;
+  /** J2 owner control and evidence views. No endpoint here can make a challenger trade. */
+  experiments?: ExperimentControl;
   /** Called after the owner password changes, with the new hash. */
   onPasswordChanged: (hash: string) => void;
   /** Exit so Docker restarts the engine with the saved changes. */
@@ -220,6 +224,25 @@ const LabBody = z.object({
     })
     .default({}),
 });
+const ExperimentId = z.string().trim().regex(/^exp_[a-zA-Z0-9-]{1,80}$/);
+const ExperimentCreate = z.object({
+  bee: z.string().regex(/^bee[1-9]$/),
+  championPolicyId: z.string().trim().regex(/^pol_[a-f0-9]{24}$/),
+  hypothesis: Str(500).min(8),
+  primaryMetric: z.enum(EXPERIMENT_METRICS),
+  challenger: z.object({
+    strategy: z.string().trim().min(8).max(10_000).optional(),
+    requestedModel: Str(100).min(2).optional(),
+    convictionCriteria: z.tuple([Str(120).min(1), Str(120).min(1), Str(120).min(1), Str(120).min(1)]).optional(),
+  }),
+  gate: z.object({
+    horizon: z.enum(["15m", "1h", "4h"]),
+    minSamples: z.number().int().min(8).max(500),
+    minImprovement: z.number().min(0).max(10_000),
+    maxFailureRate: z.number().min(0).max(0.5),
+  }),
+});
+const ExperimentAct = z.object({ id: ExperimentId, action: z.enum(["start_shadow", "stop", "rollback"]) });
 
 export class Admin {
   /** Something was saved that only a restart applies. */
@@ -404,6 +427,7 @@ export class Admin {
       brains: this.brainsView(keys),
       alpaca: this.alpacaView(effective.ALPACA_FEED),
       evolution: this.o.evolution?.() ?? null,
+      experiments: this.o.experiments?.state() ?? { shadowEnabled: false, canExecuteChallenger: false, policies: [], experiments: [] },
       styles: STYLES.map((s) => ({ id: s, label: STYLE_INFO[s].label, blurb: STYLE_INFO[s].blurb })),
       groups: FIELD_GROUPS.map((g) => ({ id: g, ...GROUP_INFO[g] })),
       fields: ADMIN_FIELDS.map((f) => {
@@ -1094,6 +1118,32 @@ export class Admin {
           return send(res, 409, { error: (err as Error).message });
         }
         log.info("admin: lab job started", { command: p.data.command });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/experiments/create": {
+        if (!this.o.experiments) return send(res, 409, { error: "Experiment control is not available." });
+        const p = ExperimentCreate.safeParse(body);
+        if (!p.success || !isBeeId(p.data.bee)) return send(res, 400, { error: "Invalid experiment definition." });
+        try {
+          this.o.experiments.create({ ...p.data, bee: p.data.bee });
+        } catch (err) {
+          return send(res, 409, { error: safeError(err).message });
+        }
+        log.info("admin: experiment created", { bee: p.data.bee, metric: p.data.primaryMetric });
+        return send(res, 200, this.state());
+      }
+
+      case "/admin/experiments/act": {
+        if (!this.o.experiments) return send(res, 409, { error: "Experiment control is not available." });
+        const p = ExperimentAct.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "Invalid experiment action." });
+        try {
+          this.o.experiments.act(p.data.id, p.data.action);
+        } catch (err) {
+          return send(res, 409, { error: safeError(err).message });
+        }
+        log.info("admin: experiment action", p.data);
         return send(res, 200, this.state());
       }
 
