@@ -1,0 +1,106 @@
+// The Arena's HTTP API. Every state-changing call is a POST with the x-arena header (a cross-site form cannot set it),
+// the session is an HttpOnly SameSite=Lax cookie, and nothing here can name another user: the only user a call can reach
+// is the one its own session belongs to.
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { readJson } from "../gate.js";
+import { clientAddr } from "../visitors.js";
+import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
+import type { ArenaStore, ArenaUser } from "./store.js";
+
+const COOKIE = "arena_session";
+const MAX_BODY = 4 * 1024;
+
+export interface ApiOpts {
+  /** Mark the cookie Secure (true whenever the site is served over https). */
+  secureCookie: boolean;
+  now?: () => number;
+}
+
+const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, createdAt: u.createdAt });
+
+function reply(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
+  res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
+  res.end(JSON.stringify(body));
+}
+
+function sessionOf(req: IncomingMessage): string | undefined {
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0 && part.slice(0, i).trim() === COOKIE) return part.slice(i + 1).trim();
+  }
+  return undefined;
+}
+
+export class ArenaApi {
+  private readonly now: () => number;
+  constructor(private readonly auth: ArenaAuth, private readonly store: ArenaStore, private readonly opts: ApiOpts) {
+    this.now = opts.now ?? Date.now;
+  }
+
+  private cookie(value: string, maxAgeSec: number): string {
+    return `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${this.opts.secureCookie ? "; Secure" : ""}`;
+  }
+
+  /** Returns false for a path that is not the Arena's. */
+  async handle(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+    if (!path.startsWith("/arena/")) return false;
+    const route = path.slice("/arena".length);
+
+    if (req.method === "GET" && route === "/me") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) reply(res, 401, { error: "not signed in" });
+      else reply(res, 200, { user: view(u) });
+      return true;
+    }
+    if (req.method !== "POST") {
+      reply(res, 405, { error: "method not allowed" });
+      return true;
+    }
+    if (req.headers["x-arena"] !== "1") {
+      reply(res, 403, { error: "missing x-arena header" });
+      return true;
+    }
+    let body: Record<string, unknown>;
+    try {
+      const b = await readJson(req, MAX_BODY);
+      body = b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : {};
+    } catch {
+      reply(res, 400, { error: "bad request" });
+      return true;
+    }
+
+    switch (route) {
+      case "/auth/request": {
+        const addr = clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress);
+        const r = await this.auth.requestLink(body.email, addr);
+        if (r.ok) reply(res, 200, { ok: true, message: "If that address can sign in, a link is on its way." });
+        else reply(res, 400, { error: "Enter a valid e-mail address." });
+        return true;
+      }
+      case "/auth/verify": {
+        const r = this.auth.verify(body.token);
+        if (!r) reply(res, 400, { error: "This link is invalid, expired or already used. Ask for a new one." });
+        else reply(res, 200, { user: view(r.user) }, { "set-cookie": this.cookie(r.session, Math.floor(SESSION_TTL_MS / 1000)) });
+        return true;
+      }
+      case "/auth/logout": {
+        this.auth.logout(sessionOf(req));
+        reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
+        return true;
+      }
+      case "/account/delete": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) reply(res, 401, { error: "not signed in" });
+        else if (body.confirm !== u.email) reply(res, 400, { error: "Type your e-mail address to confirm." });
+        else {
+          this.store.deleteUser(u.id, this.now());
+          reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
+        }
+        return true;
+      }
+      default:
+        reply(res, 404, { error: "not found" });
+        return true;
+    }
+  }
+}

@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "DB_PATH=./data/bees-{mode}.sqlite tsx --env-file-if-exists=.env src/index.ts",
     "start": "node dist/index.js",
+    "arena": "tsx --env-file-if-exists=.env src/arena/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
