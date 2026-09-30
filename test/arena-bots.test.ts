@@ -52,7 +52,7 @@ describe("creating a bot", () => {
   it("Free has one bot; Pro has more", () => {
     const f = member("free").bots;
     f.create(good);
-    expect(fails(() => f.create({ ...good, name: "Second" }), 403)).toMatch(/one bot/);
+    expect(fails(() => f.create({ ...good, name: "Second" }), 403)).toMatch(/one agent/);
     const p = member("pro").bots;
     for (let i = 0; i < LIMITS.pro.bots; i++) p.create({ ...good, name: `Bot ${i}a` });
     fails(() => p.create({ ...good, name: "One too many" }), 403);
@@ -88,7 +88,7 @@ describe("creating a bot", () => {
 
   it("refuses the Warren's own names and duplicates, case-insensitively", () => {
     const { bots } = member("pro");
-    expect(fails(() => bots.create({ ...good, name: "Bizzy Bunny" }))).toMatch(/Warren/);
+    expect(fails(() => bots.create({ ...good, name: "Bizzy Bunny" }))).toMatch(/official agents/);
     bots.create(good);
     expect(fails(() => bots.create({ ...good, name: "fluffy quant" }))).toMatch(/already/);
   });
@@ -173,7 +173,9 @@ describe("HTTP", () => {
     expect((cat.body.themes as unknown[]).length).toBe(THEMES.length);
 
     await auth.requestLink("ana@example.com", "1.1.1.1");
-    const session = auth.verify(inbox.sent[0]!.match(/token=([\w-]+)/)![1])!.session;
+    const verified = auth.verify(inbox.sent[0]!.match(/token=([\w-]+)/)![1])!;
+    store.acceptConsent(verified.user.id, 1);
+    const session = verified.session;
     const cookie = `arena_session=${session}`;
     const made = await http(api, "POST", "/arena/bots/create", good, cookie);
     expect(made.status).toBe(200);

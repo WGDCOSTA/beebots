@@ -82,7 +82,7 @@ describe("free AI design for the first bot", () => {
     expect(await rejects(s.member.design("a calm bunny that buys dips"), 403)).toMatch(/free AI tries/);
     const t = setup();
     t.bots.create({ ...form, name: "Mine", style: "breezy", coins: ["BTC"], rules: "Trade carefully always." });
-    expect(await rejects(t.member.design("a calm bunny that buys dips"), 403)).toMatch(/first bunny/);
+    expect(await rejects(t.member.design("a calm bunny that buys dips"), 403)).toMatch(/first agent/);
   });
 
   it("deleting the first bunny does not bring the free design back", async () => {
@@ -232,7 +232,9 @@ describe("HTTP", () => {
     const api = new ArenaApi(auth, store, { secureCookie: true, ai: new FakeAi() });
     const login = async (email: string) => {
       await auth.requestLink(email, "1.1.1.1");
-      return `arena_session=${auth.verify(inbox.sent.at(-1)!.match(/token=([\w-]+)/)![1])!.session}`;
+      const v = auth.verify(inbox.sent.at(-1)!.match(/token=([\w-]+)/)![1])!;
+      store.acceptConsent(v.user.id, 1);
+      return `arena_session=${v.session}`;
     };
     const ana = await login("ana@example.com");
     const bob = await login("bob@example.com");

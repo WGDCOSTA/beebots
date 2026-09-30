@@ -134,6 +134,7 @@ describe("HTTP: the public leaderboard", () => {
     const login = async (email: string) => {
       await auth.requestLink(email, "1.1.1.1");
       const v = auth.verify(inbox.sent.at(-1)!.match(/token=([\w-]+)/)![1])!;
+      store.acceptConsent(v.user.id, 1);
       return { cookie: `arena_session=${v.session}`, user: v.user };
     };
     const seed = (userId: string, handle: string, botId: string, name: string, slope: number) => {

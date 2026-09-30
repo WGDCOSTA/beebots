@@ -9,6 +9,8 @@ import { AiError, MemberAi, type AiService } from "./ai.js";
 import { BotError, Bots, COINS, LIMITS } from "./bots.js";
 import type { Leaderboard } from "./ranking.js";
 import type { RunStatus } from "./runner.js";
+import { isLocale } from "./locales.js";
+import { CONSENT_ITEMS, CONSENT_VERSION } from "./store.js";
 import { THEMES } from "./themes.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
@@ -33,7 +35,7 @@ export interface ApiOpts {
   } | null;
 }
 
-const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, handle: u.handle, createdAt: u.createdAt });
+const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, handle: u.handle, locale: u.locale, createdAt: u.createdAt });
 
 function reply(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
   res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
@@ -71,6 +73,13 @@ export class ArenaApi {
     });
   }
 
+  /** Stops an action until the member has accepted the current terms. True means the reply has been sent. */
+  private blockedByConsent(res: ServerResponse, u: ArenaUser): boolean {
+    if (!this.store.consentNeeded(u.id)) return false;
+    reply(res, 403, { error: "Accept the Terms and the Privacy notice to continue.", code: "consent_required" });
+    return true;
+  }
+
   /** Returns false for a path that is not the Arena's. */
   async handle(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
     if (!path.startsWith("/arena/")) return false;
@@ -79,7 +88,7 @@ export class ArenaApi {
     if (req.method === "GET" && route === "/me") {
       const u = this.auth.user(sessionOf(req));
       if (!u) reply(res, 401, { error: "not signed in" });
-      else reply(res, 200, { user: view(u), limits: LIMITS[u.tier] });
+      else reply(res, 200, { user: view(u), limits: LIMITS[u.tier], consent: { needed: this.store.consentNeeded(u.id), version: CONSENT_VERSION, items: CONSENT_ITEMS } });
       return true;
     }
     if (req.method === "GET" && route.startsWith("/bot-image/")) {
@@ -148,7 +157,7 @@ export class ArenaApi {
     switch (route) {
       case "/auth/request": {
         const addr = clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress);
-        const r = await this.auth.requestLink(body.email, addr);
+        const r = await this.auth.requestLink(body.email, addr, body.locale);
         if (r.ok) reply(res, 200, { ok: true, message: "If that address can sign in, a link is on its way." });
         else reply(res, 400, { error: "Enter a valid e-mail address." });
         return true;
@@ -173,6 +182,7 @@ export class ArenaApi {
           reply(res, 401, { error: "not signed in" });
           return true;
         }
+        if (this.blockedByConsent(res, u)) return true;
         const bots = new Bots(this.store.tenant(u.id), u.tier, this.now);
         try {
           if (route === "/bots/create") {
@@ -204,6 +214,7 @@ export class ArenaApi {
       case "/ai/portrait": {
         const u = this.auth.user(sessionOf(req));
         if (!u) return this.send(res, 401, { error: "not signed in" });
+        if (this.blockedByConsent(res, u)) return true;
         const ai = this.memberAi(u);
         try {
           if (route === "/ai/design") return this.send(res, 200, { draft: await ai.design(body.description) });
@@ -216,6 +227,21 @@ export class ArenaApi {
           if (e instanceof AiError || e instanceof BotError) return this.send(res, e.status, { error: e.message });
           throw e;
         }
+      }
+      case "/account/consent": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        // Every item has to be ticked: a partial acceptance is no acceptance.
+        if (!CONSENT_ITEMS.every((i) => body[i] === true)) return this.send(res, 400, { error: "Tick every box to continue.", code: "consent_incomplete" });
+        this.store.acceptConsent(u.id, this.now());
+        return this.send(res, 200, { consent: { needed: false, version: CONSENT_VERSION } });
+      }
+      case "/account/locale": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        if (!isLocale(body.locale)) return this.send(res, 400, { error: "Unknown language." });
+        this.store.setLocale(u.id, body.locale);
+        return this.send(res, 200, { locale: body.locale });
       }
       case "/account/handle": {
         const u = this.auth.user(sessionOf(req));

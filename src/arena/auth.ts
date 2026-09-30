@@ -3,6 +3,8 @@
 // always answers the same way, so the form cannot be used to learn who has an account.
 import { createHash, randomBytes } from "node:crypto";
 import { log } from "../log.js";
+import { localeOr } from "./locales.js";
+import { signInMail } from "./mailText.js";
 import type { Mailer } from "./mailer.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
@@ -43,7 +45,7 @@ export class ArenaAuth {
   }
 
   /** Always resolves the same way for a well-formed request; a bad address is the only visible failure. */
-  async requestLink(rawEmail: unknown, addr: string): Promise<{ ok: boolean }> {
+  async requestLink(rawEmail: unknown, addr: string, locale?: unknown): Promise<{ ok: boolean }> {
     const email = normaliseEmail(rawEmail);
     if (!email) return { ok: false };
     if (this.tooMany(`addr:${addr}`, ADDR_PER_HOUR) || this.tooMany(`email:${email}`, EMAIL_PER_HOUR)) return { ok: true };
@@ -52,7 +54,8 @@ export class ArenaAuth {
     this.store.dir.prepare("INSERT INTO login_tokens (hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)").run(sha(token), email, t, t + TOKEN_TTL_MS);
     const link = `${this.opts.baseUrl.replace(/\/$/, "")}/#/arena/verify?token=${token}`;
     try {
-      await this.mailer.send(email, "Your Arena sign-in link", `Open this link to sign in (valid 15 minutes, works once):\n\n${link}\n\nIf you did not ask for it, ignore this e-mail.`);
+      const m = signInMail(localeOr(locale), link);
+      await this.mailer.send(email, m.subject, m.text);
     } catch (e) {
       log.warn("arena: sign-in mail failed", { error: e instanceof Error ? e.message : String(e) });
     }

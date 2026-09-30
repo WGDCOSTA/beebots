@@ -97,9 +97,9 @@ export class MemberAi {
   async design(descriptionRaw: unknown): Promise<BotInput & { note?: string }> {
     const st = this.status();
     if (!this.ai) throw new AiError("AI help is not switched on here.", 503);
-    if (!st.canDesign) throw new AiError(st.designsLeft === 0 ? "You used your free AI tries. Fill the form in yourself." : "AI design is for your first bunny only.", 403);
+    if (!st.canDesign) throw new AiError(st.designsLeft === 0 ? "You used your free AI tries. Fill the form in yourself." : "AI design is for your first agent only.", 403);
     const description = typeof descriptionRaw === "string" ? descriptionRaw.trim() : "";
-    if (description.length < 8 || description.length > 400) throw new AiError("Describe your bunny in 8 to 400 characters.", 400);
+    if (description.length < 8 || description.length > 400) throw new AiError("Describe your agent in 8 to 400 characters.", 400);
     this.spend();
     let raw: BeeDesign;
     try {
@@ -132,7 +132,7 @@ export class MemberAi {
         style = lim.styles[0]!;
         const only = STYLE_COINS[style] ?? [];
         coins = coins.filter((c) => only.includes(c));
-        notes.push(`The Free plan runs simple styles, so this bunny trades ${coins.length ? coins.join(", ") : only.slice(0, 1).join("")} on ${style === "breezy" ? "Trend" : "Breakout"}. Pro members can use any coin.`);
+        notes.push(`The Free plan runs simple styles, so this agent trades ${coins.length ? coins.join(", ") : only.slice(0, 1).join("")} on ${style === "breezy" ? "Trend" : "Breakout"}. Pro members can use any coin.`);
       }
     }
     if (coins.length === 0) coins = [STYLE_COINS[style]?.[0] ?? "BTC"];
@@ -143,11 +143,11 @@ export class MemberAi {
   async paint(bot: { id: string; name: string; look: string }): Promise<Buffer> {
     const st = this.status();
     if (!this.ai) throw new AiError("AI help is not switched on here.", 503);
-    if (st.portraitBotId !== bot.id) throw new AiError(st.portraitsLeft === 0 ? "You used your free portraits." : "The free portrait is for your first bunny.", 403);
+    if (st.portraitBotId !== bot.id) throw new AiError(st.portraitsLeft === 0 ? "You used your free portraits." : "The free portrait is for your first agent.", 403);
     this.spend();
     let jpg: Buffer;
     try {
-      jpg = await this.ai.paint(bot.name, bot.look || `a cartoon bunny called ${bot.name}`);
+      jpg = await this.ai.paint(bot.name, bot.look || `a cartoon character called ${bot.name}`);
     } catch {
       throw new AiError("The painter is busy. Try again in a moment.", 502);
     }

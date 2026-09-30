@@ -258,7 +258,7 @@ export class ArenaRunner {
       const r = this.runs.get(id);
       if (!r || r.userId !== userId) {
         const err = this.errors.get(id);
-        out[id] = err ? { state: "error", error: "This bunny could not start. It will be retried." } : { state: "queued" };
+        out[id] = err ? { state: "error", error: "This agent could not start. It will be retried." } : { state: "queued" };
         continue;
       }
       const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);

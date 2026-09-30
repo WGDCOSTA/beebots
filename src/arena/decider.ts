@@ -15,7 +15,7 @@ interface ScoreQ {
 }
 
 const SYSTEM =
-  "You are the decision model of a paper-trading bunny in a game (simulated money, real prices). Each turn you see the bunny's " +
+  "You are the decision model of a paper-trading agent in a game (simulated money, real prices). Each turn you see the agent's " +
   "strategy, its current state and a menu of legal moves. Choose exactly ONE move from the menu, exactly as spelled, and never " +
   "invent one. Prefer doing nothing when the state does not clearly support a move. Also rate the signal strength as a whole " +
   "number from 0 (none) up to the top level. Be honest about confidence: it is a number from 0 to 1. This is not financial advice.";
@@ -35,7 +35,7 @@ export class LlmSystemOne implements SystemOne {
     const r = await this.llm.json({
       system: SYSTEM,
       user: JSON.stringify({ strategy: q.action.instructions, state: req.state, menu: q.action.criteria, signalLevels: levels }),
-      name: "bunny_move",
+      name: "agent_move",
       schema: {
         type: "object",
         additionalProperties: false,

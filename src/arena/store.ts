@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "./locales.js";
 
 export type Tier = "free" | "pro";
 export interface ArenaUser {
@@ -12,8 +13,15 @@ export interface ArenaUser {
   tier: Tier;
   /** The public name on the leaderboard. Never the e-mail address. */
   handle: string;
+  /** The language of the pages and of the e-mails sent to them. */
+  locale: Locale;
   createdAt: number;
 }
+
+/** What a new member accepts before anything else. Bumping the version asks everyone again. The texts themselves are drafts until counsel signs them off. */
+export const CONSENT_VERSION = "2026-10-draft";
+export const CONSENT_ITEMS = ["terms", "simulated", "age"] as const;
+export type ConsentItem = (typeof CONSENT_ITEMS)[number];
 
 export const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{2,19}$/;
 const RESERVED_HANDLES = new Set(["admin", "administrator", "arena", "warren", "official", "support", "staff", "moderator", "mod", "system", "root", "bizzy", "breezy", "boozy", "jev", "null", "undefined", "anonymous"]);
@@ -32,7 +40,12 @@ const ID_RE = /^[0-9a-f]{32}$/;
 const DIRECTORY = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, tier TEXT NOT NULL DEFAULT 'free', created_at INTEGER NOT NULL,
-  handle TEXT
+  handle TEXT,
+  locale TEXT NOT NULL DEFAULT 'en'
+);
+-- Evidence of what each member accepted and when: the document version and the time. No address, no device.
+CREATE TABLE IF NOT EXISTS consents (
+  user_id TEXT NOT NULL, item TEXT NOT NULL, version TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (user_id, item, version)
 );
 CREATE TABLE IF NOT EXISTS login_tokens (
   hash TEXT PRIMARY KEY, email TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER
@@ -77,9 +90,10 @@ interface UserRow {
   tier: string;
   created_at: number;
   handle: string | null;
+  locale: string | null;
 }
 
-const toUser = (r: UserRow): ArenaUser => ({ id: r.id, email: r.email, tier: r.tier === "pro" ? "pro" : "free", handle: r.handle ?? `bunny-${r.id.slice(0, 4)}`, createdAt: r.created_at });
+const toUser = (r: UserRow): ArenaUser => ({ id: r.id, email: r.email, tier: r.tier === "pro" ? "pro" : "free", handle: r.handle ?? `bunny-${r.id.slice(0, 4)}`, locale: isLocale(r.locale) ? r.locale : DEFAULT_LOCALE, createdAt: r.created_at });
 
 export class ArenaStore {
   readonly dir: DatabaseSync;
@@ -92,6 +106,7 @@ export class ArenaStore {
     this.dir.exec(DIRECTORY);
     // Directories made before public names existed: add the column and give everyone a neutral name (never their e-mail).
     if (!(this.dir.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>).some((c) => c.name === "handle")) this.dir.exec("ALTER TABLE users ADD COLUMN handle TEXT");
+    if (!(this.dir.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>).some((c) => c.name === "locale")) this.dir.exec("ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en'");
     this.dir.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_handle ON users(handle)");
     for (const r of this.dir.prepare("SELECT id FROM users WHERE handle IS NULL").all() as Array<{ id: string }>) this.dir.prepare("UPDATE users SET handle = ? WHERE id = ?").run(this.freeHandle(r.id), r.id);
   }
@@ -103,6 +118,22 @@ export class ArenaStore {
       if (!this.dir.prepare("SELECT 1 FROM users WHERE handle = ?").get(h)) return h;
     }
     return `bunny-${id.slice(0, 12)}`;
+  }
+
+  setLocale(userId: string, locale: Locale): void {
+    this.dir.prepare("UPDATE users SET locale = ? WHERE id = ?").run(locale, userId);
+  }
+
+  /** True while the member has not accepted every item of the current version. */
+  consentNeeded(userId: string): boolean {
+    const n = (this.dir.prepare("SELECT COUNT(*) AS n FROM consents WHERE user_id = ? AND version = ?").get(userId, CONSENT_VERSION) as { n: number }).n;
+    return n < CONSENT_ITEMS.length;
+  }
+
+  /** Records that the member accepted every item of the current version. */
+  acceptConsent(userId: string, now: number): void {
+    for (const item of CONSENT_ITEMS) this.dir.prepare("INSERT OR IGNORE INTO consents (user_id, item, version, ts) VALUES (?, ?, ?, ?)").run(userId, item, CONSENT_VERSION, now);
+    this.audit(userId, "accepted terms", now);
   }
 
   /** Changes a member's public name. Returns a message when it cannot, or null on success. */
@@ -130,7 +161,7 @@ export class ArenaStore {
   createUser(id: string, email: string, now: number): ArenaUser {
     const handle = this.freeHandle(id);
     this.dir.prepare("INSERT INTO users (id, email, tier, created_at, handle) VALUES (?, ?, 'free', ?, ?)").run(id, email, now, handle);
-    return { id, email, tier: "free", handle, createdAt: now };
+    return { id, email, tier: "free", handle, locale: DEFAULT_LOCALE, createdAt: now };
   }
 
   /** This user's own database. Throws for an id that is not a current user, so a path can never be chosen by a caller. */
@@ -187,6 +218,7 @@ export class ArenaStore {
     this.tenants.get(userId)?.close();
     this.tenants.delete(userId);
     this.dir.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+    this.dir.prepare("DELETE FROM consents WHERE user_id = ?").run(userId);
     // Their bots leave the public leaderboard with them.
     this.dir.prepare("DELETE FROM lb_points WHERE bot_id IN (SELECT bot_id FROM lb_bots WHERE user_id = ?)").run(userId);
     this.dir.prepare("DELETE FROM lb_bots WHERE user_id = ?").run(userId);

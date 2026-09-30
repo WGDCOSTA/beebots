@@ -113,7 +113,7 @@ export class Bots {
 
   private get(id: unknown): Row {
     const r = typeof id === "string" ? (this.db.prepare("SELECT * FROM bots WHERE id = ?").get(id) as Row | undefined) : undefined;
-    if (!r) throw new BotError("Bot not found.", 404);
+    if (!r) throw new BotError("Agent not found.", 404);
     return r;
   }
 
@@ -121,9 +121,9 @@ export class Bots {
     const lim = LIMITS[this.tier];
     const name = typeof i.name === "string" ? i.name.trim().replace(/\s+/g, " ") : "";
     if (!NAME_RE.test(name)) throw new BotError("Name: 2 to 24 letters, numbers, spaces, apostrophes or hyphens.");
-    if (isReservedName(name)) throw new BotError("That name belongs to one of the Warren's own bunnies. Pick another.");
+    if (isReservedName(name)) throw new BotError("That name is reserved for the platform's official agents. Pick another.");
     const dup = this.db.prepare("SELECT id FROM bots WHERE lower(name) = lower(?)").get(name) as { id: string } | undefined;
-    if (dup && dup.id !== exceptId) throw new BotError("You already have a bot with that name.");
+    if (dup && dup.id !== exceptId) throw new BotError("You already have an agent with that name.");
 
     const theme = typeof i.theme === "string" ? themeById(i.theme) : undefined;
     if (!theme) throw new BotError("Pick a theme.");
@@ -138,7 +138,7 @@ export class Bots {
     const coinsIn = Array.isArray(i.coins) ? i.coins : [];
     const coins = [...new Set(coinsIn.filter((c): c is string => typeof c === "string").map((c) => c.toUpperCase()))];
     if (coins.length === 0 || coins.some((c) => !(COINS as readonly string[]).includes(c))) throw new BotError("Pick at least one coin from the list.");
-    if (coins.length > lim.maxCoins) throw new BotError(`Your plan allows up to ${lim.maxCoins} coins per bot.`, 403);
+    if (coins.length > lim.maxCoins) throw new BotError(`Your plan allows up to ${lim.maxCoins} coins per agent.`, 403);
 
     const mismatch = styleCoinProblem(style, coins);
     if (mismatch) throw new BotError(mismatch);
@@ -155,7 +155,7 @@ export class Bots {
   create(i: BotInput): BotView {
     const lim = LIMITS[this.tier];
     const n = (this.db.prepare("SELECT COUNT(*) AS n FROM bots").get() as { n: number }).n;
-    if (n >= lim.bots) throw new BotError(this.tier === "free" ? "The Free plan has one bot. Upgrade to Pro for more." : `You have reached ${lim.bots} bots.`, 403);
+    if (n >= lim.bots) throw new BotError(this.tier === "free" ? "The Free plan has one agent. Upgrade to Pro for more." : `You have reached ${lim.bots} agents.`, 403);
     const c = this.clean(i);
     const id = randomBytes(6).toString("hex");
     const t = this.now();

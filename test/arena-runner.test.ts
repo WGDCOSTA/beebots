@@ -240,7 +240,9 @@ describe("HTTP wiring", () => {
     };
     const api = new ArenaApi(auth, store, { secureCookie: true, runner });
     await auth.requestLink("ana@example.com", "1.1.1.1");
-    const cookie = `arena_session=${auth.verify(sent[0]!.match(/token=([\w-]+)/)![1])!.session}`;
+    const v = auth.verify(sent[0]!.match(/token=([\w-]+)/)![1])!;
+    store.acceptConsent(v.user.id, 1);
+    const cookie = `arena_session=${v.session}`;
     const made = await call(api, "POST", "/arena/bots/create", bot("Fluffy"), cookie);
     const id = (made.body.bot as { id: string }).id;
     await call(api, "POST", "/arena/bots/update", { ...bot("Fluffy"), id, rules: "A different plan, written out clearly." }, cookie);
@@ -258,7 +260,9 @@ describe("HTTP wiring", () => {
     const auth = new ArenaAuth(store, { send: async (_t, _s, text) => void sent.push(text) }, { baseUrl: "https://x.test" });
     const api = new ArenaApi(auth, store, { secureCookie: true });
     await auth.requestLink("ana@example.com", "1.1.1.1");
-    const cookie = `arena_session=${auth.verify(sent[0]!.match(/token=([\w-]+)/)![1])!.session}`;
+    const v = auth.verify(sent[0]!.match(/token=([\w-]+)/)![1])!;
+    store.acceptConsent(v.user.id, 1);
+    const cookie = `arena_session=${v.session}`;
     expect((await call(api, "GET", "/arena/bots", undefined, cookie)).body.runner).toEqual({ enabled: false, runs: {} });
   });
 });
