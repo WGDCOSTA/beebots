@@ -20,9 +20,13 @@ export interface ArenaUser {
 }
 
 /** What a new member accepts before anything else. Bumping the version asks everyone again. The texts themselves are drafts until counsel signs them off. */
-export const CONSENT_VERSION = "2026-10-draft";
+export const CONSENT_VERSION = "2026-10-draft2";
 export const CONSENT_ITEMS = ["terms", "simulated", "age"] as const;
 export type ConsentItem = (typeof CONSENT_ITEMS)[number];
+
+/** How long the security log is kept, in days, and how long a used or expired sign-in link's record stays. The privacy notice quotes these. */
+export const AUDIT_KEEP_DAYS = 365;
+export const AUDIT_KEEP_DAYS_TOKENS = 1;
 
 export const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{2,19}$/;
 const RESERVED_HANDLES = new Set(["admin", "administrator", "arena", "warren", "official", "support", "staff", "moderator", "mod", "system", "root", "bizzy", "breezy", "boozy", "jev", "null", "undefined", "anonymous"]);
@@ -84,7 +88,7 @@ CREATE TABLE IF NOT EXISTS bots (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, theme TEXT NOT NULL, avatar TEXT NOT NULL, style TEXT NOT NULL,
   coins TEXT NOT NULL, rules TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
   tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0,
-  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER, brain_key TEXT, mode TEXT NOT NULL DEFAULT 'fixed'
+  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER, brain_key TEXT, mode TEXT NOT NULL DEFAULT 'fixed', brains TEXT NOT NULL DEFAULT '', skill TEXT
 );
 -- An autonomous agent's own record of the style it chose and when, with the reason its model gave.
 CREATE TABLE IF NOT EXISTS style_log (
@@ -187,7 +191,7 @@ export class ArenaStore {
       db.exec(TENANT);
       // Databases made before a column existed get it here (CREATE TABLE IF NOT EXISTS does not add columns).
       const have = new Set((db.prepare("PRAGMA table_info(bots)").all() as Array<{ name: string }>).map((c) => c.name));
-      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"], ["brain_key", "TEXT"], ["mode", "TEXT NOT NULL DEFAULT 'fixed'"]] as const)
+      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"], ["brain_key", "TEXT"], ["mode", "TEXT NOT NULL DEFAULT 'fixed'"], ["brains", "TEXT NOT NULL DEFAULT ''"], ["skill", "TEXT"]] as const)
         if (!have.has(col)) db.exec(`ALTER TABLE bots ADD COLUMN ${col} ${ddl}`);
       this.tenants.set(userId, db);
     }
@@ -249,6 +253,16 @@ export class ArenaStore {
     if (n >= limit) return true;
     this.dir.prepare("INSERT INTO attempts (key, ts) VALUES (?, ?)").run(key, now);
     return false;
+  }
+
+  /**
+   * Forgets what is no longer needed, so the privacy notice can say how long things are kept: a sign-in link's record a day
+   * after it expired (it holds the e-mail it was sent to), an expired session, and the security log after a year.
+   */
+  purgeExpired(now: number): void {
+    this.dir.prepare("DELETE FROM login_tokens WHERE expires_at < ?").run(now - AUDIT_KEEP_DAYS_TOKENS * 86_400_000);
+    this.dir.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
+    this.dir.prepare("DELETE FROM audit WHERE ts < ?").run(now - AUDIT_KEEP_DAYS * 86_400_000);
   }
 
   /** Sets the plan. Callers (billing.ts) are the only ones that should. */

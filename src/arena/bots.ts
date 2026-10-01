@@ -39,11 +39,13 @@ export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] 
 /** running: trades. paused: keeps what it holds under its stops, opens nothing new. stopped: closed out and finished. quarantined: the plan no longer allows it; stopped, off the board, kept for QUARANTINE_DAYS, restored by upgrading. */
 export type BotState = "running" | "paused" | "stopped" | "quarantined";
 
-/** fixed: one style the member picked. autonomous (Premium): the agent picks and changes its own style and trades any coin the market offers. */
-export type BotMode = "fixed" | "autonomous";
+/** fixed: one style the member picked. autonomous (Premium): the agent picks and changes its own style and trades any coin the market offers. skill: it trades by one of the member's skills (a rule set) on the coins the member picked. */
+export type BotMode = "fixed" | "autonomous" | "skill";
 
 export interface BotView {
   mode: BotMode;
+  /** Skill mode: the member's skill it trades by (an id from their skills), else null. */
+  skill: string | null;
   id: string;
   name: string;
   theme: string;
@@ -62,12 +64,16 @@ export interface BotView {
   quarantinedAt: number | null;
   /** The member's own model key it thinks with (their bill), or null for the platform's model. */
   brainKey: string | null;
+  /** Every model that decides together, in order: "platform" and/or the member's own key ids. One entry is a single brain; more is a vote. */
+  brains: string[];
   version: number;
   createdAt: number;
 }
 
 export interface BotInput {
   mode?: unknown;
+  skill?: unknown;
+  brains?: unknown;
   brainKey?: unknown;
   listed?: unknown;
   tagline?: unknown;
@@ -106,11 +112,24 @@ interface Row {
   state: string;
   quarantined_at: number | null;
   brain_key: string | null;
+  brains: string;
+  skill: string | null;
   mode: string;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, brainKey: r.brain_key, mode: r.mode === "autonomous" ? "autonomous" : "fixed", version: r.version, createdAt: r.created_at });
+export const PLATFORM = "platform";
+/** The brains an agent decides with: its list, or what the older single-key column says, or the platform's model. */
+function brainsOf(r: { brains: string; brain_key: string | null }): string[] {
+  try {
+    const l = r.brains ? (JSON.parse(r.brains) as unknown) : null;
+    if (Array.isArray(l) && l.length) return l.filter((x): x is string => typeof x === "string");
+  } catch {
+    /* fall through */
+  }
+  return [r.brain_key ?? PLATFORM];
+}
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, brainKey: brainsOf(r).length === 1 && brainsOf(r)[0] !== PLATFORM ? brainsOf(r)[0]! : null, brains: brainsOf(r), mode: r.mode === "autonomous" ? "autonomous" : r.mode === "skill" ? "skill" : "fixed", skill: r.skill, version: r.version, createdAt: r.created_at });
 
 /** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
 export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
@@ -124,6 +143,7 @@ export function styleCoinProblem(style: StyleId, coins: readonly string[]): stri
 
 interface Clean {
   mode: BotMode;
+  skill: string | null;
   name: string;
   theme: string;
   avatar: string;
@@ -133,8 +153,8 @@ interface Clean {
   tagline: string;
   look: string;
   listed: boolean | undefined;
-  /** undefined = not sent (keep what it has); null = the platform's model. */
-  brainKey: string | null | undefined;
+  /** undefined = not sent (keep what it has). */
+  brains: string[] | undefined;
 }
 
 export class Bots {
@@ -148,6 +168,27 @@ export class Bots {
     const r = typeof id === "string" ? (this.db.prepare("SELECT * FROM bots WHERE id = ?").get(id) as Row | undefined) : undefined;
     if (!r) throw new BotError("Agent not found.", 404);
     return r;
+  }
+
+  /** The brains asked for: a list, or the older single key (null = the platform). Checked against the plan's number of brains; ownership of a key is checked by the API, which knows the member's vault. */
+  private brainsIn(i: BotInput, max: number): string[] | undefined {
+    const raw: unknown = i.brains !== undefined ? i.brains : i.brainKey === undefined ? undefined : i.brainKey === null || i.brainKey === "" ? [PLATFORM] : [i.brainKey];
+    if (raw === undefined) return undefined;
+    if (!Array.isArray(raw)) throw new BotError("Pick the models it thinks with.");
+    const list = [...new Set(raw.filter((x): x is string => typeof x === "string"))];
+    if (list.length === 0 || list.some((x) => x !== PLATFORM && !/^[0-9a-f]{12}$/.test(x))) throw new BotError("Pick at least one model it thinks with.");
+    if (list.length > max) throw new BotError(max === 1 ? "Your plan lets an agent think with one model. Upgrade for more." : `Your plan lets an agent think with up to ${max} models.`, 403);
+    return list;
+  }
+
+  /** The ids of the member's skills their plan lets them use (the oldest `skillSlots`). */
+  private usableSkills(): Set<string> {
+    try {
+      const rows = this.db.prepare("SELECT id FROM skills ORDER BY created_at, rowid").all() as Array<{ id: string }>;
+      return new Set(rows.slice(0, LIMITS[this.tier].skillSlots).map((r) => r.id));
+    } catch {
+      return new Set(); // no skills table yet: no skills
+    }
   }
 
   private clean(i: BotInput, exceptId?: string, mode0: unknown = i.mode): Clean {
@@ -166,11 +207,18 @@ export class Bots {
 
     // Autonomous (Premium only): no style and no coin list to pick. It starts as Momentum, which takes any coin, and chooses
     // its own style from there. The mode is fixed when the agent is made: a fixed agent never turns autonomous, or the other way round.
-    const mode: BotMode = mode0 === "autonomous" ? "autonomous" : "fixed";
+    const mode: BotMode = mode0 === "autonomous" ? "autonomous" : mode0 === "skill" ? "skill" : "fixed";
     if (mode === "autonomous" && !lim.autonomy) throw new BotError("Autonomous agents are for Premium members.", 403);
-    const style = mode === "autonomous" ? ("boozy" as const) : STYLES.find((s) => s === i.style);
+    // Skill mode: it trades by one of the member's skills (it must exist and be within the plan's slots). The style is only the
+    // frame the engine runs it in (Momentum takes any coin), so no style/coin pairing applies; the coins are still the member's choice.
+    let skill: string | null = null;
+    if (mode === "skill") {
+      skill = typeof i.skill === "string" ? i.skill : null;
+      if (!skill || !this.usableSkills().has(skill)) throw new BotError("Pick one of your skills (one that fits your plan's slots).", 400);
+    }
+    const style = mode === "autonomous" || mode === "skill" ? ("boozy" as const) : STYLES.find((s) => s === i.style);
     if (!style) throw new BotError("Pick a trading style.");
-    if (!lim.styles.includes(style)) throw new BotError("That style is for Pro members.", 403);
+    if (mode === "fixed" && !lim.styles.includes(style)) throw new BotError("That style is for Pro members.", 403);
 
     const coinsIn = Array.isArray(i.coins) ? i.coins : [];
     let coins = [...new Set(coinsIn.filter((c): c is string => typeof c === "string").map((c) => c.toUpperCase()))];
@@ -178,7 +226,7 @@ export class Bots {
     else {
       if (coins.length === 0 || coins.some((c) => !(COINS as readonly string[]).includes(c))) throw new BotError("Pick at least one coin from the list.");
       if (coins.length > lim.maxCoins) throw new BotError(`Your plan allows up to ${lim.maxCoins} coins per agent.`, 403);
-      const mismatch = styleCoinProblem(style, coins);
+      const mismatch = mode === "skill" ? null : styleCoinProblem(style, coins);
       if (mismatch) throw new BotError(mismatch);
     }
 
@@ -188,7 +236,7 @@ export class Bots {
     let tagline = typeof i.tagline === "string" ? i.tagline.replace(/\s+/g, " ").trim().slice(0, 40) : "";
     if (tagline && !/^the\b/i.test(tagline)) tagline = `the ${tagline}`.slice(0, 40);
     const look = typeof i.look === "string" ? i.look.replace(/\s+/g, " ").trim().slice(0, 400) : "";
-    return { mode, name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined, brainKey: i.brainKey === undefined ? undefined : typeof i.brainKey === "string" && /^[0-9a-f]{12}$/.test(i.brainKey) ? i.brainKey : null };
+    return { mode, skill, name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined, brains: this.brainsIn(i, lim.brains) };
   }
 
   create(i: BotInput): BotView {
@@ -200,7 +248,7 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, brain_key, mode, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, c.brainKey ?? null, c.mode, t);
+      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, brains, mode, skill, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, JSON.stringify(c.brains ?? [PLATFORM]), c.mode, c.skill, t);
       this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, 1, ?, ?, ?, ?)").run(id, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {
@@ -228,14 +276,14 @@ export class Bots {
   update(id: unknown, i: BotInput): BotView {
     const cur = this.get(id);
     if (cur.state === "quarantined") throw new BotError(QUARANTINED_MSG, 409);
-    const c = this.clean(i, cur.id, cur.mode);
+    const c = this.clean({ ...i, skill: i.skill ?? cur.skill }, cur.id, cur.mode);
     // A different model is a different agent: its record starts again, so results stay comparable.
-    const same = c.style === cur.style && c.rules === cur.rules && JSON.stringify(c.coins) === cur.coins && (c.brainKey === undefined || c.brainKey === cur.brain_key);
+    const same = c.style === cur.style && c.rules === cur.rules && JSON.stringify(c.coins) === cur.coins && c.skill === cur.skill && (c.brains === undefined || JSON.stringify(c.brains) === JSON.stringify(brainsOf(cur)));
     const version = same ? cur.version : cur.version + 1;
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, listed = ?, brain_key = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === undefined ? cur.listed : c.listed ? 1 : 0, c.brainKey === undefined ? cur.brain_key : c.brainKey, version, cur.id);
+      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, listed = ?, brains = ?, skill = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === undefined ? cur.listed : c.listed ? 1 : 0, JSON.stringify(c.brains ?? brainsOf(cur)), c.skill, version, cur.id);
       if (!same) this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(cur.id, version, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {
@@ -285,8 +333,9 @@ export class Bots {
     const quarantined: string[] = [];
     const restored: string[] = [];
     let kept = 0;
+    const usable = this.usableSkills();
     for (const r of rows) {
-      const fits = (r.mode === "autonomous" ? lim.autonomy : lim.styles.includes(r.style as StyleId)) && kept < lim.bots;
+      const fits = (r.mode === "autonomous" ? lim.autonomy : r.mode === "skill" ? !!r.skill && usable.has(r.skill) : lim.styles.includes(r.style as StyleId)) && brainsOf(r).length <= lim.brains && kept < lim.bots;
       if (fits) kept++;
       if (fits && r.state === "quarantined") {
         this.db.prepare("UPDATE bots SET state = 'stopped', quarantined_at = NULL WHERE id = ?").run(r.id);

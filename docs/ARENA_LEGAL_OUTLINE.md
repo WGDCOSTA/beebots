@@ -39,3 +39,15 @@ Status: a checklist for counsel, written 30 Sep 2026. It is not legal advice and
 
 - `dashboard/src/ArenaLegal.tsx` renders the four pages with a draft banner. The text to replace is the `legal.*` strings in `dashboard/src/i18n/en.ts` and the five translations.
 - The consent screen (`ArenaConsent.tsx`) and the consent version (`CONSENT_VERSION` in `src/arena/store.ts`) must change together: a new version asks every member again.
+
+## Status of the texts, 2 Oct 2026
+
+The four pages (Terms, Privacy notice, Risk notice, Cookies) now carry full draft text, in English, in `dashboard/src/legalText.ts`. It was written from what the Arena does, and `test/arena-legal.test.ts` checks every fact that can be checked against the code (retention periods, the cookie and the two stored preferences, prices, the quarantine, the minimum age, the companies that receive data, that real trading is not offered). **It has not been reviewed by a lawyer and the pages say so.** Other languages show a notice and the English text: only the English text is stated to be binding, and translating legal texts is for counsel.
+
+To finish, the operator must:
+1. Set `ARENA_OPERATOR_NAME`, `_ADDRESS`, `_COMPANY_NO`, `_VAT`, `_EMAIL`, `_PRIVACY_EMAIL`. Until they are set the pages show each missing detail as `[x missing]`.
+2. Fill the bracketed points in the text, which are shown highlighted on the page: the hosting provider's name and country, the backup schedule, the payment-record retention period.
+3. Have counsel go through every `[Counsel to confirm ...]` point (14-day withdrawal wording at checkout, the liability cap, the governing law and consumer protection wording, the transfer mechanism for each non-EEA provider) and the whole text, then set `ARENA_LEGAL_REVIEWED_ON=YYYY-MM-DD`. Only then does the draft banner turn into "Reviewed by counsel on ...".
+4. Decide whether the product is a regulated service (see section 5 of `ARENA_AUTONOMY_LIVE.md`), which would change the Terms and the Risk notice.
+
+Two changes were made to the product so the text is true: sign-in link records (which hold an e-mail address) are now deleted one day after they expire, expired sessions are removed, and the security log is kept 365 days (`purgeExpired`). The consent version was bumped to `2026-10-draft2`, so everyone is asked to accept the new text. There is no data-download button yet: the Privacy notice says to ask by e-mail. Decide whether to build one before launch.

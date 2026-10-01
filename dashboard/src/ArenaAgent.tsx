@@ -101,6 +101,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
       </div>
     );
 
+  const skillName = data.skills.skills.find((s) => s.id === agent.skill)?.name ?? null;
   const run = data.runner.runs[id];
   const pnl = run?.pnlUsd;
   const tone = pnlTone(pnl);
@@ -132,7 +133,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             <h1 className="as-title ag-name">{agent.name}</h1>
             <span className="dim small">
               {agent.tagline && `${agent.tagline} · `}
-              {t(styleTitleKey(agent.mode, agent.style))}
+              {t(styleTitleKey(agent.mode, agent.style))}{agent.mode === "skill" && skillName ? `: ${skillName}` : ""}
               {agent.mode === "autonomous" && run?.style ? ` (${t("auto.now", { style: t(STYLE_KEYS[run.style]?.title ?? "style.breezy.t") })})` : ""} · v{agent.version}
             </span>
           </div>
@@ -258,7 +259,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             )}
           </>
         )}
-        {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} />}
+        {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} brains={agent.brains.length} />}
         {tab === "versions" && (
           <>
             <p className="dim small">{t("ver.intro")}</p>

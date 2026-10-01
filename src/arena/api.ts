@@ -6,7 +6,7 @@ import { readJson } from "../gate.js";
 import { clientAddr } from "../visitors.js";
 import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
 import { AiError, MemberAi, type AiService } from "./ai.js";
-import { BotError, Bots, COINS, LIMITS, type BotView } from "./bots.js";
+import { BotError, Bots, COINS, LIMITS, PLATFORM, type BotView } from "./bots.js";
 import type { Leaderboard } from "./ranking.js";
 import type { RunStatus } from "./runner.js";
 import { isLocale } from "./locales.js";
@@ -14,10 +14,23 @@ import { CONSENT_ITEMS, CONSENT_VERSION } from "./store.js";
 import { Billing, BillingError } from "./billing.js";
 import { PLAN_PRICES } from "./plans.js";
 import { TEMPLATES } from "./templates.js";
+import type { Skill } from "../lab/skills/index.js";
+import { libraryOf, SkillBank, SkillError } from "./skills.js";
 import { PROVIDERS, DEFAULT_MODEL, MAX_KEYS, VaultError, type Vault } from "./vault.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
+
+export interface Operator {
+  name?: string;
+  address?: string;
+  companyNo?: string;
+  vat?: string;
+  email?: string;
+  privacyEmail?: string;
+  /** The date counsel signed the legal texts off (YYYY-MM-DD). While it is empty the pages say they are drafts. */
+  reviewedOn?: string;
+}
 
 const COOKIE = "arena_session";
 const MAX_BODY = 4 * 1024;
@@ -32,6 +45,10 @@ export interface ApiOpts {
   aiDailyLimit?: number;
   /** The public leaderboard (null = none). */
   leaderboard?: Leaderboard | null;
+  /** Who operates the Arena, for the legal pages. Fields not set stay empty and the pages show them as missing. */
+  operator?: Operator;
+  /** The platform's skill library members can keep in their slots. */
+  library?: readonly Skill[];
   /** The key vault for members' own model keys (null = closed). */
   vault?: Vault | null;
   /** Plans and payment (null = payments are not open: everyone is on Free). */
@@ -155,6 +172,19 @@ export class ArenaApi {
       const plans = (["free", "pro", "premium"] as const).map((id) => ({ id, price: id === "free" ? null : PLAN_PRICES[id], limits: LIMITS[id] }));
       return this.send(res, 200, { open: this.billing().open, plans, current: me ? this.billing().view(me) : null });
     }
+    if (req.method === "GET" && route === "/operator") {
+      // Public: the legal pages name the operator and the contact addresses. Nothing here is about a member.
+      const o = this.opts.operator ?? {};
+      return this.send(res, 200, { name: o.name ?? "", address: o.address ?? "", companyNo: o.companyNo ?? "", vat: o.vat ?? "", email: o.email ?? "", privacyEmail: o.privacyEmail ?? o.email ?? "", reviewedOn: /^\d{4}-\d{2}-\d{2}$/.test(o.reviewedOn ?? "") ? o.reviewedOn : "" });
+    }
+    if (req.method === "GET" && route === "/skills") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      const bank = new SkillBank(this.store.tenant(u.id), u.tier, this.opts.library ?? [], this.now);
+      const bots = new Bots(this.store.tenant(u.id), u.tier, this.now).list();
+      const skills = bank.list().map((s) => ({ ...s, usedBy: bots.filter((b) => b.skill === s.id).map((b) => ({ id: b.id, name: b.name })) }));
+      return this.send(res, 200, { slots: bank.slots, skills, library: libraryOf(this.opts.library ?? []) });
+    }
     if (req.method === "GET" && route === "/keys") {
       // Never the secret: provider, name, model, the last four characters.
       const u = this.auth.user(sessionOf(req));
@@ -265,8 +295,9 @@ export class ArenaApi {
         const bots = new Bots(this.store.tenant(u.id), u.tier, this.now);
         // A model key an agent is set to must be the member's own: the page names it by id, and the id is checked here.
         if (route === "/bots/create" || route === "/bots/update") {
-          if (body.brainKey === "" ) body.brainKey = null;
-          if (typeof body.brainKey === "string" && !this.keysOf(u)?.has(body.brainKey)) return this.send(res, 400, { error: "That model key is not yours, or it no longer exists." });
+          // The page names the models by id; every id must be one of the member's own keys (or the platform's model).
+          const named = Array.isArray(body.brains) ? body.brains : typeof body.brainKey === "string" && body.brainKey ? [body.brainKey] : [];
+          if (named.some((k) => typeof k === "string" && k !== PLATFORM && !this.keysOf(u)?.has(k))) return this.send(res, 400, { error: "One of those model keys is not yours, or it no longer exists." });
         }
         try {
           if (route === "/bots/create") {
@@ -325,6 +356,28 @@ export class ArenaApi {
           throw e;
         }
       }
+      case "/skills/add":
+      case "/skills/delete": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        if (this.blockedByConsent(res, u)) return true;
+        const bank = new SkillBank(this.store.tenant(u.id), u.tier, this.opts.library ?? [], this.now);
+        try {
+          if (route === "/skills/add") {
+            if (this.store.tooMany(`skills:${u.id}`, 60, this.now())) return this.send(res, 429, { error: "Too many tries. Wait a little and try again." });
+            return this.send(res, 200, { skill: body.from !== undefined ? bank.addFromLibrary(body.from) : bank.addOwn(body.spec) });
+          }
+          const id = typeof body.id === "string" ? body.id : "";
+          // A skill an agent trades by cannot be removed from under it.
+          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.skill === id);
+          if (using.length) return this.send(res, 409, { error: `Agents still trade by this skill: ${using.map((b) => b.name).join(", ")}. Change them first.` });
+          bank.remove(id);
+          return this.send(res, 200, { ok: true });
+        } catch (e) {
+          if (e instanceof SkillError) return this.send(res, e.status, { error: e.message });
+          throw e;
+        }
+      }
       case "/keys/add":
       case "/keys/delete": {
         const u = this.auth.user(sessionOf(req));
@@ -340,7 +393,7 @@ export class ArenaApi {
           }
           const id = typeof body.id === "string" ? body.id : "";
           // A key that an agent thinks with cannot be removed from under it.
-          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.brainKey === id);
+          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.brains.includes(id));
           if (using.length) return this.send(res, 409, { error: `Agents still use this key: ${using.map((b) => b.name).join(", ")}. Switch them to the platform model first.` });
           keys.remove(id);
           return this.send(res, 200, { ok: true });

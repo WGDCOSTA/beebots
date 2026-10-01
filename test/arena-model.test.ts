@@ -157,7 +157,9 @@ describe("words for what an agent did", () => {
   it("translates menu labels it knows and keeps the rest readable", () => {
     expect(choiceText("LONG_BTC", t as never)).toBe('choice.long{"coin":"BTC"}');
     expect(choiceText("SHORT_ETH", t as never)).toBe('choice.short{"coin":"ETH"}');
+    expect(choiceText("SMA_CROSS_LONG_BTC", t as never)).toBe('choice.long{"coin":"BTC"}');
     expect(choiceText("HOLD_WINNER", t as never)).toBe("choice.hold");
+    expect(choiceText("WAIT", t as never)).toMatch(/wait/i);
     expect(choiceText("FT_SOMETHING_ODD", t as never)).toMatch(/something odd/i);
   });
   it("ticks the getting-started list from real data", () => {
@@ -214,9 +216,9 @@ describe("plans and quarantine", () => {
   it("lists what a plan includes and marks what is not built yet, so it is never sold as working", () => {
     const free = planFeatures({ bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false, brains: 1, skillSlots: 5, history: false });
     expect(free.map((f) => f.key)).toEqual(["plans.f.agents", "plans.f.coins", "plans.f.stylesBasic", "plans.f.packsFree", "plans.f.brains", "plans.f.skills"]);
-    expect(free.find((f) => f.key === "plans.f.brains")!.soon).toBe(false); // one brain is what exists today
+    expect(free.find((f) => f.key === "plans.f.brains")!.soon).toBeFalsy();
     const premium = planFeatures({ bots: 20, maxCoins: 8, styles: ["breezy", "bizzy", "boozy"], proThemes: true, autonomy: true, brains: 6, skillSlots: 30, history: true });
-    expect(premium.filter((f) => f.soon).map((f) => f.key)).toEqual(["plans.f.brains", "plans.f.skills", "plans.f.history"]);
+    expect(premium.filter((f) => f.soon).map((f) => f.key)).toEqual(["plans.f.skills", "plans.f.history"]);
     expect(premium.find((f) => f.key === "plans.f.agents")).toEqual({ key: "plans.f.agents", vars: { n: 20 } });
   });
 });

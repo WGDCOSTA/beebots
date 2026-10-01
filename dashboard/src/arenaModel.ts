@@ -4,7 +4,7 @@ import { humanLabel } from "./tickerModel.js";
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
 export type LegalDocId = "terms" | "privacy" | "risk" | "cookies";
-export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "plans"; paid: boolean } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
+export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "plans"; paid: boolean } | { kind: "skills" } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
 
 /** #/arena is home (or the landing page when signed out); #/arena/verify?token=... is the page the e-mailed link opens. */
 export function arenaView(hash: string): ArenaView {
@@ -13,6 +13,7 @@ export function arenaView(hash: string): ArenaView {
   const sub = parts[1];
   if (sub === "ranking") return { kind: "ranking" };
   if (sub === "me") return { kind: "me" };
+  if (sub === "skills") return { kind: "skills" };
   if (sub === "plans") return { kind: "plans", paid: new URLSearchParams(query).get("paid") === "1" };
   if (sub === "new") return { kind: "new" };
   if (sub === "agent" && /^[\w-]{1,40}$/.test(parts[2] ?? "")) return { kind: "agent", id: parts[2]! };
@@ -37,9 +38,12 @@ export const PROVIDER_LABEL: Record<string, string> = { openai: "OpenAI", claude
 
 export interface BotDraft {
   /** fixed (default) or autonomous (Premium): the agent picks its own style and coins. */
-  mode?: "fixed" | "autonomous";
+  mode?: "fixed" | "autonomous" | "skill";
+  /** Skill mode: the id of one of the member's skills. */
+  skill?: string | null;
   /** The member's own model key it thinks with; null or missing = the platform's model. */
-  brainKey?: string | null;
+  /** The models it thinks with: "platform" and/or the member's own key ids. Several decide by vote. */
+  brains?: string[];
   name: string;
   theme: string;
   avatar: string;
@@ -79,6 +83,7 @@ const lookIssue = (d: BotDraft): Say | null => {
 };
 const styleIssue = (d: BotDraft, maxCoins: number, styleName: Names): Say | null => {
   if (d.mode === "autonomous") return null; // no style or coins to pick
+  if (d.mode === "skill" && !d.skill) return { key: "prob.skill" };
   if (!d.style) return { key: "prob.style" };
   if (d.coins.length === 0) return { key: "prob.coins" };
   if (d.coins.length > maxCoins) return { key: "prob.maxCoins", vars: { n: maxCoins } };
@@ -240,7 +245,7 @@ export function seasonEndsSay(end: number, now: number): Say {
 /** A league id such as "free:breezy" in words ("Free · Trend"). */
 export function leagueText(id: string, t: (key: Key) => string): string {
   const [tier = "", style = ""] = id.split(":");
-  const name = style === "autonomous" ? t("league.autonomous") : STYLE_KEYS[style] ? t(STYLE_KEYS[style]!.title) : style;
+  const name = style === "autonomous" ? t("league.autonomous") : style === "skill" ? t("league.skill") : STYLE_KEYS[style] ? t(STYLE_KEYS[style]!.title) : style;
   return `${TIER_LABEL[tier as "free" | "pro" | "premium"] ?? "Free"} · ${name}`;
 }
 
@@ -267,7 +272,8 @@ export function handleIssue(raw: string): Key | null {
 
 /** A menu label such as LONG_BTC or HOLD_WINNER in the member's language. Labels it does not know keep their English wording. */
 export function choiceText(label: string, t: (key: Key, vars?: Record<string, string | number>) => string): string {
-  const m = /^(LONG|SHORT)_([A-Z0-9]+)$/.exec(label);
+  // A skill agent's moves carry the skill's name in front, e.g. SMA_CROSS_LONG_BTC.
+  const m = /^(?:.*_)?(LONG|SHORT)_([A-Z0-9]+)$/.exec(label);
   if (m) return t(m[1] === "LONG" ? "choice.long" : "choice.short", { coin: m[2]! });
   if (/^HOLD/.test(label)) return t("choice.hold");
   if (/^(CLOSE|EXIT|FLAT)/.test(label)) return t("choice.close");
@@ -302,7 +308,7 @@ export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
     { key: "plans.f.coins", vars: { n: l.maxCoins } },
     { key: l.styles.length > 2 ? "plans.f.stylesAll" : "plans.f.stylesBasic" },
     { key: l.proThemes ? "plans.f.packsAll" : "plans.f.packsFree" },
-    { key: "plans.f.brains", vars: { n: l.brains }, soon: l.brains > 1 },
+    { key: "plans.f.brains", vars: { n: l.brains } },
     { key: "plans.f.skills", vars: { n: l.skillSlots }, soon: true },
   ];
   if (l.history) out.push({ key: "plans.f.history", soon: true });
@@ -312,5 +318,5 @@ export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
 
 /** The name of the style an agent trades, or what it is when it chooses its own. */
 export function styleTitleKey(mode: string | undefined, style: string): Key {
-  return mode === "autonomous" ? "style.auto.t" : (STYLE_KEYS[style]?.title ?? "style.breezy.t");
+  return mode === "autonomous" ? "style.auto.t" : mode === "skill" ? "style.skill.t" : (STYLE_KEYS[style]?.title ?? "style.breezy.t");
 }

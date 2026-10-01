@@ -131,12 +131,13 @@ function StyleChoices({ log }: { log: Array<{ ts: number; style: string; reason:
   );
 }
 
-export function ArenaDecisions({ decisions, styles = null }: { decisions: DecisionFact[]; styles?: Array<{ ts: number; style: string; reason: string; changed: boolean }> | null }) {
+export function ArenaDecisions({ decisions, styles = null, brains = 1 }: { decisions: DecisionFact[]; styles?: Array<{ ts: number; style: string; reason: string; changed: boolean }> | null; brains?: number }) {
   const { t } = useI18n();
   return (
     <>
       {styles && <StyleChoices log={styles} />}
       <p className="dim small">{t("dec.intro")}</p>
+      {brains > 1 && <p className="dim small">{t("dec.vote", { n: brains })}</p>}
       {decisions.length === 0 ? <p className="dim">{t("dec.empty")}</p> : <ul className="dc-list">{decisions.map((d, i) => <Decision key={`${d.ts}-${i}`} d={d} />)}</ul>}
     </>
   );

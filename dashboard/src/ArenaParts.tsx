@@ -25,9 +25,10 @@ export interface Agent extends BotDraft {
   id: string;
   image: boolean;
   state: AgentState;
-  mode: "fixed" | "autonomous";
+  mode: "fixed" | "autonomous" | "skill";
+  skill: string | null;
   quarantinedAt: number | null;
-  brainKey: string | null;
+  brains: string[];
   version: number;
   createdAt: number;
 }
@@ -54,6 +55,21 @@ export interface KeysState {
   keys: KeyView[];
 }
 
+export interface SkillItem {
+  id: string;
+  kind: "lib" | "own";
+  name: string;
+  family: string;
+  description: string;
+  locked: boolean;
+  usedBy: Array<{ id: string; name: string }>;
+}
+export interface SkillsState {
+  slots: number;
+  skills: SkillItem[];
+  library: Array<{ id: string; name: string; family: string; description: string }>;
+}
+
 export interface Template extends BotDraft {
   id: string;
   kind: "steady" | "breakout" | "momentum";
@@ -68,6 +84,7 @@ export interface ArenaData {
   ai: AiStatus | null;
   templates: Template[];
   keys: KeysState;
+  skills: SkillsState;
   reload: () => Promise<void>;
 }
 
@@ -77,15 +94,16 @@ export function useArenaData(): { data: ArenaData | null; error: "load" | "down"
   const [error, setError] = useState<"load" | "down" | null>(null);
   const load = useCallback(async () => {
     try {
-      const [c, b, a, t, k] = await Promise.all([
+      const [c, b, a, t, k, sk] = await Promise.all([
         arena<Catalogue>("GET", "catalogue"),
         arena<{ bots: Agent[]; curves: Record<string, number[]>; runner: ArenaData["runner"] }>("GET", "bots"),
         arena<AiStatus>("GET", "ai/status"),
         arena<{ templates: Template[] }>("GET", "templates"),
         arena<KeysState>("GET", "keys"),
+        arena<SkillsState>("GET", "skills"),
       ]);
       if (c.status === 200 && b.status === 200) {
-        setData({ cat: c.data, agents: b.data.bots, runner: b.data.runner, curves: b.data.curves ?? {}, ai: a.status === 200 ? a.data : null, templates: t.data.templates ?? [], keys: k.status === 200 ? k.data : { open: false, max: 5, providers: [], keys: [] } });
+        setData({ cat: c.data, agents: b.data.bots, runner: b.data.runner, curves: b.data.curves ?? {}, ai: a.status === 200 ? a.data : null, templates: t.data.templates ?? [], keys: k.status === 200 ? k.data : { open: false, max: 5, providers: [], keys: [] }, skills: sk.status === 200 ? sk.data : { slots: 0, skills: [], library: [] } });
         setError(null);
       } else setError("load");
     } catch {

@@ -166,6 +166,12 @@ export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Lim
         )}
       </div>
 
+      <div className="arena-actions">
+        <a className="pbtn ghost" href="#/arena/skills">
+          {t("skills.link", { n: data.skills.skills.length, max: data.skills.slots })}
+        </a>
+      </div>
+
       {agents.length > 0 && (
         <div className="arena-actions">
           {anyRunning && (

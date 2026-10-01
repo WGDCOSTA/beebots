@@ -161,3 +161,24 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 .ky-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
 .ky-list li > div { min-width: 0; overflow-wrap: anywhere; }
 .dc-styles { margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+/* Step 7: several brains. */
+.ab-brains { display: grid; gap: 8px; margin: 6px 0; }
+.ab-brains label { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); cursor: pointer; overflow-wrap: anywhere; }
+.ab-brains label.on { border-color: var(--bizzy); background: color-mix(in srgb, var(--bizzy) 16%, var(--card-2)); }
+.ab-brains input { width: 22px; height: 22px; accent-color: #c98500; flex: none; }
+/* Step 8: skills. */
+.sk-list { list-style: none; margin: 8px 0; padding: 0; display: grid; }
+.sk-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.sk-list li.locked { opacity: 0.7; }
+.sk-main { min-width: 0; overflow-wrap: anywhere; }
+.sk-spec { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; width: 100%; box-sizing: border-box; }
+/* The legal pages. */
+.as-legal { max-width: 72ch; line-height: 1.6; }
+.as-legal .banner.ok { border-color: color-mix(in srgb, var(--good) 60%, var(--line)); color: var(--good-text); background: color-mix(in srgb, var(--good) 7%, var(--card)); }
+.as-legal h2 { font-size: 18px; margin: 22px 0 6px; scroll-margin-top: 70px; }
+.as-legal ul, .as-legal ol { padding-left: 20px; display: grid; gap: 6px; }
+.as-legal mark { background: color-mix(in srgb, var(--warning) 28%, transparent); color: inherit; border-radius: 4px; padding: 0 3px; }
+.lg-toc { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px; margin: 12px 0; background: var(--card); }
+.lg-toc a { display: inline-flex; align-items: center; min-height: 36px; }
+.lg-links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); }
+.lg-links a { display: inline-flex; align-items: center; min-height: 44px; }

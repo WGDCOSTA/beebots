@@ -1,7 +1,7 @@
 // The fields of an agent, in groups, shared by the create wizard (one group per step) and the agent's Settings (all at once).
 // What the plan leaves out is shown locked, with the reason, and a coin a style cannot trade is greyed out, not hidden.
 import { coinFits, PROVIDER_LABEL, STYLE_COINS, STYLE_KEYS, toggleCoin, withStyle, type BotDraft } from "./arenaModel";
-import { Portrait, type Catalogue, type KeysState, type Limits } from "./ArenaParts";
+import { Portrait, type Catalogue, type KeysState, type Limits, type SkillsState } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
 interface Props {
@@ -63,8 +63,10 @@ export function LookFields({ cat, limits, d, set }: Props) {
   );
 }
 
-export function StyleFields({ cat, limits, d, set, locked }: Props & { locked?: boolean }) {
+export function StyleFields({ cat, limits, d, set, skills }: Props & { skills?: SkillsState }) {
   const { t } = useI18n();
+  const isSkill = d.mode === "skill";
+  const usable = (skills?.skills ?? []).filter((s) => !s.locked);
   if (d.mode === "autonomous")
     return (
       <>
@@ -77,7 +79,29 @@ export function StyleFields({ cat, limits, d, set, locked }: Props & { locked?: 
     );
   return (
     <>
-      <div className="eyebrow">{t("field.style")}</div>
+      {isSkill && (
+        <>
+          <label className="eyebrow" htmlFor="af-skill">
+            {t("skills.pick")}
+          </label>
+          <select id="af-skill" className="pinput" value={d.skill ?? ""} onChange={(e) => set({ ...d, skill: e.target.value || null, style: "boozy" })}>
+            <option value="">{t("skills.choose")}</option>
+            {usable.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {usable.length === 0 && (
+            <a className="small" href="#/arena/skills">
+              {t("skills.getOne")}
+            </a>
+          )}
+          <p className="dim small">{t("skills.pickHelp")}</p>
+        </>
+      )}
+      {!isSkill && <div className="eyebrow">{t("field.style")}</div>}
+      {!isSkill && (
       <div className="ab-styles">
         {Object.entries(STYLE_KEYS).map(([id, s]) => {
           const locked = !limits.styles.includes(id);
@@ -92,8 +116,9 @@ export function StyleFields({ cat, limits, d, set, locked }: Props & { locked?: 
           );
         })}
       </div>
+      )}
 
-      {limits.styles.length < 3 && (
+      {!isSkill && limits.styles.length < 3 && (
         <a className="small" href="#/arena/plans">
           {t("plans.seeLocked")}
         </a>
@@ -120,7 +145,7 @@ export function StyleFields({ cat, limits, d, set, locked }: Props & { locked?: 
           );
         })}
       </div>
-      {STYLE_COINS[d.style] && <p className="dim small">{t("field.coinNo", { style: t(STYLE_KEYS[d.style]!.title), coins: STYLE_COINS[d.style]!.join(", ") })}</p>}
+      {!isSkill && STYLE_COINS[d.style] && <p className="dim small">{t("field.coinNo", { style: t(STYLE_KEYS[d.style]!.title), coins: STYLE_COINS[d.style]!.join(", ") })}</p>}
     </>
   );
 }
@@ -153,24 +178,42 @@ export function ListedField({ d, set }: Pick<Props, "d" | "set">) {
   );
 }
 
-/** Which model an agent thinks with: the platform's shared one, or one of the member's own keys. Hidden while the member has no key and the vault is closed. */
-export function BrainField({ d, set, keys }: Pick<Props, "d" | "set"> & { keys: KeysState }) {
+/** Which models an agent thinks with: the platform's shared one and/or the member's own keys, up to what the plan allows. With several, they vote. */
+export function BrainField({ d, set, keys, limits }: Pick<Props, "d" | "set" | "limits"> & { keys: KeysState }) {
   const { t } = useI18n();
-  if (!keys.open && !d.brainKey) return null;
+  const chosen = d.brains ?? ["platform"];
+  const max = limits.brains;
+  if (!keys.open && chosen.length === 1 && chosen[0] === "platform") return null;
+  const toggle = (id: string) => {
+    const has = chosen.includes(id);
+    const next = has ? chosen.filter((x) => x !== id) : [...chosen, id];
+    if (next.length === 0 || next.length > max) return;
+    set({ ...d, brains: next });
+  };
+  const options = [{ id: "platform", label: t("brain.platform") }, ...keys.keys.map((k) => ({ id: k.id, label: `${k.label} · ${PROVIDER_LABEL[k.provider] ?? k.provider} · ${k.model}` }))];
   return (
     <>
-      <label className="eyebrow" htmlFor="af-brain">
-        {t("brain.field")}
-      </label>
-      <select id="af-brain" className="pinput" value={d.brainKey ?? ""} onChange={(e) => set({ ...d, brainKey: e.target.value || null })}>
-        <option value="">{t("brain.platform")}</option>
-        {keys.keys.map((k) => (
-          <option key={k.id} value={k.id}>
-            {k.label} · {PROVIDER_LABEL[k.provider] ?? k.provider} · {k.model}
-          </option>
-        ))}
-      </select>
-      <p className="dim small">{t("brain.help")}</p>
+      <div className="eyebrow">
+        {t("brain.field")} <span className="dim">({chosen.length}/{max})</span>
+      </div>
+      <div className="ab-brains" role="group" aria-label={t("brain.field")}>
+        {options.map((o) => {
+          const on = chosen.includes(o.id);
+          return (
+            <label key={o.id} className={on ? "on" : ""}>
+              <input type="checkbox" checked={on} disabled={(!on && chosen.length >= max) || (on && chosen.length === 1)} onChange={() => toggle(o.id)} />
+              <span>{o.label}</span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="dim small">{t(max > 1 ? "brain.helpMany" : "brain.help", { n: max })}</p>
+      {chosen.length > 1 && <p className="small">{t("brain.vote", { n: chosen.length })}</p>}
+      {max === 1 && (
+        <a className="small" href="#/arena/plans">
+          {t("plans.seeLocked")}
+        </a>
+      )}
       {keys.keys.length === 0 && (
         <a className="small" href="#/arena/me">
           {t("brain.addKey")}
@@ -179,20 +222,23 @@ export function BrainField({ d, set, keys }: Pick<Props, "d" | "set"> & { keys: 
     </>
   );
 }
-
 /** Fixed style or autonomous. Chosen when the agent is made and never changed afterwards. Autonomous is Premium only: shown locked, with the way to the plans. */
 export function ModeField({ d, set, limits }: Pick<Props, "d" | "set" | "limits">) {
   const { t } = useI18n();
-  const auto = d.mode === "autonomous";
+  const mode = d.mode ?? "fixed";
   return (
     <>
       <div className="eyebrow">{t("mode.field")}</div>
       <div className="ab-styles">
-        <button type="button" className={`ab-style ${!auto ? "on" : ""}`} aria-pressed={!auto} onClick={() => set({ ...d, mode: "fixed" })}>
+        <button type="button" className={`ab-style ${mode === "fixed" ? "on" : ""}`} aria-pressed={mode === "fixed"} onClick={() => set({ ...d, mode: "fixed" })}>
           <strong>{t("mode.fixed.t")}</strong>
           <span className="dim small">{t("mode.fixed.b")}</span>
         </button>
-        <button type="button" className={`ab-style ${auto ? "on" : ""}`} aria-pressed={auto} disabled={!limits.autonomy} onClick={() => set({ ...d, mode: "autonomous" })}>
+        <button type="button" className={`ab-style ${mode === "skill" ? "on" : ""}`} aria-pressed={mode === "skill"} onClick={() => set({ ...d, mode: "skill", style: "boozy", coins: d.coins.length ? d.coins : ["BTC"] })}>
+          <strong>{t("mode.skill.t")}</strong>
+          <span className="dim small">{t("mode.skill.b")}</span>
+        </button>
+        <button type="button" className={`ab-style ${mode === "autonomous" ? "on" : ""}`} aria-pressed={mode === "autonomous"} disabled={!limits.autonomy} onClick={() => set({ ...d, mode: "autonomous" })}>
           <strong>
             {t("mode.auto.t")}
             {!limits.autonomy && <small> {t("field.premium")}</small>}

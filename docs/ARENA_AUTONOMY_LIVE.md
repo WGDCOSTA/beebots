@@ -55,6 +55,8 @@ The owner's admin already has a registry of brains (OpenAI, Z.ai GLM, custom Ope
 
 Decision needed from the owner: bring-your-own keys, platform pool, or both; and the cost ceiling per Premium agent per day.
 
+**Built on paper (step 7, 1 Oct 2026): several brains per agent.** An agent can think with the platform's model and/or up to its plan's number of the member's own keys (Free 1, Pro 3, Premium 6). Every brain is asked the same question and the move most of them choose wins. The odds the agent shows are the share of ALL its brains that chose each move: a brain that fails or answers off the menu abstains and lowers the winner's share, so a split or thin vote gives weak odds and the engine's own gates make the agent hold; a tie goes to HOLD when HOLD is among the tied moves, otherwise to the higher mean confidence; if every brain fails the engine holds. All brains' tokens are paid, so the agent's daily ceiling is the sum of each brain's (the platform's small ceiling plus each own key's) and the cost estimate uses their mean price. A different set (or order) of brains is a new version with a fresh paper account. If a key it needs is gone, it does not start. If a member downgrades to a plan with fewer brains, the agent goes into quarantine like any agent the plan no longer allows. Other combinations (one decides and another reviews, one brain per role) are not built.
+
 ## 5. Connecting a real OKX account
 
 This is the largest change of the whole plan, because it moves from simulated money to a member's money. Earlier decisions said "paper only at launch; live is a later phase behind legal review and a custody decision". Those two gates stay, and this section lists what the gates have to cover.

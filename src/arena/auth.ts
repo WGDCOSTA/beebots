@@ -48,6 +48,7 @@ export class ArenaAuth {
   async requestLink(rawEmail: unknown, addr: string, locale?: unknown): Promise<{ ok: boolean }> {
     const email = normaliseEmail(rawEmail);
     if (!email) return { ok: false };
+    this.store.purgeExpired(this.now());
     if (this.tooMany(`addr:${addr}`, ADDR_PER_HOUR) || this.tooMany(`email:${email}`, EMAIL_PER_HOUR)) return { ok: true };
     const token = secret();
     const t = this.now();
