@@ -68,7 +68,7 @@ describe("the dictionaries", () => {
 
 describe("the code only asks for keys that exist", () => {
   const dir = join(__dirname, "..", "dashboard", "src");
-  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Ranking|Home|Agent|New|Fields|Parts|Decisions|Settings)\./.test(f));
+  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Plans|Ranking|Home|Agent|New|Fields|Parts|Decisions|Settings)\./.test(f));
   const used = new Set<string>();
   for (const f of files) {
     const src = readFileSync(join(dir, f), "utf8");
@@ -79,7 +79,7 @@ describe("the code only asks for keys that exist", () => {
   const model = readFileSync(join(dir, "arenaModel.ts"), "utf8");
   for (const m of model.matchAll(/"([a-z]+(?:\.[\w]+)+)"/g)) if (m[1]! in en) used.add(m[1]!);
   // keys chosen by a condition or a lookup in the page
-  for (const k of ["home.quotaFull1", "home.quotaFull", "home.loadError", "trade.buy", "trade.sell", "dec.ruleActed", "dec.ruleBlocked", "set.paint", "set.repaint", "new.tpl.steady", "new.tpl.breakout", "new.tpl.momentum"]) used.add(k);
+  for (const k of ["home.quotaFull1", "home.quotaFull", "home.loadError", "trade.buy", "trade.sell", "dec.ruleActed", "dec.ruleBlocked", "set.paint", "set.repaint", "new.tpl.steady", "new.tpl.breakout", "new.tpl.momentum", "plans.paid", "plans.paidDone"]) used.add(k);
   // keys built from a variable
   for (const s of ["start", "look", "style", "rules", "review"]) used.add(`new.step.${s}`);
   for (const s of ["performance", "decisions", "versions", "settings"]) used.add(`agent.tab.${s}`);

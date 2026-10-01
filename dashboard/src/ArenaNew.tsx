@@ -36,6 +36,9 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
         <h3>{t("new.title")}</h3>
         <p className="dim">{t(limits.bots === 1 ? "home.quotaFull1" : "home.quotaFull", { n: limits.bots })}</p>
         <div className="arena-actions">
+          <a className="pbtn" href="#/arena/plans">
+            {t("home.quarantine.cta")}
+          </a>
           <button className="pbtn ghost" onClick={onCancel}>
             {t("new.back")}
           </button>

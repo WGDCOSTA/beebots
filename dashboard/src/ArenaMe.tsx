@@ -1,6 +1,6 @@
 // "Me": the person, apart from the agents. Who they are, their public name, their language, signing out, and leaving.
 import { useState } from "react";
-import { arena, type Member } from "./arenaApi";
+import { arena, type BillingView, type Member } from "./arenaApi";
 import { handleIssue, TIER_LABEL } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
 import { LOCALES, LOCALE_NAMES, type Locale } from "./i18n/locales";
@@ -60,12 +60,24 @@ function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) =
   );
 }
 
-export function ArenaMe({ me, onOut, onHandle, onPickLocale }: { me: Member; onOut: () => void; onHandle: (h: string) => void; onPickLocale: (l: Locale) => void }) {
+export function ArenaMe({ me, billing, onOut, onHandle, onPickLocale }: { me: Member; billing: BillingView | null; onOut: () => void; onHandle: (h: string) => void; onPickLocale: (l: Locale) => void }) {
   const { t, locale } = useI18n();
   const [confirm, setConfirm] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [billError, setBillError] = useState("");
+
+  const manage = async () => {
+    setBillError("");
+    try {
+      const r = await arena<{ url?: string }>("POST", "billing/portal", {});
+      if (r.status === 200 && r.data.url) window.location.assign(r.data.url);
+      else setBillError(r.data.error ?? t("me.billingError"));
+    } catch {
+      setBillError(t("me.billingError"));
+    }
+  };
 
   const out = async () => {
     setBusy(true);
@@ -107,6 +119,27 @@ export function ArenaMe({ me, onOut, onHandle, onPickLocale }: { me: Member; onO
             {t("me.signOut")}
           </button>
         </div>
+      </div>
+
+      <div className="pcard arena-card">
+        <div className="arena-who">
+          <div>
+            <div className="eyebrow">{t("me.plan")}</div>
+            <strong>{TIER_LABEL[me.tier]}</strong>
+            {billing?.periodEnd && me.tier !== "free" && <div className="dim small">{t("me.periodEnd", { date: new Date(billing.periodEnd).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) })}</div>}
+          </div>
+        </div>
+        <div className="arena-actions">
+          <a className="pbtn ghost" href="#/arena/plans">
+            {t("me.seePlans")}
+          </a>
+          {billing?.canManage && (
+            <button className="pbtn ghost" onClick={() => void manage()}>
+              {t("plans.manage")}
+            </button>
+          )}
+        </div>
+        {billError && <p className="bad">{billError}</p>}
       </div>
 
       <div className="pcard arena-card">

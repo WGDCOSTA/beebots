@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agoParts, arenaView, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleIssue, leagueText, looksLikeEmail, needSays, pnlTone, resendIn, riskSay, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
+import { agoParts, arenaView, fmtPrice, planFeatures, quarantineDaysLeft, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleIssue, leagueText, looksLikeEmail, needSays, pnlTone, resendIn, riskSay, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
 import { en } from "../dashboard/src/i18n/en.js";
 
 describe("arenaView", () => {
@@ -188,5 +188,35 @@ describe("leaderboard words", () => {
   it("checks a public name the way the server does", () => {
     expect(handleIssue("fast-ana")).toBeNull();
     for (const bad of ["", "ab", "a".repeat(21), "no spaces", "-x-"]) expect(handleIssue(bad)).toBe("me.handleRule");
+  });
+});
+
+describe("plans and quarantine", () => {
+  it("reads the plans page route", () => {
+    expect(arenaView("#/arena/plans")).toEqual({ kind: "plans", paid: false });
+    expect(arenaView("#/arena/plans?paid=1")).toEqual({ kind: "plans", paid: true });
+  });
+  it("shows quarantine as its own state, before anything else", () => {
+    expect(statePill(true, "quarantined", { state: "stopped" })).toEqual({ key: "state.quarantined", tone: "stop" });
+    expect(statePill(false, "quarantined", undefined).key).toBe("state.quarantined");
+  });
+  it("counts the days left in a quarantine, never below zero", () => {
+    const t0 = Date.UTC(2026, 9, 1);
+    expect(quarantineDaysLeft(t0, t0, 10)).toBe(10);
+    expect(quarantineDaysLeft(t0, t0 + 3 * 86_400_000 + 1000, 10)).toBe(7);
+    expect(quarantineDaysLeft(t0, t0 + 99 * 86_400_000, 10)).toBe(0);
+    expect(quarantineDaysLeft(null, t0, 10)).toBe(10);
+  });
+  it("formats a price in the member's language", () => {
+    expect(fmtPrice(999, "eur", "en")).toBe("€9.99");
+    expect(fmtPrice(1599, "eur", "de")).toContain("15,99");
+  });
+  it("lists what a plan includes and marks what is not built yet, so it is never sold as working", () => {
+    const free = planFeatures({ bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false, brains: 1, skillSlots: 5, history: false });
+    expect(free.map((f) => f.key)).toEqual(["plans.f.agents", "plans.f.coins", "plans.f.stylesBasic", "plans.f.packsFree", "plans.f.brains", "plans.f.skills"]);
+    expect(free.find((f) => f.key === "plans.f.brains")!.soon).toBe(false); // one brain is what exists today
+    const premium = planFeatures({ bots: 20, maxCoins: 8, styles: ["breezy", "bizzy", "boozy"], proThemes: true, autonomy: true, brains: 6, skillSlots: 30, history: true });
+    expect(premium.filter((f) => f.soon).map((f) => f.key)).toEqual(["plans.f.brains", "plans.f.skills", "plans.f.history", "plans.f.auto"]);
+    expect(premium.find((f) => f.key === "plans.f.agents")).toEqual({ key: "plans.f.agents", vars: { n: 20 } });
   });
 });

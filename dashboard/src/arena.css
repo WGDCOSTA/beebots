@@ -144,3 +144,15 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 }
 @media (min-width: 1100px) { .ag-cards { grid-template-columns: repeat(3, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .as * { animation: none !important; transition: none !important; } }
+/* Step 4: plans and quarantine. */
+.pl-grid { display: grid; gap: 12px; grid-template-columns: 1fr; margin: 12px 0; }
+.as .pl-grid .pcard { margin: 0; }
+.pl-card { display: grid; gap: 10px; align-content: start; }
+.pl-card.mine { border-color: color-mix(in srgb, var(--bizzy) 70%, var(--line)); }
+.pl-price { font-size: 22px; font-weight: 800; }
+.pl-feats { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pl-feats li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.pl-soon { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--warning); border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--line)); white-space: nowrap; }
+.ag-quarantine { border-color: color-mix(in srgb, var(--warning) 55%, var(--line)); background: color-mix(in srgb, var(--warning) 6%, var(--card)); }
+.ag-quarantine h3 { margin-top: 0; }
+@media (min-width: 800px) { .pl-grid { grid-template-columns: repeat(3, 1fr); } }

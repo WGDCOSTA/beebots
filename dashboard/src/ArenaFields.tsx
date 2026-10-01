@@ -29,6 +29,11 @@ export function LookFields({ cat, limits, d, set }: Props) {
         })}
       </div>
       {theme && <p className="dim small">{theme.blurb}</p>}
+      {!limits.proThemes && (
+        <a className="small" href="#/arena/plans">
+          {t("plans.seeLocked")}
+        </a>
+      )}
 
       <div className="eyebrow">{t("field.avatar")}</div>
       <div className="ab-avatars">
@@ -77,6 +82,12 @@ export function StyleFields({ cat, limits, d, set }: Props) {
           );
         })}
       </div>
+
+      {limits.styles.length < 3 && (
+        <a className="small" href="#/arena/plans">
+          {t("plans.seeLocked")}
+        </a>
+      )}
 
       <div className="eyebrow">
         {t("field.coins")} <span className="dim">({d.coins.length}/{limits.maxCoins})</span>
