@@ -9,14 +9,14 @@ import { useI18n } from "./i18n/I18n";
 
 export function ArenaSettings({ data, limits, agent, onGone }: { data: ArenaData; limits: Limits; agent: Agent; onGone: () => void }) {
   const { t } = useI18n();
-  const [d, setD] = useState<BotDraft>({ name: agent.name, theme: agent.theme, avatar: agent.avatar, style: agent.style, coins: agent.coins, rules: agent.rules, tagline: agent.tagline, look: agent.look, listed: agent.listed, brainKey: agent.brainKey ?? null, mode: agent.mode });
+  const [d, setD] = useState<BotDraft>({ name: agent.name, theme: agent.theme, avatar: agent.avatar, style: agent.style, coins: agent.coins, rules: agent.rules, tagline: agent.tagline, look: agent.look, listed: agent.listed, brains: agent.brains, mode: agent.mode });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [painting, setPainting] = useState(false);
   const [typed, setTyped] = useState("");
   const styleName = (id: string) => t(STYLE_KEYS[id]?.title ?? "style.breezy.t");
   const issue = draftIssue(d, limits.maxCoins, styleName);
-  const changesVersion = d.style !== agent.style || d.rules.trim() !== agent.rules || (d.brainKey ?? null) !== (agent.brainKey ?? null) || JSON.stringify(d.coins) !== JSON.stringify(agent.coins);
+  const changesVersion = d.style !== agent.style || d.rules.trim() !== agent.rules || JSON.stringify(d.brains ?? agent.brains) !== JSON.stringify(agent.brains) || JSON.stringify(d.coins) !== JSON.stringify(agent.coins);
   const ai = data.ai;
 
   const save = async () => {
@@ -69,7 +69,7 @@ export function ArenaSettings({ data, limits, agent, onGone }: { data: ArenaData
         <LookFields cat={data.cat} limits={limits} d={d} set={setD} />
         <StyleFields cat={data.cat} limits={limits} d={d} set={setD} />
         <RulesField d={d} set={setD} note={changesVersion ? t("set.newVersion") : undefined} />
-        <BrainField d={d} set={setD} keys={data.keys} />
+        <BrainField d={d} set={setD} keys={data.keys} limits={limits} />
         <ListedField d={d} set={setD} />
         {msg && <p className={msg.ok ? "good" : "bad"}>{msg.text}</p>}
         {issue && <p className="dim small">{t(issue.key, issue.vars)}</p>}

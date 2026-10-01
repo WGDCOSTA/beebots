@@ -359,7 +359,7 @@ export const en = {
   "keys.max": "You can keep up to {n} keys.",
   "brain.field": "Thinks with",
   "brain.platform": "The platform's model (shared, with a small daily ceiling)",
-  "brain.help": "With your own key you pay the provider directly. Changing the model starts a new version with a fresh paper account, so results stay comparable.",
+  "brain.help": "With your own key you pay the provider directly. Changing the models starts a new version with a fresh paper account, so results stay comparable.",
   "brain.addKey": "Add a key in Me",
   "style.auto.t": "Autonomous",
   "style.auto.b": "Picks its own style, changes it when the market changes, and trades any coin the market offers. Your rules still guide it, and every risk rule stays.",
@@ -377,6 +377,9 @@ export const en = {
   "auto.switched": "Switched to {style}",
   "auto.kept": "Kept {style}",
   "auto.said": "Model said: {reason}",
+  "brain.helpMany": "Up to {n} models at once. They all answer the same question and the move most of them choose wins. A model that fails counts as an abstention. You pay every model's tokens.",
+  "brain.vote": "{n} models vote on every decision. The odds shown are the share of all models that chose each move, so a split vote gives weak odds and the agent tends to hold.",
+  "dec.vote": "This agent decides by vote of {n} models. The odds on each decision are the share of the models that chose that move.",
 } as const;
 
 export type Key = keyof typeof en;

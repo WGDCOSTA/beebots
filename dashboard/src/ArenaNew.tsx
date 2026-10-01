@@ -210,7 +210,7 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
               <dt>{t("field.coins")}</dt>
               <dd>{d.mode === "autonomous" ? t("coins.any") : d.coins.join(", ")}</dd>
             </dl>
-            <BrainField d={d} set={setD} keys={data.keys} />
+            <BrainField d={d} set={setD} keys={data.keys} limits={limits} />
             <ListedField d={d} set={setD} />
           </>
         )}

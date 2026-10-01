@@ -341,7 +341,7 @@ export const de: Partial<Record<Key, string>> = {
   "keys.max": "Du kannst bis zu {n} Schlüssel behalten.",
   "brain.field": "Denkt mit",
   "brain.platform": "Das Modell der Plattform (geteilt, mit kleinem Tageslimit)",
-  "brain.help": "Mit deinem eigenen Schlüssel zahlst du den Anbieter direkt. Ein Modellwechsel startet eine neue Version mit frischem Simulationskonto, damit die Ergebnisse vergleichbar bleiben.",
+  "brain.help": "Mit deinem eigenen Schlüssel zahlst du den Anbieter direkt. Ein Wechsel der Modelle startet eine neue Version mit frischem Simulationskonto, damit die Ergebnisse vergleichbar bleiben.",
   "brain.addKey": "Füge in Ich einen Schlüssel hinzu",
   "style.auto.t": "Autonom",
   "style.auto.b": "Wählt seinen Stil selbst, wechselt ihn, wenn sich der Markt ändert, und handelt jeden Coin, den der Markt bietet. Deine Regeln leiten ihn weiter, und alle Risikoregeln bleiben.",
@@ -359,4 +359,7 @@ export const de: Partial<Record<Key, string>> = {
   "auto.switched": "Wechselte zu {style}",
   "auto.kept": "Behielt {style}",
   "auto.said": "Das Modell sagte: {reason}",
+  "brain.helpMany": "Bis zu {n} Modelle gleichzeitig. Alle beantworten dieselbe Frage, und der Zug, den die meisten wählen, gewinnt. Ein Modell, das ausfällt, zählt als Enthaltung. Du zahlst die Tokens jedes Modells.",
+  "brain.vote": "{n} Modelle stimmen bei jeder Entscheidung ab. Die gezeigten Wahrscheinlichkeiten sind der Anteil aller Modelle, die den jeweiligen Zug gewählt haben; eine geteilte Abstimmung ergibt schwache Wahrscheinlichkeiten, und der Agent neigt zum Abwarten.",
+  "dec.vote": "Dieser Agent entscheidet per Abstimmung von {n} Modellen. Die Wahrscheinlichkeiten jeder Entscheidung sind der Anteil der Modelle, die diesen Zug gewählt haben.",
 };

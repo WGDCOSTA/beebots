@@ -341,7 +341,7 @@ export const it: Partial<Record<Key, string>> = {
   "keys.max": "Puoi tenere fino a {n} chiavi.",
   "brain.field": "Pensa con",
   "brain.platform": "Il modello della piattaforma (condiviso, con un piccolo tetto giornaliero)",
-  "brain.help": "Con la tua chiave paghi direttamente il fornitore. Cambiare modello avvia una nuova versione con un conto simulato nuovo, così i risultati restano confrontabili.",
+  "brain.help": "Con la tua chiave paghi direttamente il fornitore. Cambiare i modelli avvia una nuova versione con un conto simulato nuovo, così i risultati restano confrontabili.",
   "brain.addKey": "Aggiungi una chiave in Io",
   "style.auto.t": "Autonomo",
   "style.auto.b": "Sceglie il proprio stile, lo cambia quando cambia il mercato e opera qualsiasi moneta offra il mercato. Le tue regole lo guidano ancora e tutte le regole di rischio restano.",
@@ -359,4 +359,7 @@ export const it: Partial<Record<Key, string>> = {
   "auto.switched": "È passato a {style}",
   "auto.kept": "Ha mantenuto {style}",
   "auto.said": "Il modello ha detto: {reason}",
+  "brain.helpMany": "Fino a {n} modelli insieme. Tutti rispondono alla stessa domanda e vince la mossa scelta dalla maggioranza. Un modello che fallisce conta come astensione. Paghi i token di ognuno.",
+  "brain.vote": "{n} modelli votano a ogni decisione. Le probabilità mostrate sono la quota di tutti i modelli che ha scelto ogni mossa; un voto diviso dà probabilità deboli e l'agente tende ad aspettare.",
+  "dec.vote": "Questo agente decide per voto di {n} modelli. Le probabilità di ogni decisione sono la quota dei modelli che ha scelto quella mossa.",
 };

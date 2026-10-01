@@ -27,7 +27,7 @@ export interface Agent extends BotDraft {
   state: AgentState;
   mode: "fixed" | "autonomous";
   quarantinedAt: number | null;
-  brainKey: string | null;
+  brains: string[];
   version: number;
   createdAt: number;
 }

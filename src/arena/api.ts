@@ -6,7 +6,7 @@ import { readJson } from "../gate.js";
 import { clientAddr } from "../visitors.js";
 import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
 import { AiError, MemberAi, type AiService } from "./ai.js";
-import { BotError, Bots, COINS, LIMITS, type BotView } from "./bots.js";
+import { BotError, Bots, COINS, LIMITS, PLATFORM, type BotView } from "./bots.js";
 import type { Leaderboard } from "./ranking.js";
 import type { RunStatus } from "./runner.js";
 import { isLocale } from "./locales.js";
@@ -265,8 +265,9 @@ export class ArenaApi {
         const bots = new Bots(this.store.tenant(u.id), u.tier, this.now);
         // A model key an agent is set to must be the member's own: the page names it by id, and the id is checked here.
         if (route === "/bots/create" || route === "/bots/update") {
-          if (body.brainKey === "" ) body.brainKey = null;
-          if (typeof body.brainKey === "string" && !this.keysOf(u)?.has(body.brainKey)) return this.send(res, 400, { error: "That model key is not yours, or it no longer exists." });
+          // The page names the models by id; every id must be one of the member's own keys (or the platform's model).
+          const named = Array.isArray(body.brains) ? body.brains : typeof body.brainKey === "string" && body.brainKey ? [body.brainKey] : [];
+          if (named.some((k) => typeof k === "string" && k !== PLATFORM && !this.keysOf(u)?.has(k))) return this.send(res, 400, { error: "One of those model keys is not yours, or it no longer exists." });
         }
         try {
           if (route === "/bots/create") {
@@ -340,7 +341,7 @@ export class ArenaApi {
           }
           const id = typeof body.id === "string" ? body.id : "";
           // A key that an agent thinks with cannot be removed from under it.
-          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.brainKey === id);
+          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.brains.includes(id));
           if (using.length) return this.send(res, 409, { error: `Agents still use this key: ${using.map((b) => b.name).join(", ")}. Switch them to the platform model first.` });
           keys.remove(id);
           return this.send(res, 200, { ok: true });

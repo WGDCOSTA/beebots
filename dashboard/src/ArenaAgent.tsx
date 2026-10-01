@@ -258,7 +258,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             )}
           </>
         )}
-        {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} />}
+        {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} brains={agent.brains.length} />}
         {tab === "versions" && (
           <>
             <p className="dim small">{t("ver.intro")}</p>

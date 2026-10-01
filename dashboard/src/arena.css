@@ -161,3 +161,8 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 .ky-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
 .ky-list li > div { min-width: 0; overflow-wrap: anywhere; }
 .dc-styles { margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+/* Step 7: several brains. */
+.ab-brains { display: grid; gap: 8px; margin: 6px 0; }
+.ab-brains label { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); cursor: pointer; overflow-wrap: anywhere; }
+.ab-brains label.on { border-color: var(--bizzy); background: color-mix(in srgb, var(--bizzy) 16%, var(--card-2)); }
+.ab-brains input { width: 22px; height: 22px; accent-color: #c98500; flex: none; }

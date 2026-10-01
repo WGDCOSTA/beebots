@@ -341,7 +341,7 @@ export const ptBR: Partial<Record<Key, string>> = {
   "keys.max": "Você pode guardar até {n} chaves.",
   "brain.field": "Pensa com",
   "brain.platform": "O modelo da plataforma (compartilhado, com um teto diário pequeno)",
-  "brain.help": "Com a sua chave você paga direto ao provedor. Trocar o modelo começa uma nova versão com conta simulada zerada, para os resultados continuarem comparáveis.",
+  "brain.help": "Com a sua chave você paga direto ao provedor. Trocar os modelos começa uma nova versão com conta simulada zerada, para os resultados continuarem comparáveis.",
   "brain.addKey": "Adicione uma chave em Eu",
   "style.auto.t": "Autônomo",
   "style.auto.b": "Escolhe o próprio estilo, muda quando o mercado muda e opera qualquer moeda que o mercado ofereça. Suas regras continuam guiando, e todas as regras de risco continuam.",
@@ -359,4 +359,7 @@ export const ptBR: Partial<Record<Key, string>> = {
   "auto.switched": "Mudou para {style}",
   "auto.kept": "Manteve {style}",
   "auto.said": "O modelo disse: {reason}",
+  "brain.helpMany": "Até {n} modelos ao mesmo tempo. Todos respondem à mesma pergunta e vence a jogada que a maioria escolher. Um modelo que falha conta como abstenção. Você paga os tokens de todos.",
+  "brain.vote": "{n} modelos votam em cada decisão. As probabilidades mostradas são a fatia de todos os modelos que escolheu cada jogada; um voto dividido dá probabilidades fracas, e o agente tende a esperar.",
+  "dec.vote": "Este agente decide pelo voto de {n} modelos. As probabilidades de cada decisão são a fatia dos modelos que escolheu aquela jogada.",
 };

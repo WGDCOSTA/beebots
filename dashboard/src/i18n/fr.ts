@@ -341,7 +341,7 @@ export const fr: Partial<Record<Key, string>> = {
   "keys.max": "Vous pouvez garder jusqu'à {n} clés.",
   "brain.field": "Réfléchit avec",
   "brain.platform": "Le modèle de la plateforme (partagé, avec un petit plafond quotidien)",
-  "brain.help": "Avec votre propre clé, vous payez directement le fournisseur. Changer de modèle démarre une nouvelle version avec un compte simulé neuf, pour que les résultats restent comparables.",
+  "brain.help": "Avec votre propre clé, vous payez directement le fournisseur. Changer de modèles démarre une nouvelle version avec un compte simulé neuf, pour que les résultats restent comparables.",
   "brain.addKey": "Ajoutez une clé dans Moi",
   "style.auto.t": "Autonome",
   "style.auto.b": "Choisit son propre style, en change quand le marché change et trade n'importe quelle crypto du marché. Vos règles le guident toujours, et toutes les règles de risque restent.",
@@ -359,4 +359,7 @@ export const fr: Partial<Record<Key, string>> = {
   "auto.switched": "A basculé sur {style}",
   "auto.kept": "A gardé {style}",
   "auto.said": "Le modèle a dit : {reason}",
+  "brain.helpMany": "Jusqu'à {n} modèles à la fois. Tous répondent à la même question et le coup choisi par le plus grand nombre l'emporte. Un modèle qui échoue compte comme une abstention. Vous payez les tokens de chacun.",
+  "brain.vote": "{n} modèles votent à chaque décision. Les probabilités affichées sont la part de tous les modèles qui ont choisi chaque coup ; un vote partagé donne de faibles probabilités et l'agent a tendance à attendre.",
+  "dec.vote": "Cet agent décide par le vote de {n} modèles. Les probabilités de chaque décision sont la part des modèles qui ont choisi ce coup.",
 };

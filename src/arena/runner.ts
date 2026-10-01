@@ -15,12 +15,12 @@ import { log } from "../log.js";
 import type { MarketFeed } from "../market/data.js";
 import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
-import { Bots, type BotView } from "./bots.js";
+import { Bots, PLATFORM, type BotView } from "./bots.js";
 import { readInsights, type Insights } from "./insights.js";
 import type { LlmClient } from "../brains/llm.js";
 import type { StyleId } from "../settings.js";
 import { chooseStyle, marketLines } from "./autonomy.js";
-import { LlmSystemOne } from "./decider.js";
+import { EnsembleSystemOne, LlmSystemOne } from "./decider.js";
 import { EST_USD_PER_MTOK, type Vault } from "./vault.js";
 import type { Leaderboard } from "./ranking.js";
 import type { ArenaStore } from "./store.js";
@@ -168,20 +168,32 @@ export class ArenaRunner {
   private async start(userId: string, bot: BotView): Promise<void> {
     mkdirSync(this.dir(userId), { recursive: true });
     const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
-    // The platform's model and its small daily ceiling, or the member's own key, its model and the member's own ceiling.
-    // An agent set to its member's key never falls back to the platform's model: if the key is gone it does not start.
-    let decider = this.o.decider;
-    let dailyUsd = this.o.dailyUsd;
-    let usdPerMTok = this.o.usdPerMTok;
-    let styleLlm: LlmClient | null = this.o.llm ?? null;
-    if (bot.brainKey) {
-      const k = this.o.vault?.for(this.o.store.tenant(userId), userId, this.o.now).secret(bot.brainKey);
-      if (!k) throw new Error("its own model key is not available");
-      styleLlm = this.o.vault!.brain(k.provider, k.secret, k.model);
-      decider = new LlmSystemOne(styleLlm, `own-${k.provider}`);
-      dailyUsd = k.dailyUsd ?? this.o.ownKeyDailyUsd;
-      usdPerMTok = EST_USD_PER_MTOK[k.provider];
+    // Which models decide: the platform's, the member's own keys, or several together (a vote). Each own key brings the member's
+    // ceiling (or the default), the platform's model brings its small one; the agent's ceiling is the sum, and the cost estimate
+    // is the mean price per token. An agent that names a key that is gone never falls back to the platform's model: it does not start.
+    const members: Array<{ sys: SystemOne; label: string }> = [];
+    let dailyUsd = 0;
+    const rates: number[] = [];
+    let styleLlm: LlmClient | null = null;
+    for (const id of bot.brains) {
+      if (id === PLATFORM) {
+        members.push({ sys: this.o.decider, label: "platform" });
+        dailyUsd += this.o.dailyUsd;
+        rates.push(this.o.usdPerMTok);
+        styleLlm ??= this.o.llm ?? null;
+        continue;
+      }
+      const k = this.o.vault?.for(this.o.store.tenant(userId), userId, this.o.now).secret(id);
+      if (!k) throw new Error("one of its own model keys is not available");
+      const llm = this.o.vault!.brain(k.provider, k.secret, k.model);
+      members.push({ sys: new LlmSystemOne(llm, `own-${k.provider}`), label: k.provider });
+      dailyUsd += k.dailyUsd ?? this.o.ownKeyDailyUsd;
+      rates.push(EST_USD_PER_MTOK[k.provider]);
+      styleLlm ??= llm;
     }
+    if (members.length === 0) throw new Error("it has no model to think with");
+    const decider: SystemOne = members.length === 1 ? members[0]!.sys : new EnsembleSystemOne(members);
+    const usdPerMTok = rates.reduce((s, x) => s + x, 0) / rates.length;
     const cfg = this.config(bot, file, dailyUsd, usdPerMTok);
     const db = new Db(file);
     const ctl = { paused: bot.state === "paused", closing: false };

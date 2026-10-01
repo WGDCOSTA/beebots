@@ -39,7 +39,8 @@ export interface BotDraft {
   /** fixed (default) or autonomous (Premium): the agent picks its own style and coins. */
   mode?: "fixed" | "autonomous";
   /** The member's own model key it thinks with; null or missing = the platform's model. */
-  brainKey?: string | null;
+  /** The models it thinks with: "platform" and/or the member's own key ids. Several decide by vote. */
+  brains?: string[];
   name: string;
   theme: string;
   avatar: string;
@@ -302,7 +303,7 @@ export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
     { key: "plans.f.coins", vars: { n: l.maxCoins } },
     { key: l.styles.length > 2 ? "plans.f.stylesAll" : "plans.f.stylesBasic" },
     { key: l.proThemes ? "plans.f.packsAll" : "plans.f.packsFree" },
-    { key: "plans.f.brains", vars: { n: l.brains }, soon: l.brains > 1 },
+    { key: "plans.f.brains", vars: { n: l.brains } },
     { key: "plans.f.skills", vars: { n: l.skillSlots }, soon: true },
   ];
   if (l.history) out.push({ key: "plans.f.history", soon: true });
