@@ -785,3 +785,70 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
     max-width: 7.5rem;
   }
 }
+
+/* The overview: the live site's grid (three bunny columns and the rail, styles.css .grid) with the member's agents. */
+.ar-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.08fr);
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+.ar-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+/* a column on a scrolling page: a fixed height, so the curve has room as in the live board's full-height columns */
+.ar-cols .bee {
+  min-height: 46rem;
+}
+.ar-cols .bee .chart {
+  min-height: 12rem;
+}
+.ar-cols > .pcard {
+  margin: 0;
+}
+.ar-rail {
+  position: sticky;
+  top: 1rem;
+}
+.ar-rail .ticker {
+  max-height: calc(100vh - 16rem);
+  overflow-y: auto;
+}
+.as .board-row {
+  text-decoration: none;
+  color: inherit;
+}
+@media (max-width: 1400px) {
+  .ar-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1100px), (max-aspect-ratio: 4/5) {
+  .ar-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ar-rail {
+    position: static;
+  }
+}
+@media (max-width: 700px) {
+  .ar-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ar-cols .bee {
+    min-height: 0;
+  }
+}
+/* agents' names are longer than the bunnies': a wider name column, one line, an ellipsis if it must */
+.ar-rail .board-row {
+  grid-template-columns: 1.2rem 2rem minmax(5.5rem, 8rem) 1fr auto 5.6rem;
+}
+.ar-rail .board-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { money, signed } from "./BeeColumn";
 import { HiveButton } from "./Hive";
-import { ALL_BEES, PROFILE, type Snapshot } from "./types";
+import { ALL_BEES, PROFILE, type Snapshot, type SystemInfo } from "./types";
 
 function Clock() {
   const [now, setNow] = useState(Date.now());
@@ -160,39 +160,7 @@ export function SystemBar({ snap }: { snap: Snapshot | null }) {
         {flag(s.rewards, "rewards", "Points and levels unlock skills, brains, limits")}
         {flag(s.maxPositions > 1 && s.rewards, "multi-orders", "Top performers hold several positions inside one leverage cap", `≤${s.maxPositions}`)}
       </span>
-      {s.cmc && (
-        <span className="sys-group" title={`CoinMarketCap, updated ${new Date(s.cmc.updatedAt).toLocaleTimeString()}`}>
-          <span className="sys-key">MARKET</span>
-          {s.cmc.fearGreed && (
-            <span className={`sys-val ${s.cmc.fearGreed.value >= 55 ? "up" : s.cmc.fearGreed.value <= 45 ? "down" : ""}`} title="Fear & Greed (0 extreme fear, 100 extreme greed)">
-              F&amp;G {s.cmc.fearGreed.value} <em>{s.cmc.fearGreed.label}</em>
-            </span>
-          )}
-          {s.cmc.fearTrend && (
-            <span className={`sys-val ${s.cmc.fearTrend.change > 0 ? "up" : s.cmc.fearTrend.change < 0 ? "down" : ""}`} title={`Fear & Greed over the last week: ${s.cmc.fearTrend.days.join(" → ")}`}>
-              <Spark values={s.cmc.fearTrend.days} /> {s.cmc.fearTrend.change > 0 ? "▲" : s.cmc.fearTrend.change < 0 ? "▼" : "■"}
-              {Math.abs(s.cmc.fearTrend.change)} 7d
-            </span>
-          )}
-          {s.cmc.altSeason && s.cmc.altSeason.index !== null && (
-            <span className={`sys-val ${s.cmc.altSeason.index >= 75 ? "up" : s.cmc.altSeason.index <= 25 ? "down" : ""}`} title={`Altcoin Season Index (0 bitcoin season … 100 altcoin season). Year range ${s.cmc.altSeason.yearlyLow ?? "?"}–${s.cmc.altSeason.yearlyHigh ?? "?"}`}>
-              ALT {s.cmc.altSeason.index} <em>{s.cmc.altSeason.label}</em>
-            </span>
-          )}
-          {s.cmc.btcDominancePct !== null && <span className="sys-val" title="Bitcoin dominance">BTC dom {s.cmc.btcDominancePct}%</span>}
-          {s.cmc.mcapChange24hPct !== null && (
-            <span className={`sys-val ${s.cmc.mcapChange24hPct >= 0 ? "up" : "down"}`} title="Total crypto market cap, 24h change">
-              mcap {s.cmc.mcapChange24hPct >= 0 ? "+" : ""}
-              {s.cmc.mcapChange24hPct}%
-            </span>
-          )}
-          {s.cmc.sectors?.hot[0] && (
-            <span className="sys-val up" title={`Leading sectors today: ${s.cmc.sectors.hot.map((x) => `${x.name} ${x.pct >= 0 ? "+" : ""}${x.pct}%`).join(", ")}`}>
-              🔥 {s.cmc.sectors.hot[0].name}
-            </span>
-          )}
-        </span>
-      )}
+      {s.cmc && <MarketGroup cmc={s.cmc} />}
       <span className="sys-group">
         <span className="sys-key">RISK</span>
         <span className="sys-val">≤{s.maxLeverage}x lev</span>
@@ -213,5 +181,43 @@ function Spark({ values }: { values: number[] }) {
     <svg className="spark" width="40" height="12" viewBox="0 0 40 12" aria-hidden>
       <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** The whole crypto market at a glance (CoinMarketCap via the engine): Fear & Greed and its week, altcoin season, BTC
+ * dominance, the market cap's day, the leading sector. Shared by the live site's system bar and the Arena's. */
+export function MarketGroup({ cmc }: { cmc: NonNullable<SystemInfo["cmc"]> }) {
+  return (
+    <span className="sys-group" title={`CoinMarketCap, updated ${new Date(cmc.updatedAt).toLocaleTimeString()}`}>
+      <span className="sys-key">MARKET</span>
+      {cmc.fearGreed && (
+        <span className={`sys-val ${cmc.fearGreed.value >= 55 ? "up" : cmc.fearGreed.value <= 45 ? "down" : ""}`} title="Fear & Greed (0 extreme fear, 100 extreme greed)">
+          F&amp;G {cmc.fearGreed.value} <em>{cmc.fearGreed.label}</em>
+        </span>
+      )}
+      {cmc.fearTrend && (
+        <span className={`sys-val ${cmc.fearTrend.change > 0 ? "up" : cmc.fearTrend.change < 0 ? "down" : ""}`} title={`Fear & Greed over the last week: ${cmc.fearTrend.days.join(" → ")}`}>
+          <Spark values={cmc.fearTrend.days} /> {cmc.fearTrend.change > 0 ? "▲" : cmc.fearTrend.change < 0 ? "▼" : "■"}
+          {Math.abs(cmc.fearTrend.change)} 7d
+        </span>
+      )}
+      {cmc.altSeason && cmc.altSeason.index !== null && (
+        <span className={`sys-val ${cmc.altSeason.index >= 75 ? "up" : cmc.altSeason.index <= 25 ? "down" : ""}`} title={`Altcoin Season Index (0 bitcoin season … 100 altcoin season). Year range ${cmc.altSeason.yearlyLow ?? "?"}–${cmc.altSeason.yearlyHigh ?? "?"}`}>
+          ALT {cmc.altSeason.index} <em>{cmc.altSeason.label}</em>
+        </span>
+      )}
+      {cmc.btcDominancePct !== null && <span className="sys-val" title="Bitcoin dominance">BTC dom {cmc.btcDominancePct}%</span>}
+      {cmc.mcapChange24hPct !== null && (
+        <span className={`sys-val ${cmc.mcapChange24hPct >= 0 ? "up" : "down"}`} title="Total crypto market cap, 24h change">
+          mcap {cmc.mcapChange24hPct >= 0 ? "+" : ""}
+          {cmc.mcapChange24hPct}%
+        </span>
+      )}
+      {cmc.sectors?.hot[0] && (
+        <span className="sys-val up" title={`Leading sectors today: ${cmc.sectors.hot.map((x) => `${x.name} ${x.pct >= 0 ? "+" : ""}${x.pct}%`).join(", ")}`}>
+          🔥 {cmc.sectors.hot[0].name}
+        </span>
+      )}
+    </span>
   );
 }

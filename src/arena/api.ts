@@ -60,6 +60,8 @@ export interface ApiOpts {
     status(userId: string, botIds: string[]): Record<string, RunStatus>;
     styleLog?(userId: string, bot: BotView): Array<{ ts: number; style: string; reason: string; changed: boolean }>;
     insights?(userId: string, bot: BotView, opts?: { decisions?: number; trades?: number; points?: number }): Insights | null;
+    /** The member's running agents as the live board draws a bunny (runner.live). */
+    live?(userId: string, botIds: string[]): Record<string, { bee: unknown; curve: Array<[number, number]>; decisions: unknown[] }>;
   } | null;
 }
 
@@ -209,6 +211,16 @@ export class ArenaApi {
         if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
         throw e;
       }
+    }
+    if (req.method === "GET" && route === "/bots/live") {
+      // The member's own agents as the live board draws a bunny: engine view, curve with times, latest decisions.
+      const u = this.auth.user(sessionOf(req));
+      if (!u) reply(res, 401, { error: "not signed in" });
+      else {
+        const ids = new Bots(this.store.tenant(u.id), u.tier, this.now).list().map((b) => b.id);
+        reply(res, 200, { live: this.opts.runner?.live?.(u.id, ids) ?? {} });
+      }
+      return true;
     }
     if (req.method === "GET" && route === "/bots") {
       const u = this.auth.user(sessionOf(req));

@@ -2,6 +2,8 @@
 // Signed in: a bottom tab bar on a phone, a left sidebar on a wider screen. Signed out: a slim top bar with the way in.
 import { useEffect, useState, type ReactNode } from "react";
 import { seasonEndsSay } from "./arenaModel";
+import { MarketGroup } from "./Header";
+import type { SystemInfo } from "./types";
 import { useI18n } from "./i18n/I18n";
 import { LOCALES, LOCALE_NAMES, type Locale } from "./i18n/locales";
 import "./arena.css";
@@ -78,6 +80,26 @@ function usePulse(): Pulse | null {
   return p;
 }
 
+/** The whole market's mood from the live engine's public snapshot (CoinMarketCap), for the same MARKET group as the live site. */
+function useMarket(): SystemInfo["cmc"] | null {
+  const [cmc, setCmc] = useState<SystemInfo["cmc"] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      void fetch("/snapshot", { cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<{ system?: SystemInfo }>) : null))
+        .then((j) => alive && setCmc(j?.system?.cmc ?? null))
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  return cmc;
+}
+
 /** The UTC clock of the live site's header. */
 function Clock() {
   const [now, setNow] = useState(Date.now());
@@ -102,6 +124,7 @@ export function ArenaShell({ tab, mode, onPickLocale, children }: { tab: Tab; mo
   const { t } = useI18n();
   const signedIn = mode === "in";
   const pulse = usePulse();
+  const cmc = useMarket();
   const ends = pulse ? seasonEndsSay(pulse.end, Date.now()) : null;
   return (
     <div className={`as ${mode}`}>
@@ -154,10 +177,14 @@ export function ArenaShell({ tab, mode, onPickLocale, children }: { tab: Tab; mo
             <span className="sys-key">{t("shell.sys.rules")}</span>
             <span className="sys-val">{t("shell.sys.rulesVal", { days: pulse.days, trades: pulse.trades })}</span>
           </span>
-          <span className="sys-group">
-            <span className="sys-key">{t("shell.sys.market")}</span>
-            <span className="sys-val up">● {t("shell.sys.marketVal")}</span>
-          </span>
+          {cmc ? (
+            <MarketGroup cmc={cmc} />
+          ) : (
+            <span className="sys-group">
+              <span className="sys-key">{t("shell.sys.market")}</span>
+              <span className="sys-val up">● {t("shell.sys.marketVal")}</span>
+            </span>
+          )}
         </div>
       )}
       {signedIn && (

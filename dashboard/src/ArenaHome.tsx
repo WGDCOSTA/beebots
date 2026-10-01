@@ -2,7 +2,8 @@
 // ticks itself from real data, the plan's quota, and Pause all. Pausing keeps positions under their stops and opens nothing new.
 import { useEffect, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
-import { checklist, fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, seasonEndsSay, type RunStatus } from "./arenaModel";
+import { checklist, fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, seasonEndsSay, STYLE_KEYS, type RunStatus } from "./arenaModel";
+import { ArenaOverview, useArenaLive } from "./ArenaOverview";
 import { avatarColor, Portrait, Spark, StatePill, useFlash, type Agent, type ArenaData } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
@@ -27,6 +28,8 @@ export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Lim
   const [hide, setHide] = useState(hidden);
   const [busy, setBusy] = useState(false);
   const { agents, runner, cat } = data;
+  const live = useArenaLive();
+  const styleLabel = (st: string) => (STYLE_KEYS[st] ? t(STYLE_KEYS[st]!.title) : st);
 
   useEffect(() => {
     void arena<Standing & { enabled?: boolean }>("GET", "leaderboard").then((r) => setBoard(r.status === 200 && r.data.rows ? r.data : null)).catch(() => setBoard(null));
@@ -126,8 +129,15 @@ export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Lim
         </div>
       )}
 
-      <div className="ag-cards">
-        {agents.map((a) => (
+      <ArenaOverview
+        agents={agents}
+        cat={cat}
+        live={live}
+        styleLabel={styleLabel}
+        after={
+          <>
+        {/* Agents not running right now (queued, paused before start, stopped, in quarantine) keep their card. */}
+        {agents.filter((a) => !live[a.id]).map((a) => (
           <AgentCard key={a.id} a={a} data={data} days={days} />
         ))}
         {agents.length > 0 && (
@@ -139,7 +149,9 @@ export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Lim
             {full && <span className="dim small">{t(limits.bots === 1 ? "home.quotaFull1" : "home.quotaFull", { n: limits.bots })}</span>}
           </button>
         )}
-      </div>
+          </>
+        }
+      />
 
       <div className="arena-actions">
         <a className="pbtn ghost" href="#/arena/skills">

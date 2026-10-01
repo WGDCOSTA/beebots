@@ -139,10 +139,13 @@ interface Props {
   rank: number;
   gap: number | null;
   flash: FeedState["flashes"][BeeName];
+  /** Where its portrait and name lead: the bunny's profile by default; the Arena passes its agent page. */
+  href?: string;
 }
 
-export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Props) {
+export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash, href }: Props) {
   const meta = beeMeta(name);
+  const to = href ?? `#/bunny/${name}`;
   const p = bee?.position ?? null;
   const flashing = flash && Date.now() - flash.at < 2500;
   const cap = bee?.cap ?? null;
@@ -150,11 +153,11 @@ export function BeeColumn({ name, bee, curve, baseline, rank, gap, flash }: Prop
   return (
     <section className={`bee ${flashing ? `flash-${flash.kind}` : ""}`} style={{ ["--bee" as string]: meta.color, ["--bee-glow" as string]: meta.glow }}>
       <header className="bee-head">
-        <a className="portrait" href={`#/bunny/${name}`} title={`Open ${meta.title}'s profile`}>
+        <a className="portrait" href={to} title={`Open ${meta.title}'s profile`}>
           <img src={meta.img} alt={`${meta.title} portrait`} />
         </a>
         <div className="bee-id">
-          <a className="bee-name" href={`#/bunny/${name}`}>
+          <a className="bee-name" href={to}>
             {meta.title} <span className="bee-profile-link">profile ↗</span>
           </a>
           <div className="bee-tag">

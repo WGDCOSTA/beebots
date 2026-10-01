@@ -420,6 +420,35 @@ export class ArenaRunner {
     return readInsights(this.fileOf(userId, bot), opts);
   }
 
+  /**
+   * What the live board shows for a bunny, for each of a member's running bots: the engine's own public view of its slot
+   * (equity, position, last call and its odds, the day's trades and fees, totals), its equity curve with times, and its
+   * latest decisions. The same shapes the owner's dashboard reads, so the Arena can draw them with the same components.
+   * A member's own agents only: positions and decisions are never public (the leaderboard shows results alone).
+   */
+  live(userId: string, botIds: string[], days = 7): Record<string, { bee: unknown; curve: Array<[number, number]>; decisions: unknown[] }> {
+    const out: Record<string, { bee: unknown; curve: Array<[number, number]>; decisions: unknown[] }> = {};
+    const since = this.o.now() - days * 86_400_000;
+    for (const id of botIds) {
+      const r = this.runs.get(id);
+      if (!r || r.userId !== userId) continue;
+      const bee = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
+      if (!bee) continue;
+      const decisions = r.db
+        .recentEvents(60)
+        .map((line) => {
+          try {
+            return JSON.parse(line) as { type?: string };
+          } catch {
+            return null;
+          }
+        })
+        .filter((e): e is { type: string } => e?.type === "decision");
+      out[id] = { bee, curve: r.db.equitySeries(since, 300)[SLOT] ?? [], decisions };
+    }
+    return out;
+  }
+
   /** Where each of a member's bots stands. */
   status(userId: string, botIds: string[]): Record<string, RunStatus> {
     const out: Record<string, RunStatus> = {};
