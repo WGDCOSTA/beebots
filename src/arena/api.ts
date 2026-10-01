@@ -14,6 +14,7 @@ import { CONSENT_ITEMS, CONSENT_VERSION } from "./store.js";
 import { Billing, BillingError } from "./billing.js";
 import { PLAN_PRICES } from "./plans.js";
 import { TEMPLATES } from "./templates.js";
+import { PROVIDERS, DEFAULT_MODEL, MAX_KEYS, VaultError, type Vault } from "./vault.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
@@ -31,6 +32,8 @@ export interface ApiOpts {
   aiDailyLimit?: number;
   /** The public leaderboard (null = none). */
   leaderboard?: Leaderboard | null;
+  /** The key vault for members' own model keys (null = closed). */
+  vault?: Vault | null;
   /** Plans and payment (null = payments are not open: everyone is on Free). */
   billing?: Billing | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
@@ -75,6 +78,11 @@ export class ArenaApi {
   /** The billing service, or a closed one when payments are not set up. */
   private billing(): Billing {
     return this.opts.billing ?? new Billing(this.store, null, null, () => {}, this.now);
+  }
+
+  /** The member's keys, or null while the vault is closed. */
+  private keysOf(u: ArenaUser) {
+    return this.opts.vault?.open ? this.opts.vault.for(this.store.tenant(u.id), u.id, this.now) : null;
   }
 
   private memberAi(u: ArenaUser): MemberAi {
@@ -145,6 +153,13 @@ export class ArenaApi {
       const me = this.auth.user(sessionOf(req));
       const plans = (["free", "pro", "premium"] as const).map((id) => ({ id, price: id === "free" ? null : PLAN_PRICES[id], limits: LIMITS[id] }));
       return this.send(res, 200, { open: this.billing().open, plans, current: me ? this.billing().view(me) : null });
+    }
+    if (req.method === "GET" && route === "/keys") {
+      // Never the secret: provider, name, model, the last four characters.
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      const keys = this.keysOf(u);
+      return this.send(res, 200, { open: !!keys, max: MAX_KEYS, providers: PROVIDERS.map((id) => ({ id, model: DEFAULT_MODEL[id] })), keys: keys?.list() ?? [] });
     }
     if (req.method === "GET" && route === "/templates") {
       // Starter agents: examples to edit, never advice. Public, like the catalogue.
@@ -247,6 +262,11 @@ export class ArenaApi {
         }
         if (this.blockedByConsent(res, u)) return true;
         const bots = new Bots(this.store.tenant(u.id), u.tier, this.now);
+        // A model key an agent is set to must be the member's own: the page names it by id, and the id is checked here.
+        if (route === "/bots/create" || route === "/bots/update") {
+          if (body.brainKey === "" ) body.brainKey = null;
+          if (typeof body.brainKey === "string" && !this.keysOf(u)?.has(body.brainKey)) return this.send(res, 400, { error: "That model key is not yours, or it no longer exists." });
+        }
         try {
           if (route === "/bots/create") {
             reply(res, 200, { bot: bots.create(body) });
@@ -301,6 +321,30 @@ export class ArenaApi {
           return this.send(res, 200, { bot: bots.find(bot.id), ai: ai.status() });
         } catch (e) {
           if (e instanceof AiError || e instanceof BotError) return this.send(res, e.status, { error: e.message });
+          throw e;
+        }
+      }
+      case "/keys/add":
+      case "/keys/delete": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        if (this.blockedByConsent(res, u)) return true;
+        const keys = this.keysOf(u);
+        if (!keys) return this.send(res, 503, { error: "Your own model keys are not open yet." });
+        try {
+          if (route === "/keys/add") {
+            // Each add calls the provider once to prove the key works, so it is rate limited.
+            if (this.store.tooMany(`keys:${u.id}`, 10, this.now())) return this.send(res, 429, { error: "Too many tries. Wait a little and try again." });
+            return this.send(res, 200, { key: await keys.add(body) });
+          }
+          const id = typeof body.id === "string" ? body.id : "";
+          // A key that an agent thinks with cannot be removed from under it.
+          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.brainKey === id);
+          if (using.length) return this.send(res, 409, { error: `Agents still use this key: ${using.map((b) => b.name).join(", ")}. Switch them to the platform model first.` });
+          keys.remove(id);
+          return this.send(res, 200, { ok: true });
+        } catch (e) {
+          if (e instanceof VaultError) return this.send(res, e.status, { error: e.message });
           throw e;
         }
       }

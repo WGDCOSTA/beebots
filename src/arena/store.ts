@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS bots (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, theme TEXT NOT NULL, avatar TEXT NOT NULL, style TEXT NOT NULL,
   coins TEXT NOT NULL, rules TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
   tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0,
-  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER
+  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER, brain_key TEXT
 );
 CREATE TABLE IF NOT EXISTS bot_versions (
   bot_id TEXT NOT NULL, version INTEGER NOT NULL, style TEXT NOT NULL, coins TEXT NOT NULL, rules TEXT NOT NULL,
@@ -182,7 +182,7 @@ export class ArenaStore {
       db.exec(TENANT);
       // Databases made before a column existed get it here (CREATE TABLE IF NOT EXISTS does not add columns).
       const have = new Set((db.prepare("PRAGMA table_info(bots)").all() as Array<{ name: string }>).map((c) => c.name));
-      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"]] as const)
+      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"], ["brain_key", "TEXT"]] as const)
         if (!have.has(col)) db.exec(`ALTER TABLE bots ADD COLUMN ${col} ${ddl}`);
       this.tenants.set(userId, db);
     }
@@ -235,6 +235,15 @@ export class ArenaStore {
     for (const ext of ["", "-wal", "-shm"]) rmSync(join(this.root, "tenants", `${userId}.db${ext}`), { force: true });
     rmSync(join(this.root, "tenants", userId), { recursive: true, force: true });
     this.audit(userId, "account deleted", now);
+  }
+
+  /** True when `key` has already been used `limit` times in the last hour; otherwise counts this use. */
+  tooMany(key: string, limit: number, now: number): boolean {
+    this.dir.prepare("DELETE FROM attempts WHERE ts < ?").run(now - 3_600_000);
+    const n = (this.dir.prepare("SELECT COUNT(*) AS n FROM attempts WHERE key = ? AND ts >= ?").get(key, now - 3_600_000) as { n: number }).n;
+    if (n >= limit) return true;
+    this.dir.prepare("INSERT INTO attempts (key, ts) VALUES (?, ?)").run(key, now);
+    return false;
   }
 
   /** Sets the plan. Callers (billing.ts) are the only ones that should. */
