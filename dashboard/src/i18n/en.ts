@@ -62,8 +62,7 @@ export const en = {
   "consent.error": "Could not save. Try again.",
   "consent.signOut": "Sign out instead",
 
-  "legal.banner": "Draft. This text is being prepared and is not yet legally binding.",
-  "legal.body": "The final text is being prepared with legal counsel and will be published here before launch.",
+  "legal.banner": "Draft. This text has not been reviewed by a lawyer yet and is not final. Do not treat it as legal advice.",
   "legal.terms": "Terms of use",
   "legal.privacy": "Privacy notice",
   "legal.risk": "Risk notice",
@@ -412,6 +411,10 @@ export const en = {
   "style.skill.t": "Skill",
   "league.skill": "Skill",
   "prob.skill": "Choose one of your skills.",
+  "legal.englishOnly": "Only the English text is legally binding. It is shown below because the legal texts have not been translated yet.",
+  "legal.updated": "Last updated {date}",
+  "legal.reviewed": "Reviewed by counsel on {date}.",
+  "legal.gaps": "Some details of the operator are not filled in yet. They are marked \"missing\" in the text.",
 } as const;
 
 export type Key = keyof typeof en;

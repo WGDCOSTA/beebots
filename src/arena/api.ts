@@ -21,6 +21,17 @@ import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
+export interface Operator {
+  name?: string;
+  address?: string;
+  companyNo?: string;
+  vat?: string;
+  email?: string;
+  privacyEmail?: string;
+  /** The date counsel signed the legal texts off (YYYY-MM-DD). While it is empty the pages say they are drafts. */
+  reviewedOn?: string;
+}
+
 const COOKIE = "arena_session";
 const MAX_BODY = 4 * 1024;
 
@@ -34,6 +45,8 @@ export interface ApiOpts {
   aiDailyLimit?: number;
   /** The public leaderboard (null = none). */
   leaderboard?: Leaderboard | null;
+  /** Who operates the Arena, for the legal pages. Fields not set stay empty and the pages show them as missing. */
+  operator?: Operator;
   /** The platform's skill library members can keep in their slots. */
   library?: readonly Skill[];
   /** The key vault for members' own model keys (null = closed). */
@@ -158,6 +171,11 @@ export class ArenaApi {
       const me = this.auth.user(sessionOf(req));
       const plans = (["free", "pro", "premium"] as const).map((id) => ({ id, price: id === "free" ? null : PLAN_PRICES[id], limits: LIMITS[id] }));
       return this.send(res, 200, { open: this.billing().open, plans, current: me ? this.billing().view(me) : null });
+    }
+    if (req.method === "GET" && route === "/operator") {
+      // Public: the legal pages name the operator and the contact addresses. Nothing here is about a member.
+      const o = this.opts.operator ?? {};
+      return this.send(res, 200, { name: o.name ?? "", address: o.address ?? "", companyNo: o.companyNo ?? "", vat: o.vat ?? "", email: o.email ?? "", privacyEmail: o.privacyEmail ?? o.email ?? "", reviewedOn: /^\d{4}-\d{2}-\d{2}$/.test(o.reviewedOn ?? "") ? o.reviewedOn : "" });
     }
     if (req.method === "GET" && route === "/skills") {
       const u = this.auth.user(sessionOf(req));

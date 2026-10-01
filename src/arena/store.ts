@@ -20,9 +20,13 @@ export interface ArenaUser {
 }
 
 /** What a new member accepts before anything else. Bumping the version asks everyone again. The texts themselves are drafts until counsel signs them off. */
-export const CONSENT_VERSION = "2026-10-draft";
+export const CONSENT_VERSION = "2026-10-draft2";
 export const CONSENT_ITEMS = ["terms", "simulated", "age"] as const;
 export type ConsentItem = (typeof CONSENT_ITEMS)[number];
+
+/** How long the security log is kept, in days, and how long a used or expired sign-in link's record stays. The privacy notice quotes these. */
+export const AUDIT_KEEP_DAYS = 365;
+export const AUDIT_KEEP_DAYS_TOKENS = 1;
 
 export const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{2,19}$/;
 const RESERVED_HANDLES = new Set(["admin", "administrator", "arena", "warren", "official", "support", "staff", "moderator", "mod", "system", "root", "bizzy", "breezy", "boozy", "jev", "null", "undefined", "anonymous"]);
@@ -249,6 +253,16 @@ export class ArenaStore {
     if (n >= limit) return true;
     this.dir.prepare("INSERT INTO attempts (key, ts) VALUES (?, ?)").run(key, now);
     return false;
+  }
+
+  /**
+   * Forgets what is no longer needed, so the privacy notice can say how long things are kept: a sign-in link's record a day
+   * after it expired (it holds the e-mail it was sent to), an expired session, and the security log after a year.
+   */
+  purgeExpired(now: number): void {
+    this.dir.prepare("DELETE FROM login_tokens WHERE expires_at < ?").run(now - AUDIT_KEEP_DAYS_TOKENS * 86_400_000);
+    this.dir.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now);
+    this.dir.prepare("DELETE FROM audit WHERE ts < ?").run(now - AUDIT_KEEP_DAYS * 86_400_000);
   }
 
   /** Sets the plan. Callers (billing.ts) are the only ones that should. */

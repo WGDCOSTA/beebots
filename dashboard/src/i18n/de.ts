@@ -57,8 +57,7 @@ export const de: Partial<Record<Key, string>> = {
   "consent.cookie": "Cookies: Ein Sitzungs-Cookie hält dich angemeldet. Kein Tracking.",
   "consent.error": "Speichern nicht möglich. Versuche es erneut.",
   "consent.signOut": "Abmelden",
-  "legal.banner": "Entwurf. Dieser Text wird vorbereitet und ist noch nicht rechtsverbindlich.",
-  "legal.body": "Der endgültige Text wird mit rechtlicher Beratung erstellt und vor dem Start hier veröffentlicht.",
+  "legal.banner": "Entwurf. Dieser Text wurde noch nicht von einem Anwalt geprüft und ist nicht endgültig. Verstehe ihn nicht als Rechtsberatung.",
   "legal.terms": "Nutzungsbedingungen",
   "legal.privacy": "Datenschutzhinweis",
   "legal.risk": "Risikohinweis",
@@ -394,4 +393,8 @@ export const de: Partial<Record<Key, string>> = {
   "style.skill.t": "Skill",
   "league.skill": "Skill",
   "prob.skill": "Wähle einen deiner Skills.",
+  "legal.englishOnly": "Rechtlich verbindlich ist nur der englische Text. Er wird unten gezeigt, weil die Rechtstexte noch nicht übersetzt sind.",
+  "legal.updated": "Zuletzt aktualisiert am {date}",
+  "legal.reviewed": "Von einem Anwalt geprüft am {date}.",
+  "legal.gaps": "Einige Angaben zum Betreiber sind noch nicht ausgefüllt. Sie sind im Text als \"missing\" markiert.",
 };
