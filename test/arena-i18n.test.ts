@@ -79,7 +79,7 @@ describe("the code only asks for keys that exist", () => {
   const model = readFileSync(join(dir, "arenaModel.ts"), "utf8");
   for (const m of model.matchAll(/"([a-z]+(?:\.[\w]+)+)"/g)) if (m[1]! in en) used.add(m[1]!);
   // keys chosen by a condition or a lookup in the page
-  for (const k of ["home.quotaFull1", "home.quotaFull", "home.loadError", "trade.buy", "trade.sell", "dec.ruleActed", "dec.ruleBlocked", "set.paint", "set.repaint", "new.tpl.steady", "new.tpl.breakout", "new.tpl.momentum", "plans.paid", "plans.paidDone"]) used.add(k);
+  for (const k of ["home.quotaFull1", "home.quotaFull", "home.loadError", "trade.buy", "trade.sell", "dec.ruleActed", "dec.ruleBlocked", "set.paint", "set.repaint", "new.tpl.steady", "new.tpl.breakout", "new.tpl.momentum", "plans.paid", "plans.paidDone", "style.auto.t", "style.auto.b", "auto.switched", "auto.kept"]) used.add(k);
   // keys built from a variable
   for (const s of ["start", "look", "style", "rules", "review"]) used.add(`new.step.${s}`);
   for (const s of ["performance", "decisions", "versions", "settings"]) used.add(`agent.tab.${s}`);

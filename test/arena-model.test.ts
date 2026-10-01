@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agoParts, arenaView, fmtPrice, planFeatures, quarantineDaysLeft, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleIssue, leagueText, looksLikeEmail, needSays, pnlTone, resendIn, riskSay, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
+import { agoParts, arenaView, styleTitleKey, fmtPrice, planFeatures, quarantineDaysLeft, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleIssue, leagueText, looksLikeEmail, needSays, pnlTone, resendIn, riskSay, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
 import { en } from "../dashboard/src/i18n/en.js";
 
 describe("arenaView", () => {
@@ -216,7 +216,26 @@ describe("plans and quarantine", () => {
     expect(free.map((f) => f.key)).toEqual(["plans.f.agents", "plans.f.coins", "plans.f.stylesBasic", "plans.f.packsFree", "plans.f.brains", "plans.f.skills"]);
     expect(free.find((f) => f.key === "plans.f.brains")!.soon).toBe(false); // one brain is what exists today
     const premium = planFeatures({ bots: 20, maxCoins: 8, styles: ["breezy", "bizzy", "boozy"], proThemes: true, autonomy: true, brains: 6, skillSlots: 30, history: true });
-    expect(premium.filter((f) => f.soon).map((f) => f.key)).toEqual(["plans.f.brains", "plans.f.skills", "plans.f.history", "plans.f.auto"]);
+    expect(premium.filter((f) => f.soon).map((f) => f.key)).toEqual(["plans.f.brains", "plans.f.skills", "plans.f.history"]);
     expect(premium.find((f) => f.key === "plans.f.agents")).toEqual({ key: "plans.f.agents", vars: { n: 20 } });
+  });
+});
+
+describe("autonomous agents in the pages", () => {
+  const d = { name: "Free Spirit", theme: "bunnies", avatar: "scout", style: "breezy", coins: [] as string[], rules: "Protect capital first, then trade.", tagline: "", look: "", listed: true };
+  it("needs no style or coins from the member, but still a name and guidance", () => {
+    expect(draftIssue({ ...d, mode: "autonomous", style: "", coins: [] }, 8)).toBeNull();
+    expect(draftIssue({ ...d, mode: "fixed", coins: [] }, 8)?.key).toBe("prob.coins");
+    expect(draftIssue({ ...d, mode: "autonomous", name: "" }, 8)?.key).toBe("prob.name");
+    expect(stepIssue("style", { ...d, mode: "autonomous", style: "" }, 8)).toBeNull();
+  });
+  it("names the mode, not a style, for an autonomous agent", () => {
+    expect(styleTitleKey("autonomous", "boozy")).toBe("style.auto.t");
+    expect(styleTitleKey("fixed", "bizzy")).toBe("style.bizzy.t");
+    expect(styleTitleKey(undefined, "breezy")).toBe("style.breezy.t");
+  });
+  it("names the autonomous league", () => {
+    const t = (k: string) => ({ "league.autonomous": "Autonomous" })[k] ?? k;
+    expect(leagueText("premium:autonomous", t as never)).toBe("Premium · Autonomous");
   });
 });

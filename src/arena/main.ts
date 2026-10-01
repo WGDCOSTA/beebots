@@ -65,6 +65,7 @@ if (env.ARENA_RUN === "1") {
       usdPerMTok: Number(env.ARENA_LLM_USD_PER_MTOK ?? 0.3),
       leaderboard,
       vault,
+      llm,
       ownKeyDailyUsd: Number(env.ARENA_OWN_KEY_DAILY_USD ?? 1000),
       sampleMs: Number(env.ARENA_SAMPLE_MS ?? 600_000),
     });

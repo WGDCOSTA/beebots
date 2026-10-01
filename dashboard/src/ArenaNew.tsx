@@ -3,8 +3,8 @@
 // again, so the page's own checks are only there to say what is missing before the member presses Create.
 import { useState } from "react";
 import { arena, type Limits } from "./arenaApi";
-import { stepIssue, STYLE_KEYS, WIZARD_STEPS, type BotDraft, type Say, type WizardStep } from "./arenaModel";
-import { BrainField, ListedField, LookFields, RulesField, StyleFields } from "./ArenaFields";
+import { stepIssue, STYLE_KEYS, styleTitleKey, WIZARD_STEPS, type BotDraft, type Say, type WizardStep } from "./arenaModel";
+import { BrainField, ListedField, LookFields, ModeField, RulesField, StyleFields } from "./ArenaFields";
 import { Portrait, type ArenaData } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
@@ -111,7 +111,7 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
           <div>
             <strong>{d.name.trim() || t("new.unnamed")}</strong> {d.tagline && <span className="dim small">{d.tagline.startsWith("the ") ? d.tagline : `the ${d.tagline}`}</span>}
             <div className="small dim">
-              {t(STYLE_KEYS[d.style]!.title)} · {d.coins.join(" · ")} {theme ? `· ${theme.label}` : ""}
+              {t(styleTitleKey(d.mode, d.style))} · {d.mode === "autonomous" ? t("coins.any") : d.coins.join(" · ")} {theme ? `· ${theme.label}` : ""}
             </div>
           </div>
         </div>
@@ -159,7 +159,7 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
                     disabled={locked}
                     onClick={() => {
                       const { id: _id, kind: _k, pro: _p, ...fields } = tp; // eslint-disable-line @typescript-eslint/no-unused-vars
-                      setD({ ...BLANK, ...fields, coins: fields.coins.slice(0, limits.maxCoins) });
+                      setD({ ...BLANK, ...fields, mode: "fixed", coins: fields.coins.slice(0, limits.maxCoins) });
                       setFrom("template");
                       go(1);
                     }}
@@ -192,7 +192,12 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
           </>
         )}
         {step === "look" && <LookFields cat={data.cat} limits={limits} d={d} set={setD} />}
-        {step === "style" && <StyleFields cat={data.cat} limits={limits} d={d} set={setD} />}
+        {step === "style" && (
+          <>
+            <ModeField d={d} set={setD} limits={limits} />
+            <StyleFields cat={data.cat} limits={limits} d={d} set={setD} />
+          </>
+        )}
         {step === "rules" && <RulesField d={d} set={setD} />}
         {step === "review" && (
           <>
@@ -201,9 +206,9 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
               <dt>{t("field.rules")}</dt>
               <dd>{d.rules}</dd>
               <dt>{t("field.style")}</dt>
-              <dd>{t(STYLE_KEYS[d.style]!.title)}</dd>
+              <dd>{t(styleTitleKey(d.mode, d.style))}</dd>
               <dt>{t("field.coins")}</dt>
-              <dd>{d.coins.join(", ")}</dd>
+              <dd>{d.mode === "autonomous" ? t("coins.any") : d.coins.join(", ")}</dd>
             </dl>
             <BrainField d={d} set={setD} keys={data.keys} />
             <ListedField d={d} set={setD} />

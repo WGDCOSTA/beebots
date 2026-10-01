@@ -17,6 +17,9 @@ import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, type BotView } from "./bots.js";
 import { readInsights, type Insights } from "./insights.js";
+import type { LlmClient } from "../brains/llm.js";
+import type { StyleId } from "../settings.js";
+import { chooseStyle, marketLines } from "./autonomy.js";
 import { LlmSystemOne } from "./decider.js";
 import { EST_USD_PER_MTOK, type Vault } from "./vault.js";
 import type { Leaderboard } from "./ranking.js";
@@ -46,12 +49,24 @@ export interface RunnerOpts {
   sampleMs?: number;
   /** The key vault: an agent set to think with its member's own key gets that key's model and the member's own daily ceiling. */
   vault?: Vault;
+  /** The platform's chat model, for an autonomous agent's style calls when it thinks with the platform's model. Without it such an agent keeps Momentum. */
+  llm?: LlmClient;
+  /** How long an autonomous agent keeps a style before it asks again, and the least time between two switches (engine rule). Hours. */
+  styleReviewHours?: number;
   /** The daily decision spend an agent on its member's own key may use when the member set no ceiling, in USD. */
   ownKeyDailyUsd?: number;
 }
 
 /** A stopped agent, or one in quarantine: no engine, no ranking, positions closed. */
 const ended = (b: { state: string } | undefined): boolean => b?.state === "stopped" || b?.state === "quarantined";
+
+export interface StyleEntry {
+  ts: number;
+  style: StyleId;
+  /** What the model said when it chose. */
+  reason: string;
+  changed: boolean;
+}
 
 export type RunState = "running" | "paused" | "stopping" | "stopped" | "queued" | "error";
 export interface RunStatus {
@@ -69,6 +84,8 @@ export interface RunStatus {
   orders?: number;
   spentUsd?: number;
   capped?: boolean;
+  /** Autonomous agents: the style it chose last, or null before its first choice. */
+  style?: StyleId | null;
   last?: { choice: string | null; confidence: number | null; status: string; ts: number } | null;
 }
 
@@ -81,23 +98,29 @@ interface Run {
   engine: Engine;
   db: Db;
   jev: Jev;
+  usdPerMTok: number;
+  /** The agent's daily decision ceiling in USD. */
+  dailyUsd: number;
   file: string;
   startedAt: number;
   /** Read by the engine on every tick: what the member asked for. */
   ctl: { paused: boolean; closing: boolean };
+  /** Autonomous agents: the style its model chose last (the engine adopts it while the agent is flat), the model to ask, and when it last asked. */
+  auto: { style: StyleId | null; llm: LlmClient | null; reviewedAt: number; busy: boolean };
 }
 
 export class ArenaRunner {
   private runs = new Map<string, Run>();
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
-  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault">;
+  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm">;
   private timer: NodeJS.Timeout | null = null;
   private sampler: NodeJS.Timeout | null = null;
   private settler: NodeJS.Timeout | null = null;
+  private reviewer: NodeJS.Timeout | null = null;
 
   constructor(opts: RunnerOpts) {
-    this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, ownKeyDailyUsd: 1000, now: Date.now, ...opts };
+    this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, ownKeyDailyUsd: 1000, styleReviewHours: 6, now: Date.now, ...opts };
   }
 
   /** The positions every running bot holds, so the shared feed keeps their coins fresh. */
@@ -131,6 +154,8 @@ export class ArenaRunner {
         BEE_START_EQUITY_USD: String(this.o.startUsd),
         JEV_DAILY_USD_CAP: String(dailyUsd),
         JEV_USD_PER_MTOK: String(usdPerMTok),
+        SPECIALIZATION: "true",
+        SPECIALIZE_MIN_HOURS: String(this.o.styleReviewHours),
         DB_PATH: file,
         LOG_LEVEL: "warn",
       },
@@ -148,16 +173,21 @@ export class ArenaRunner {
     let decider = this.o.decider;
     let dailyUsd = this.o.dailyUsd;
     let usdPerMTok = this.o.usdPerMTok;
+    let styleLlm: LlmClient | null = this.o.llm ?? null;
     if (bot.brainKey) {
       const k = this.o.vault?.for(this.o.store.tenant(userId), userId, this.o.now).secret(bot.brainKey);
       if (!k) throw new Error("its own model key is not available");
-      decider = new LlmSystemOne(this.o.vault!.brain(k.provider, k.secret, k.model), `own-${k.provider}`);
+      styleLlm = this.o.vault!.brain(k.provider, k.secret, k.model);
+      decider = new LlmSystemOne(styleLlm, `own-${k.provider}`);
       dailyUsd = k.dailyUsd ?? this.o.ownKeyDailyUsd;
       usdPerMTok = EST_USD_PER_MTOK[k.provider];
     }
     const cfg = this.config(bot, file, dailyUsd, usdPerMTok);
     const db = new Db(file);
     const ctl = { paused: bot.state === "paused", closing: false };
+    const auto: Run["auto"] = { style: null, llm: bot.mode === "autonomous" ? styleLlm : null, reviewedAt: 0, busy: false };
+    // The last choice survives a restart: it is read back from the agent's own log.
+    if (bot.mode === "autonomous") auto.style = this.lastStyle(userId, bot);
     try {
       const jev = new Jev({ ...cfg.jev, client: decider, now: this.o.now });
       const engine = new Engine({
@@ -171,14 +201,47 @@ export class ArenaRunner {
         now: this.o.now,
         paused: () => ctl.paused,
         closeRequested: () => ctl.closing,
+        specialization: bot.mode === "autonomous" ? () => (auto.style ? { kind: "style" as const, id: auto.style } : null) : undefined,
       });
       await engine.start();
-      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, file, startedAt: this.o.now(), ctl });
+      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, usdPerMTok, dailyUsd, file, startedAt: this.o.now(), ctl, auto });
       this.errors.delete(bot.id);
+      if (bot.mode === "autonomous") void this.review(bot.id);
     } catch (e) {
       db.close();
       rmSync(file, { force: true });
       throw e;
+    }
+  }
+
+  private lastStyle(userId: string, bot: BotView): StyleId | null {
+    const r = this.o.store.tenant(userId).prepare("SELECT style FROM style_log WHERE bot_id = ? AND version = ? ORDER BY ts DESC, rowid DESC LIMIT 1").get(bot.id, bot.version) as { style: StyleId } | undefined;
+    return r?.style ?? null;
+  }
+
+  /**
+   * Asks an autonomous agent's model which style fits the market now, when it is time (a few hours after the last ask) and
+   * the agent is not paused or closing. The call counts against the agent's daily spend, and is skipped near the ceiling so
+   * decisions are never starved by style calls. A failed call keeps the current style.
+   */
+  async review(botId: string): Promise<void> {
+    const r = this.runs.get(botId);
+    if (!r || !r.auto.llm || r.auto.busy || r.ctl.paused || r.ctl.closing) return;
+    const now = this.o.now();
+    if (r.auto.reviewedAt && now - r.auto.reviewedAt < this.o.styleReviewHours * 3_600_000) return;
+    if (r.jev.spentTodayUsd >= r.dailyUsd * 0.8) return;
+    r.auto.busy = true;
+    try {
+      const c = await chooseStyle(r.auto.llm, { rules: r.bot.rules, current: r.auto.style, market: marketLines(this.o.feed.view()) });
+      r.auto.reviewedAt = now;
+      const changed = c.style !== r.auto.style;
+      r.auto.style = c.style;
+      r.jev.spentTodayUsd += ((c.inputTokens + c.outputTokens) / 1e6) * r.usdPerMTok;
+      this.o.store.tenant(r.userId).prepare("INSERT INTO style_log (bot_id, version, ts, style, reason, changed) VALUES (?, ?, ?, ?, ?, ?)").run(r.botId, r.version, now, c.style, c.reason, changed ? 1 : 0);
+    } catch (e) {
+      log.warn("arena: a style call failed, the agent keeps its style", { bot: botId, error: safeError(e).message });
+    } finally {
+      r.auto.busy = false;
     }
   }
 
@@ -265,7 +328,7 @@ export class ArenaRunner {
       const user = this.o.store.userById(r.userId);
       const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
       if (!user || !b) continue;
-      lb.record({ botId: r.botId, userId: r.userId, handle: user.handle, name: r.bot.name, theme: r.bot.theme, avatar: r.bot.avatar, style: r.bot.style, tier: user.tier, version: r.version }, b.equityUsd, b.totals.orders, ts);
+      lb.record({ botId: r.botId, userId: r.userId, handle: user.handle, name: r.bot.name, theme: r.bot.theme, avatar: r.bot.avatar, style: r.bot.mode === "autonomous" ? "autonomous" : r.bot.style, tier: user.tier, version: r.version }, b.equityUsd, b.totals.orders, ts);
     }
     lb.prune(ts);
   }
@@ -280,6 +343,7 @@ export class ArenaRunner {
     void this.syncAll();
     this.timer = setInterval(() => void this.syncAll(), everyMs);
     this.settler = setInterval(() => void this.serial(() => this.settle()), 10_000);
+    this.reviewer = setInterval(() => void Promise.all([...this.runs.keys()].map((id) => this.review(id))), 600_000);
     if (this.o.leaderboard) this.sampler = setInterval(() => this.sample(), this.o.sampleMs);
   }
 
@@ -287,6 +351,7 @@ export class ArenaRunner {
     if (this.timer) clearInterval(this.timer);
     if (this.sampler) clearInterval(this.sampler);
     if (this.settler) clearInterval(this.settler);
+    if (this.reviewer) clearInterval(this.reviewer);
     for (const r of [...this.runs.values()]) this.stopRun(r, false);
   }
 
@@ -317,6 +382,12 @@ export class ArenaRunner {
     const ins = readInsights(this.fileOf(userId, bot), { decisions: 0, trades: 0 });
     const last = ins?.equity.at(-1)?.[1] ?? this.o.startUsd;
     return { state: "stopped", equityUsd: last, startEquityUsd: this.o.startUsd, pnlUsd: last - this.o.startUsd, pnlPct: ((last - this.o.startUsd) / this.o.startUsd) * 100, position: null, decisions: undefined };
+  }
+
+  /** An autonomous agent's style choices, newest first. */
+  styleLog(userId: string, bot: BotView, limit = 20): StyleEntry[] {
+    if (bot.mode !== "autonomous") return [];
+    return (this.o.store.tenant(userId).prepare("SELECT ts, style, reason, changed FROM style_log WHERE bot_id = ? AND version = ? ORDER BY ts DESC, rowid DESC LIMIT ?").all(bot.id, bot.version, limit) as Array<{ ts: number; style: StyleId; reason: string; changed: number }>).map((r) => ({ ts: r.ts, style: r.style, reason: r.reason, changed: r.changed === 1 }));
   }
 
   /** What the agent page shows: the curve, the decisions with their facts, the trades. Null before the first sample. */
@@ -353,6 +424,7 @@ export class ArenaRunner {
         orders: b.totals.orders,
         spentUsd: Number(r.jev.spentTodayUsd.toFixed(4)),
         capped: r.jev.capTripped,
+        ...(r.bot.mode === "autonomous" ? { style: r.auto.style } : {}),
         last: b.last ? { choice: b.last.choice, confidence: b.last.confidence, status: b.last.status, ts: b.last.ts } : null,
       };
     }

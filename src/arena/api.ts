@@ -41,6 +41,7 @@ export interface ApiOpts {
     update(userId: string): Promise<void>;
     forget(userId: string): Promise<void>;
     status(userId: string, botIds: string[]): Record<string, RunStatus>;
+    styleLog?(userId: string, bot: BotView): Array<{ ts: number; style: string; reason: string; changed: boolean }>;
     insights?(userId: string, bot: BotView, opts?: { decisions?: number; trades?: number; points?: number }): Insights | null;
   } | null;
 }
@@ -173,7 +174,7 @@ export class ArenaApi {
       try {
         const id = new URL(req.url ?? "/", "http://localhost").searchParams.get("id");
         const bot = new Bots(this.store.tenant(u.id), u.tier, this.now).find(id);
-        return this.send(res, 200, { bot, insights: this.opts.runner?.insights?.(u.id, bot) ?? null });
+        return this.send(res, 200, { bot, insights: this.opts.runner?.insights?.(u.id, bot) ?? null, styleLog: this.opts.runner?.styleLog?.(u.id, bot) ?? [] });
       } catch (e) {
         if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
         throw e;

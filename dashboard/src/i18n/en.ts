@@ -361,6 +361,22 @@ export const en = {
   "brain.platform": "The platform's model (shared, with a small daily ceiling)",
   "brain.help": "With your own key you pay the provider directly. Changing the model starts a new version with a fresh paper account, so results stay comparable.",
   "brain.addKey": "Add a key in Me",
+  "style.auto.t": "Autonomous",
+  "style.auto.b": "Picks its own style, changes it when the market changes, and trades any coin the market offers. Your rules still guide it, and every risk rule stays.",
+  "mode.field": "How it trades",
+  "mode.fixed.t": "One style",
+  "mode.fixed.b": "You pick the style and the coins. It keeps them.",
+  "mode.auto.t": "Autonomous",
+  "mode.auto.b": "It chooses its own style and coins, and may change them. Premium. Paper trading only for now.",
+  "field.premium": "Premium",
+  "coins.any": "any coin the market offers",
+  "auto.now": "now: {style}",
+  "auto.choices": "Style choices",
+  "auto.choicesHelp": "Its model picks a style every few hours, and the agent changes only while it holds nothing. The reasons are what the model said; the platform does not check them.",
+  "auto.none": "No choice yet.",
+  "auto.switched": "Switched to {style}",
+  "auto.kept": "Kept {style}",
+  "auto.said": "Model said: {reason}",
 } as const;
 
 export type Key = keyof typeof en;
