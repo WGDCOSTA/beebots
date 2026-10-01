@@ -57,6 +57,8 @@ export interface EngineDeps {
   now?: () => number;
   /** True once someone asked to end the experiment (deploy/close.sh drops a flag file in the data volume). */
   closeRequested?: () => boolean;
+  /** Paused: positions stay under their stops, but nothing new is opened (the Arena's Pause). */
+  paused?: () => boolean;
   /** Dry run only: consume a one-shot "resume last position" request (flag file). */
   takeResumeRequest?: () => boolean;
   /**
@@ -584,6 +586,7 @@ export class Engine {
     // Benched (trade cap or fee budget): the bee rides whatever it holds. Jev is not asked, because nothing it
     // chose could be acted on; only code can close the position (stop, time stop, loss stop) until 00:00 UTC.
     if (bee.cap === "trade_cap" || bee.cap === "fee_budget") return this.decideBenched(id, now);
+    if (this.d.paused?.()) return this.decideBenched(id, now, true);
     const ctx = this.ctx(id, now);
     const menu = brain.menu(ctx);
     const legOptions = this.legMenu(id, ctx);
@@ -874,11 +877,11 @@ export class Engine {
 
   // ---------- benched: ride the position ----------
 
-  private async decideBenched(id: BeeId, now: number): Promise<void> {
+  private async decideBenched(id: BeeId, now: number, paused = false): Promise<void> {
     const { db } = this.d;
     const bee = this.bees[id];
     const ctx = this.ctx(id, now);
-    const risk = applyRisk({
+    let risk = applyRisk({
       ctx,
       brain: this.brain(id),
       proposal: null,
@@ -887,6 +890,8 @@ export class Engine {
       dataAgeMs: now - this.d.feed.lastRefreshAt,
       maxDataAgeMs: 3 * this.d.cfg.dataRefreshMs + 30_000,
     });
+    // Paused: exits (stops, time stop, loss stop) still run, but no rule may open or add anything, not even the forced entry.
+    if (paused && ["open", "switch", "add", "leg_open"].includes(risk.action.kind)) risk = { ...risk, action: { kind: "none" }, forcedBy: null, status: "paused: not opening anything new" };
     if (risk.capTripped) {
       db.insertCap(id, now, risk.capTripped, risk.status);
       this.d.bus.emit("cap", { bee: id, cap: risk.capTripped, detail: risk.status }, now);
@@ -912,8 +917,8 @@ export class Engine {
       this.lastPulseAt[id] = now;
       const p = bee.position;
       this.d.bus.emit("decision", {
-        bee: id, choice: p ? `RIDING ${p.coin}` : "BENCHED", probabilities: [], confidence: null, conviction: null, latencyMs: null,
-        tokens: null, jevUsd: 0, action: "hold", vetoedBy: null, forcedBy: null, status: risk.status, jev: "benched", pulse: true,
+        bee: id, choice: paused ? (p ? `PAUSED, HOLDING ${p.coin}` : "PAUSED") : p ? `RIDING ${p.coin}` : "BENCHED", probabilities: [], confidence: null, conviction: null, latencyMs: null,
+        tokens: null, jevUsd: 0, action: "hold", vetoedBy: null, forcedBy: null, status: risk.status, jev: paused ? "paused" : "benched", pulse: true,
         ...this.liveChip(id),
       }, now);
     }

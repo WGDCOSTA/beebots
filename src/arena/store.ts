@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS bots (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, theme TEXT NOT NULL, avatar TEXT NOT NULL, style TEXT NOT NULL,
   coins TEXT NOT NULL, rules TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
   tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0,
-  listed INTEGER NOT NULL DEFAULT 1
+  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running'
 );
 CREATE TABLE IF NOT EXISTS bot_versions (
   bot_id TEXT NOT NULL, version INTEGER NOT NULL, style TEXT NOT NULL, coins TEXT NOT NULL, rules TEXT NOT NULL,
@@ -174,7 +174,7 @@ export class ArenaStore {
       db.exec(TENANT);
       // Databases made before a column existed get it here (CREATE TABLE IF NOT EXISTS does not add columns).
       const have = new Set((db.prepare("PRAGMA table_info(bots)").all() as Array<{ name: string }>).map((c) => c.name));
-      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"]] as const)
+      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"]] as const)
         if (!have.has(col)) db.exec(`ALTER TABLE bots ADD COLUMN ${col} ${ddl}`);
       this.tenants.set(userId, db);
     }

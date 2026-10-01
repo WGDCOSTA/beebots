@@ -1,6 +1,6 @@
 // Runs every member's bunnies on paper. One engine per BOT (the same Engine the owner's Warren uses), each with its own
 // SQLite file and a single slot, all reading one shared market feed and deciding with the platform's default model.
-// A new version of a bot starts a fresh paper account (new file, new book); deleting a bot or an account removes its files.
+// A new version of a bot starts a fresh paper account (new file, new book); a stopped agent keeps its file until it is started again as a new version or deleted; deleting a bot or an account removes its files.
 // Nothing here can place a real order: the executor is the simulator and MODE is always dry.
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -16,6 +16,7 @@ import type { MarketFeed } from "../market/data.js";
 import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, type BotView } from "./bots.js";
+import { readInsights, type Insights } from "./insights.js";
 import type { Leaderboard } from "./ranking.js";
 import type { ArenaStore } from "./store.js";
 
@@ -43,7 +44,7 @@ export interface RunnerOpts {
   sampleMs?: number;
 }
 
-export type RunState = "running" | "queued" | "error";
+export type RunState = "running" | "paused" | "stopping" | "stopped" | "queued" | "error";
 export interface RunStatus {
   state: RunState;
   error?: string;
@@ -73,6 +74,8 @@ interface Run {
   jev: Jev;
   file: string;
   startedAt: number;
+  /** Read by the engine on every tick: what the member asked for. */
+  ctl: { paused: boolean; closing: boolean };
 }
 
 export class ArenaRunner {
@@ -82,6 +85,7 @@ export class ArenaRunner {
   private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard">;
   private timer: NodeJS.Timeout | null = null;
   private sampler: NodeJS.Timeout | null = null;
+  private settler: NodeJS.Timeout | null = null;
 
   constructor(opts: RunnerOpts) {
     this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, now: Date.now, ...opts };
@@ -132,6 +136,7 @@ export class ArenaRunner {
     const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
     const cfg = this.config(bot, file);
     const db = new Db(file);
+    const ctl = { paused: bot.state === "paused", closing: false };
     try {
       const jev = new Jev({ ...cfg.jev, client: this.o.decider, now: this.o.now });
       const engine = new Engine({
@@ -143,9 +148,11 @@ export class ArenaRunner {
         bus: new EventBus(db),
         alerts: new Alerts(undefined),
         now: this.o.now,
+        paused: () => ctl.paused,
+        closeRequested: () => ctl.closing,
       });
       await engine.start();
-      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, file, startedAt: this.o.now() });
+      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, file, startedAt: this.o.now(), ctl });
       this.errors.delete(bot.id);
     } catch (e) {
       db.close();
@@ -170,14 +177,19 @@ export class ArenaRunner {
       for (const r of [...this.runs.values()].filter((x) => x.userId === userId)) {
         const b = byId.get(r.botId);
         if (!b || b.version !== r.version) this.stopRun(r, true);
-        else r.bot = b; // a cosmetic edit keeps the account, and the ranking shows the new name and avatar
+        else {
+          r.bot = b; // a cosmetic edit keeps the account, and the ranking shows the new name and avatar
+          r.ctl.paused = b.state === "paused";
+          if (b.state === "stopped") r.ctl.closing = true; // close what it holds, then the run ends (settle)
+        }
       }
+      await this.settle(userId);
       // A bot that is gone, or that its owner took off the leaderboard, leaves it with every sample.
-      for (const id of this.o.leaderboard?.listedBots(userId) ?? []) if (!byId.get(id)?.listed) this.o.leaderboard?.remove(id);
+      for (const id of this.o.leaderboard?.listedBots(userId) ?? []) if (!byId.get(id)?.listed || byId.get(id)?.state === "stopped") this.o.leaderboard?.remove(id);
       // Old versions' files are not needed once their engine is gone.
       if (user) this.prune(userId, bots);
       for (const b of bots) {
-        if (this.runs.has(b.id)) continue;
+        if (this.runs.has(b.id) || b.state === "stopped") continue;
         if (this.runs.size >= this.o.maxRunners) continue;
         try {
           await this.start(userId, b);
@@ -188,6 +200,19 @@ export class ArenaRunner {
         }
       }
     });
+  }
+
+  /** A run that was asked to stop ends once it is flat: it closes its position through the normal ledger first. The file stays, for its record. */
+  private async settle(userId?: string): Promise<void> {
+    for (const r of [...this.runs.values()]) {
+      if (!r.ctl.closing || (userId && r.userId !== userId)) continue;
+      try {
+        if (!r.engine.health().flat) await r.engine.tick();
+      } catch (e) {
+        log.warn("arena: closing an agent failed", { bot: r.botId, error: safeError(e).message });
+      }
+      if (r.engine.health().flat) this.stopRun(r, false);
+    }
   }
 
   private prune(userId: string, bots: BotView[]): void {
@@ -215,7 +240,7 @@ export class ArenaRunner {
     const lb = this.o.leaderboard;
     if (!lb) return;
     for (const r of this.runs.values()) {
-      if (!r.bot.listed) continue;
+      if (!r.bot.listed || r.ctl.closing) continue;
       const user = this.o.store.userById(r.userId);
       const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
       if (!user || !b) continue;
@@ -233,12 +258,14 @@ export class ArenaRunner {
   begin(everyMs = 60_000): void {
     void this.syncAll();
     this.timer = setInterval(() => void this.syncAll(), everyMs);
+    this.settler = setInterval(() => void this.serial(() => this.settle()), 10_000);
     if (this.o.leaderboard) this.sampler = setInterval(() => this.sample(), this.o.sampleMs);
   }
 
   stopAll(): void {
     if (this.timer) clearInterval(this.timer);
     if (this.sampler) clearInterval(this.sampler);
+    if (this.settler) clearInterval(this.settler);
     for (const r of [...this.runs.values()]) this.stopRun(r, false);
   }
 
@@ -251,6 +278,31 @@ export class ArenaRunner {
     return this.runs.size;
   }
 
+  private fileOf(userId: string, bot: { id: string; version: number }): string {
+    return join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
+  }
+
+  /** A stopped agent has no engine; its last numbers come from its file. Undefined when the agent is not stopped. */
+  private stoppedRun(userId: string, botId: string): RunStatus | undefined {
+    const user = this.o.store.userById(userId);
+    if (!user) return undefined;
+    let bot: BotView;
+    try {
+      bot = new Bots(this.o.store.tenant(userId), user.tier, this.o.now).find(botId);
+    } catch {
+      return undefined;
+    }
+    if (bot.state !== "stopped") return undefined;
+    const ins = readInsights(this.fileOf(userId, bot), { decisions: 0, trades: 0 });
+    const last = ins?.equity.at(-1)?.[1] ?? this.o.startUsd;
+    return { state: "stopped", equityUsd: last, startEquityUsd: this.o.startUsd, pnlUsd: last - this.o.startUsd, pnlPct: ((last - this.o.startUsd) / this.o.startUsd) * 100, position: null, decisions: undefined };
+  }
+
+  /** What the agent page shows: the curve, the decisions with their facts, the trades. Null before the first sample. */
+  insights(userId: string, bot: BotView): Insights | null {
+    return readInsights(this.fileOf(userId, bot));
+  }
+
   /** Where each of a member's bots stands. */
   status(userId: string, botIds: string[]): Record<string, RunStatus> {
     const out: Record<string, RunStatus> = {};
@@ -258,7 +310,8 @@ export class ArenaRunner {
       const r = this.runs.get(id);
       if (!r || r.userId !== userId) {
         const err = this.errors.get(id);
-        out[id] = err ? { state: "error", error: "This agent could not start. It will be retried." } : { state: "queued" };
+        const stopped = this.stoppedRun(userId, id);
+        out[id] = stopped ?? (err ? { state: "error", error: "This agent could not start. It will be retried." } : { state: "queued" });
         continue;
       }
       const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
@@ -267,7 +320,7 @@ export class ArenaRunner {
         continue;
       }
       out[id] = {
-        state: "running",
+        state: r.ctl.closing ? "stopping" : r.ctl.paused ? "paused" : "running",
         startedAt: r.startedAt,
         equityUsd: b.equityUsd,
         startEquityUsd: b.startEquityUsd,

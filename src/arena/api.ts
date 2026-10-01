@@ -6,12 +6,14 @@ import { readJson } from "../gate.js";
 import { clientAddr } from "../visitors.js";
 import { ArenaAuth, SESSION_TTL_MS } from "./auth.js";
 import { AiError, MemberAi, type AiService } from "./ai.js";
-import { BotError, Bots, COINS, LIMITS } from "./bots.js";
+import { BotError, Bots, COINS, LIMITS, type BotView } from "./bots.js";
 import type { Leaderboard } from "./ranking.js";
 import type { RunStatus } from "./runner.js";
 import { isLocale } from "./locales.js";
 import { CONSENT_ITEMS, CONSENT_VERSION } from "./store.js";
+import { TEMPLATES } from "./templates.js";
 import { THEMES } from "./themes.js";
+import type { Insights } from "./insights.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
 const COOKIE = "arena_session";
@@ -32,6 +34,7 @@ export interface ApiOpts {
     update(userId: string): Promise<void>;
     forget(userId: string): Promise<void>;
     status(userId: string, botIds: string[]): Record<string, RunStatus>;
+    insights?(userId: string, bot: BotView): Insights | null;
   } | null;
 }
 
@@ -128,6 +131,24 @@ export class ArenaApi {
       reply(res, 200, { themes: THEMES, coins: COINS, limits: LIMITS });
       return true;
     }
+    if (req.method === "GET" && route === "/templates") {
+      // Starter agents: examples to edit, never advice. Public, like the catalogue.
+      reply(res, 200, { templates: TEMPLATES });
+      return true;
+    }
+    if (req.method === "GET" && route === "/bots/insights") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      try {
+        const id = new URL(req.url ?? "/", "http://localhost").searchParams.get("id");
+        const bot = new Bots(this.store.tenant(u.id), u.tier, this.now).find(id);
+        return this.send(res, 200, { bot, insights: this.opts.runner?.insights?.(u.id, bot) ?? null });
+      } catch (e) {
+        if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
+        throw e;
+      }
+    }
     if (req.method === "GET" && route === "/bots") {
       const u = this.auth.user(sessionOf(req));
       if (!u) reply(res, 401, { error: "not signed in" });
@@ -176,7 +197,9 @@ export class ArenaApi {
       case "/bots/create":
       case "/bots/update":
       case "/bots/delete":
-      case "/bots/versions": {
+      case "/bots/versions":
+      case "/bots/state":
+      case "/bots/state-all": {
         const u = this.auth.user(sessionOf(req));
         if (!u) {
           reply(res, 401, { error: "not signed in" });
@@ -196,6 +219,19 @@ export class ArenaApi {
             void this.opts.runner?.update(u.id);
           }
           else if (route === "/bots/versions") reply(res, 200, { versions: bots.versions(body.id) });
+          else if (route === "/bots/state") {
+            // pause: keeps positions under their stops, opens nothing new. stop: closes positions and ends the run.
+            const to = { pause: "paused", resume: "running", stop: "stopped" }[String(body.to)];
+            const bot = body.to === "again" ? bots.startAgain(body.id) : to ? bots.setState(body.id, to as "paused" | "running" | "stopped") : null;
+            if (!bot) return this.send(res, 400, { error: "Unknown action." });
+            await this.opts.runner?.update(u.id);
+            reply(res, 200, { bot });
+          } else if (route === "/bots/state-all") {
+            if (body.to !== "pause" && body.to !== "resume") return this.send(res, 400, { error: "Unknown action." });
+            const changed = bots.setAll(body.to === "pause" ? "paused" : "running");
+            await this.opts.runner?.update(u.id);
+            reply(res, 200, { changed });
+          }
           else {
             const gone = bots.find(body.id);
             bots.remove(gone.id);

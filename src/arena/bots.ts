@@ -25,6 +25,9 @@ export const LIMITS: Record<Tier, PlanLimits> = {
 
 export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] as const;
 
+/** running: trades. paused: keeps what it holds under its stops, opens nothing new. stopped: closed out and finished. */
+export type BotState = "running" | "paused" | "stopped";
+
 export interface BotView {
   id: string;
   name: string;
@@ -39,6 +42,7 @@ export interface BotView {
   image: boolean;
   /** Shown on the public leaderboard (name, style and results only; never positions or rules). */
   listed: boolean;
+  state: BotState;
   version: number;
   createdAt: number;
 }
@@ -77,10 +81,11 @@ interface Row {
   look: string;
   image: number;
   listed: number;
+  state: string;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, version: r.version, createdAt: r.created_at });
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, version: r.version, createdAt: r.created_at });
 
 /** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
 export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
@@ -202,6 +207,39 @@ export class Bots {
       throw e;
     }
     return toView(this.get(cur.id));
+  }
+
+  /** Pause keeps the positions under their stops and opens nothing new; resume undoes it. Stop closes everything and ends this run. */
+  setState(id: unknown, to: BotState): BotView {
+    const cur = this.get(id);
+    const from = cur.state as BotState;
+    const ok = (from === "running" && (to === "paused" || to === "stopped")) || (from === "paused" && (to === "running" || to === "stopped"));
+    if (!ok) throw new BotError(from === "stopped" ? "This agent is stopped. Start it again to run it." : `This agent is already ${from}.`, 409);
+    this.db.prepare("UPDATE bots SET state = ? WHERE id = ?").run(to, cur.id);
+    return toView(this.get(cur.id));
+  }
+
+  /** A stopped agent runs again as a new version: a fresh paper account, the old run kept in its history. */
+  startAgain(id: unknown): BotView {
+    const cur = this.get(id);
+    if (cur.state !== "stopped") throw new BotError("Only a stopped agent can be started again.", 409);
+    const version = cur.version + 1;
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("UPDATE bots SET state = 'running', version = ? WHERE id = ?").run(version, cur.id);
+      this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(cur.id, version, cur.style, cur.coins, cur.rules, this.now());
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+    return toView(this.get(cur.id));
+  }
+
+  /** Pauses every running agent (the Home's "Pause all"), or resumes every paused one. Returns how many changed. */
+  setAll(to: "paused" | "running"): number {
+    const from = to === "paused" ? "running" : "paused";
+    return Number(this.db.prepare("UPDATE bots SET state = ? WHERE state = ?").run(to, from).changes);
   }
 
   remove(id: unknown): void {
