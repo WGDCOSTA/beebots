@@ -39,7 +39,11 @@ export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] 
 /** running: trades. paused: keeps what it holds under its stops, opens nothing new. stopped: closed out and finished. quarantined: the plan no longer allows it; stopped, off the board, kept for QUARANTINE_DAYS, restored by upgrading. */
 export type BotState = "running" | "paused" | "stopped" | "quarantined";
 
+/** fixed: one style the member picked. autonomous (Premium): the agent picks and changes its own style and trades any coin the market offers. */
+export type BotMode = "fixed" | "autonomous";
+
 export interface BotView {
+  mode: BotMode;
   id: string;
   name: string;
   theme: string;
@@ -63,6 +67,7 @@ export interface BotView {
 }
 
 export interface BotInput {
+  mode?: unknown;
   brainKey?: unknown;
   listed?: unknown;
   tagline?: unknown;
@@ -101,10 +106,11 @@ interface Row {
   state: string;
   quarantined_at: number | null;
   brain_key: string | null;
+  mode: string;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, brainKey: r.brain_key, version: r.version, createdAt: r.created_at });
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, brainKey: r.brain_key, mode: r.mode === "autonomous" ? "autonomous" : "fixed", version: r.version, createdAt: r.created_at });
 
 /** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
 export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
@@ -117,6 +123,7 @@ export function styleCoinProblem(style: StyleId, coins: readonly string[]): stri
 }
 
 interface Clean {
+  mode: BotMode;
   name: string;
   theme: string;
   avatar: string;
@@ -143,7 +150,7 @@ export class Bots {
     return r;
   }
 
-  private clean(i: BotInput, exceptId?: string): Clean {
+  private clean(i: BotInput, exceptId?: string, mode0: unknown = i.mode): Clean {
     const lim = LIMITS[this.tier];
     const name = typeof i.name === "string" ? i.name.trim().replace(/\s+/g, " ") : "";
     if (!NAME_RE.test(name)) throw new BotError("Name: 2 to 24 letters, numbers, spaces, apostrophes or hyphens.");
@@ -157,17 +164,23 @@ export class Bots {
     const avatar = typeof i.avatar === "string" ? avatarOf(theme.id, i.avatar) : undefined;
     if (!avatar) throw new BotError("Pick an avatar from that theme.");
 
-    const style = STYLES.find((s) => s === i.style);
+    // Autonomous (Premium only): no style and no coin list to pick. It starts as Momentum, which takes any coin, and chooses
+    // its own style from there. The mode is fixed when the agent is made: a fixed agent never turns autonomous, or the other way round.
+    const mode: BotMode = mode0 === "autonomous" ? "autonomous" : "fixed";
+    if (mode === "autonomous" && !lim.autonomy) throw new BotError("Autonomous agents are for Premium members.", 403);
+    const style = mode === "autonomous" ? ("boozy" as const) : STYLES.find((s) => s === i.style);
     if (!style) throw new BotError("Pick a trading style.");
     if (!lim.styles.includes(style)) throw new BotError("That style is for Pro members.", 403);
 
     const coinsIn = Array.isArray(i.coins) ? i.coins : [];
-    const coins = [...new Set(coinsIn.filter((c): c is string => typeof c === "string").map((c) => c.toUpperCase()))];
-    if (coins.length === 0 || coins.some((c) => !(COINS as readonly string[]).includes(c))) throw new BotError("Pick at least one coin from the list.");
-    if (coins.length > lim.maxCoins) throw new BotError(`Your plan allows up to ${lim.maxCoins} coins per agent.`, 403);
-
-    const mismatch = styleCoinProblem(style, coins);
-    if (mismatch) throw new BotError(mismatch);
+    let coins = [...new Set(coinsIn.filter((c): c is string => typeof c === "string").map((c) => c.toUpperCase()))];
+    if (mode === "autonomous") coins = []; // empty means: any coin the market offers
+    else {
+      if (coins.length === 0 || coins.some((c) => !(COINS as readonly string[]).includes(c))) throw new BotError("Pick at least one coin from the list.");
+      if (coins.length > lim.maxCoins) throw new BotError(`Your plan allows up to ${lim.maxCoins} coins per agent.`, 403);
+      const mismatch = styleCoinProblem(style, coins);
+      if (mismatch) throw new BotError(mismatch);
+    }
 
     const rules = typeof i.rules === "string" ? i.rules.trim() : "";
     if (rules.length < MIN_RULES || rules.length > MAX_RULES) throw new BotError(`Rules: ${MIN_RULES} to ${MAX_RULES} characters.`);
@@ -175,7 +188,7 @@ export class Bots {
     let tagline = typeof i.tagline === "string" ? i.tagline.replace(/\s+/g, " ").trim().slice(0, 40) : "";
     if (tagline && !/^the\b/i.test(tagline)) tagline = `the ${tagline}`.slice(0, 40);
     const look = typeof i.look === "string" ? i.look.replace(/\s+/g, " ").trim().slice(0, 400) : "";
-    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined, brainKey: i.brainKey === undefined ? undefined : typeof i.brainKey === "string" && /^[0-9a-f]{12}$/.test(i.brainKey) ? i.brainKey : null };
+    return { mode, name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined, brainKey: i.brainKey === undefined ? undefined : typeof i.brainKey === "string" && /^[0-9a-f]{12}$/.test(i.brainKey) ? i.brainKey : null };
   }
 
   create(i: BotInput): BotView {
@@ -187,7 +200,7 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, brain_key, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, c.brainKey ?? null, t);
+      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, brain_key, mode, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, c.brainKey ?? null, c.mode, t);
       this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, 1, ?, ?, ?, ?)").run(id, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {
@@ -215,7 +228,7 @@ export class Bots {
   update(id: unknown, i: BotInput): BotView {
     const cur = this.get(id);
     if (cur.state === "quarantined") throw new BotError(QUARANTINED_MSG, 409);
-    const c = this.clean(i, cur.id);
+    const c = this.clean(i, cur.id, cur.mode);
     // A different model is a different agent: its record starts again, so results stay comparable.
     const same = c.style === cur.style && c.rules === cur.rules && JSON.stringify(c.coins) === cur.coins && (c.brainKey === undefined || c.brainKey === cur.brain_key);
     const version = same ? cur.version : cur.version + 1;
@@ -273,7 +286,7 @@ export class Bots {
     const restored: string[] = [];
     let kept = 0;
     for (const r of rows) {
-      const fits = lim.styles.includes(r.style as StyleId) && kept < lim.bots;
+      const fits = (r.mode === "autonomous" ? lim.autonomy : lim.styles.includes(r.style as StyleId)) && kept < lim.bots;
       if (fits) kept++;
       if (fits && r.state === "quarantined") {
         this.db.prepare("UPDATE bots SET state = 'stopped', quarantined_at = NULL WHERE id = ?").run(r.id);

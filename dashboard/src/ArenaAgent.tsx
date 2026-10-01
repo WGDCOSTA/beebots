@@ -3,7 +3,7 @@
 // Pause keeps the position under its stop and opens nothing new. Stop closes the position and ends this run.
 import { useCallback, useEffect, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
-import { fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, sparkPath, STYLE_KEYS } from "./arenaModel";
+import { fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, sparkPath, STYLE_KEYS, styleTitleKey } from "./arenaModel";
 import { ArenaDecisions, useAgo, type DecisionFact } from "./ArenaDecisions";
 import { ArenaSettings } from "./ArenaSettings";
 import { Portrait, StatePill, type ArenaData } from "./ArenaParts";
@@ -58,6 +58,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
   const agent = data.agents.find((a) => a.id === id);
   const [tab, setTab] = useState<Tab>("performance");
   const [ins, setIns] = useState<Insights | null>(null);
+  const [styles, setStyles] = useState<Array<{ ts: number; style: string; reason: string; changed: boolean }>>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [rank, setRank] = useState<{ rank: number; league: string } | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -66,8 +67,11 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
 
   const loadInsights = useCallback(async () => {
     try {
-      const r = await arena<{ insights: Insights | null }>("GET", `bots/insights?id=${encodeURIComponent(id)}`);
-      if (r.status === 200) setIns(r.data.insights);
+      const r = await arena<{ insights: Insights | null; styleLog?: Array<{ ts: number; style: string; reason: string; changed: boolean }> }>("GET", `bots/insights?id=${encodeURIComponent(id)}`);
+      if (r.status === 200) {
+        setIns(r.data.insights);
+        setStyles(r.data.styleLog ?? []);
+      }
     } catch {
       /* the page keeps showing what it has */
     }
@@ -128,7 +132,8 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             <h1 className="as-title ag-name">{agent.name}</h1>
             <span className="dim small">
               {agent.tagline && `${agent.tagline} · `}
-              {t(STYLE_KEYS[agent.style]?.title ?? "style.breezy.t")} · v{agent.version}
+              {t(styleTitleKey(agent.mode, agent.style))}
+              {agent.mode === "autonomous" && run?.style ? ` (${t("auto.now", { style: t(STYLE_KEYS[run.style]?.title ?? "style.breezy.t") })})` : ""} · v{agent.version}
             </span>
           </div>
           <StatePill enabled={data.runner.enabled} state={agent.state} run={run} />
@@ -253,7 +258,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             )}
           </>
         )}
-        {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} />}
+        {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} />}
         {tab === "versions" && (
           <>
             <p className="dim small">{t("ver.intro")}</p>
@@ -264,7 +269,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
                     <strong>v{v.version}</strong> {v.version === agent.version && <span className="ag-pill run">{t("ver.current")}</span>} <span className="dim small">{t("ver.started", { when: new Date(v.createdAt).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) })}</span>
                   </div>
                   <div className="small">
-                    {t(STYLE_KEYS[v.style]?.title ?? "style.breezy.t")} · {v.coins.join(", ")}
+                    {t(styleTitleKey(agent.mode, v.style))} · {agent.mode === "autonomous" ? t("coins.any") : v.coins.join(", ")}
                   </div>
                   <div className="ab-rules-preview small">{v.rules}</div>
                 </li>

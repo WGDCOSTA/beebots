@@ -36,6 +36,8 @@ export function resendIn(sentAt: number, now: number, cooldownMs = 30_000): numb
 export const PROVIDER_LABEL: Record<string, string> = { openai: "OpenAI", claude: "Claude (Anthropic)", zai: "Z.ai (GLM)", kimi: "Kimi (Moonshot)" };
 
 export interface BotDraft {
+  /** fixed (default) or autonomous (Premium): the agent picks its own style and coins. */
+  mode?: "fixed" | "autonomous";
   /** The member's own model key it thinks with; null or missing = the platform's model. */
   brainKey?: string | null;
   name: string;
@@ -76,6 +78,7 @@ const lookIssue = (d: BotDraft): Say | null => {
   return null;
 };
 const styleIssue = (d: BotDraft, maxCoins: number, styleName: Names): Say | null => {
+  if (d.mode === "autonomous") return null; // no style or coins to pick
   if (!d.style) return { key: "prob.style" };
   if (d.coins.length === 0) return { key: "prob.coins" };
   if (d.coins.length > maxCoins) return { key: "prob.maxCoins", vars: { n: maxCoins } };
@@ -136,6 +139,8 @@ export interface RunStatus {
   orders?: number;
   spentUsd?: number;
   capped?: boolean;
+  /** Autonomous agents: the style it chose last. */
+  style?: string | null;
   last?: { choice: string | null; confidence: number | null; status: string; ts: number } | null;
 }
 
@@ -301,6 +306,11 @@ export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
     { key: "plans.f.skills", vars: { n: l.skillSlots }, soon: true },
   ];
   if (l.history) out.push({ key: "plans.f.history", soon: true });
-  if (l.autonomy) out.push({ key: "plans.f.auto", soon: true });
+  if (l.autonomy) out.push({ key: "plans.f.auto" });
   return out;
+}
+
+/** The name of the style an agent trades, or what it is when it chooses its own. */
+export function styleTitleKey(mode: string | undefined, style: string): Key {
+  return mode === "autonomous" ? "style.auto.t" : (STYLE_KEYS[style]?.title ?? "style.breezy.t");
 }

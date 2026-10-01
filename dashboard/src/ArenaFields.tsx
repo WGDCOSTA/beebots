@@ -63,8 +63,18 @@ export function LookFields({ cat, limits, d, set }: Props) {
   );
 }
 
-export function StyleFields({ cat, limits, d, set }: Props) {
+export function StyleFields({ cat, limits, d, set, locked }: Props & { locked?: boolean }) {
   const { t } = useI18n();
+  if (d.mode === "autonomous")
+    return (
+      <>
+        <div className="eyebrow">{t("field.style")}</div>
+        <div className="ab-style on" aria-live="polite">
+          <strong>{t("style.auto.t")}</strong>
+          <span className="dim small">{t("style.auto.b")}</span>
+        </div>
+      </>
+    );
   return (
     <>
       <div className="eyebrow">{t("field.style")}</div>
@@ -164,6 +174,35 @@ export function BrainField({ d, set, keys }: Pick<Props, "d" | "set"> & { keys: 
       {keys.keys.length === 0 && (
         <a className="small" href="#/arena/me">
           {t("brain.addKey")}
+        </a>
+      )}
+    </>
+  );
+}
+
+/** Fixed style or autonomous. Chosen when the agent is made and never changed afterwards. Autonomous is Premium only: shown locked, with the way to the plans. */
+export function ModeField({ d, set, limits }: Pick<Props, "d" | "set" | "limits">) {
+  const { t } = useI18n();
+  const auto = d.mode === "autonomous";
+  return (
+    <>
+      <div className="eyebrow">{t("mode.field")}</div>
+      <div className="ab-styles">
+        <button type="button" className={`ab-style ${!auto ? "on" : ""}`} aria-pressed={!auto} onClick={() => set({ ...d, mode: "fixed" })}>
+          <strong>{t("mode.fixed.t")}</strong>
+          <span className="dim small">{t("mode.fixed.b")}</span>
+        </button>
+        <button type="button" className={`ab-style ${auto ? "on" : ""}`} aria-pressed={auto} disabled={!limits.autonomy} onClick={() => set({ ...d, mode: "autonomous" })}>
+          <strong>
+            {t("mode.auto.t")}
+            {!limits.autonomy && <small> {t("field.premium")}</small>}
+          </strong>
+          <span className="dim small">{t("mode.auto.b")}</span>
+        </button>
+      </div>
+      {!limits.autonomy && (
+        <a className="small" href="#/arena/plans">
+          {t("plans.seeLocked")}
         </a>
       )}
     </>

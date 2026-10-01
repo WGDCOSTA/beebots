@@ -9,7 +9,7 @@ import { useI18n } from "./i18n/I18n";
 
 export function ArenaSettings({ data, limits, agent, onGone }: { data: ArenaData; limits: Limits; agent: Agent; onGone: () => void }) {
   const { t } = useI18n();
-  const [d, setD] = useState<BotDraft>({ name: agent.name, theme: agent.theme, avatar: agent.avatar, style: agent.style, coins: agent.coins, rules: agent.rules, tagline: agent.tagline, look: agent.look, listed: agent.listed, brainKey: agent.brainKey ?? null });
+  const [d, setD] = useState<BotDraft>({ name: agent.name, theme: agent.theme, avatar: agent.avatar, style: agent.style, coins: agent.coins, rules: agent.rules, tagline: agent.tagline, look: agent.look, listed: agent.listed, brainKey: agent.brainKey ?? null, mode: agent.mode });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [painting, setPainting] = useState(false);

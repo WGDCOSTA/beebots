@@ -2,7 +2,7 @@
 // done, and the risk rule that overruled it or acted for it. The model answers with a choice and odds, not words, so
 // nothing here is an explanation the platform invented.
 import { useState } from "react";
-import { agoParts, choiceText, didKey, riskSay } from "./arenaModel";
+import { agoParts, choiceText, didKey, riskSay, STYLE_KEYS } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
 
 export interface DecisionFact {
@@ -104,10 +104,38 @@ function Decision({ d }: { d: DecisionFact }) {
   );
 }
 
-export function ArenaDecisions({ decisions }: { decisions: DecisionFact[] }) {
+/** An autonomous agent's style choices. The reason is what its model said, shown as such: nothing checks it. */
+function StyleChoices({ log }: { log: Array<{ ts: number; style: string; reason: string; changed: boolean }> }) {
+  const { t } = useI18n();
+  const ago = useAgo();
+  return (
+    <section className="dc-styles">
+      <div className="eyebrow">{t("auto.choices")}</div>
+      <p className="dim small">{t("auto.choicesHelp")}</p>
+      {log.length === 0 ? (
+        <p className="dim small">{t("auto.none")}</p>
+      ) : (
+        <ul className="dc-list">
+          {log.map((e) => (
+            <li className="dc" key={e.ts}>
+              <div className="dc-head">
+                <strong>{t(e.changed ? "auto.switched" : "auto.kept", { style: t(STYLE_KEYS[e.style]?.title ?? "style.breezy.t") })}</strong>
+                <span className="dim small">{ago(e.ts)}</span>
+              </div>
+              <div className="small">{t("auto.said", { reason: e.reason })}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function ArenaDecisions({ decisions, styles = null }: { decisions: DecisionFact[]; styles?: Array<{ ts: number; style: string; reason: string; changed: boolean }> | null }) {
   const { t } = useI18n();
   return (
     <>
+      {styles && <StyleChoices log={styles} />}
       <p className="dim small">{t("dec.intro")}</p>
       {decisions.length === 0 ? <p className="dim">{t("dec.empty")}</p> : <ul className="dc-list">{decisions.map((d, i) => <Decision key={`${d.ts}-${i}`} d={d} />)}</ul>}
     </>

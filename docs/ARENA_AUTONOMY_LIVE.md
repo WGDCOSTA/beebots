@@ -44,6 +44,8 @@ What it takes in the engine (not built):
 
 The Decisions tab already shows what it saw, the odds and the rule that overruled it, so an autonomous agent's style changes appear there with no new screen.
 
+**Built on paper (step 6, 1 Oct 2026), and what it does not do yet.** A Premium member picks "Autonomous" when creating an agent (it cannot be changed afterwards, either way). The agent starts as Momentum, which takes any coin the market feed offers, and asks its model every 6 hours (and at start) which of the three styles fits the market, given a short summary of the biggest coins and the member's guidance; the engine adopts the new style only while the agent holds nothing, so it never switches mid-position. Each choice is recorded with the model's one-line reason, shown as "the model said": the platform does not check it. The style calls are paid from the agent's own daily model spend and skipped near the ceiling. It has its own league on the board (`premium:autonomous`) and can be kept private. If a Premium member downgrades, an autonomous agent goes into quarantine like any agent the plan no longer allows. **Not in this step:** scalp (needs the 1-minute feed and the lab's gate, which the Arena does not have), stocks (needs a broker), any style beyond the three, and live trading. Without a model for style calls (the platform has none configured and the agent is on the platform's model) the agent simply stays on Momentum.
+
 ## 4. Several model brains per agent (Premium)
 
 The owner's admin already has a registry of brains (OpenAI, Z.ai GLM, custom OpenAI-compatible endpoints). For members the open choices are:

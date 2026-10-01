@@ -150,7 +150,7 @@ export function ArenaRanking() {
                     <strong>{r.name}</strong> {r.mine && <span className="badge ok">{t("rank.you")}</span>}
                   </div>
                   <div className="dim small">
-                    @{r.handle} · {STYLE_KEYS[r.style] ? t(STYLE_KEYS[r.style]!.title) : r.style} · v{r.version}
+                    @{r.handle} · {r.style === "autonomous" ? t("style.auto.t") : STYLE_KEYS[r.style] ? t(STYLE_KEYS[r.style]!.title) : r.style} · v{r.version}
                   </div>
                   <div className="rk-stats small">
                     <span className={r.metrics!.returnPct >= 0 ? "good" : "bad"}>{fmtPct(r.metrics!.returnPct, locale)}</span>
