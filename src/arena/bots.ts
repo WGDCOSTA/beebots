@@ -56,11 +56,14 @@ export interface BotView {
   state: BotState;
   /** When it went into quarantine, or null. */
   quarantinedAt: number | null;
+  /** The member's own model key it thinks with (their bill), or null for the platform's model. */
+  brainKey: string | null;
   version: number;
   createdAt: number;
 }
 
 export interface BotInput {
+  brainKey?: unknown;
   listed?: unknown;
   tagline?: unknown;
   look?: unknown;
@@ -97,10 +100,11 @@ interface Row {
   listed: number;
   state: string;
   quarantined_at: number | null;
+  brain_key: string | null;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, version: r.version, createdAt: r.created_at });
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, brainKey: r.brain_key, version: r.version, createdAt: r.created_at });
 
 /** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
 export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
@@ -122,6 +126,8 @@ interface Clean {
   tagline: string;
   look: string;
   listed: boolean | undefined;
+  /** undefined = not sent (keep what it has); null = the platform's model. */
+  brainKey: string | null | undefined;
 }
 
 export class Bots {
@@ -169,7 +175,7 @@ export class Bots {
     let tagline = typeof i.tagline === "string" ? i.tagline.replace(/\s+/g, " ").trim().slice(0, 40) : "";
     if (tagline && !/^the\b/i.test(tagline)) tagline = `the ${tagline}`.slice(0, 40);
     const look = typeof i.look === "string" ? i.look.replace(/\s+/g, " ").trim().slice(0, 400) : "";
-    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined };
+    return { name, theme: theme.id, avatar: avatar.id, style, coins, rules, tagline, look, listed: typeof i.listed === "boolean" ? i.listed : undefined, brainKey: i.brainKey === undefined ? undefined : typeof i.brainKey === "string" && /^[0-9a-f]{12}$/.test(i.brainKey) ? i.brainKey : null };
   }
 
   create(i: BotInput): BotView {
@@ -181,7 +187,7 @@ export class Bots {
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, t);
+      this.db.prepare("INSERT INTO bots (id, name, theme, avatar, style, coins, rules, tagline, look, listed, brain_key, version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)").run(id, c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === false ? 0 : 1, c.brainKey ?? null, t);
       this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, 1, ?, ?, ?, ?)").run(id, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {
@@ -210,12 +216,13 @@ export class Bots {
     const cur = this.get(id);
     if (cur.state === "quarantined") throw new BotError(QUARANTINED_MSG, 409);
     const c = this.clean(i, cur.id);
-    const same = c.style === cur.style && c.rules === cur.rules && JSON.stringify(c.coins) === cur.coins;
+    // A different model is a different agent: its record starts again, so results stay comparable.
+    const same = c.style === cur.style && c.rules === cur.rules && JSON.stringify(c.coins) === cur.coins && (c.brainKey === undefined || c.brainKey === cur.brain_key);
     const version = same ? cur.version : cur.version + 1;
     const t = this.now();
     this.db.exec("BEGIN");
     try {
-      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, listed = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === undefined ? cur.listed : c.listed ? 1 : 0, version, cur.id);
+      this.db.prepare("UPDATE bots SET name = ?, theme = ?, avatar = ?, style = ?, coins = ?, rules = ?, tagline = ?, look = ?, listed = ?, brain_key = ?, version = ? WHERE id = ?").run(c.name, c.theme, c.avatar, c.style, JSON.stringify(c.coins), c.rules, c.tagline, c.look, c.listed === undefined ? cur.listed : c.listed ? 1 : 0, c.brainKey === undefined ? cur.brain_key : c.brainKey, version, cur.id);
       if (!same) this.db.prepare("INSERT INTO bot_versions (bot_id, version, style, coins, rules, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(cur.id, version, c.style, JSON.stringify(c.coins), c.rules, t);
       this.db.exec("COMMIT");
     } catch (e) {

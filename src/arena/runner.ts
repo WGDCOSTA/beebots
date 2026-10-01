@@ -17,6 +17,8 @@ import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, type BotView } from "./bots.js";
 import { readInsights, type Insights } from "./insights.js";
+import { LlmSystemOne } from "./decider.js";
+import { EST_USD_PER_MTOK, type Vault } from "./vault.js";
 import type { Leaderboard } from "./ranking.js";
 import type { ArenaStore } from "./store.js";
 
@@ -42,6 +44,10 @@ export interface RunnerOpts {
   leaderboard?: Leaderboard;
   /** How often a running bot's paper equity is sampled for the ranking. */
   sampleMs?: number;
+  /** The key vault: an agent set to think with its member's own key gets that key's model and the member's own daily ceiling. */
+  vault?: Vault;
+  /** The daily decision spend an agent on its member's own key may use when the member set no ceiling, in USD. */
+  ownKeyDailyUsd?: number;
 }
 
 /** A stopped agent, or one in quarantine: no engine, no ranking, positions closed. */
@@ -85,13 +91,13 @@ export class ArenaRunner {
   private runs = new Map<string, Run>();
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
-  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard">;
+  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault">;
   private timer: NodeJS.Timeout | null = null;
   private sampler: NodeJS.Timeout | null = null;
   private settler: NodeJS.Timeout | null = null;
 
   constructor(opts: RunnerOpts) {
-    this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, now: Date.now, ...opts };
+    this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, ownKeyDailyUsd: 1000, now: Date.now, ...opts };
   }
 
   /** The positions every running bot holds, so the shared feed keeps their coins fresh. */
@@ -108,7 +114,7 @@ export class ArenaRunner {
     return this.queue;
   }
 
-  private config(bot: BotView, file: string): Config {
+  private config(bot: BotView, file: string, dailyUsd: number, usdPerMTok: number): Config {
     const t = this.o.now();
     const settings = {
       version: 1,
@@ -123,8 +129,8 @@ export class ArenaRunner {
         DRY_RUN: "true",
         TICK_MS: String(this.o.tickMs),
         BEE_START_EQUITY_USD: String(this.o.startUsd),
-        JEV_DAILY_USD_CAP: String(this.o.dailyUsd),
-        JEV_USD_PER_MTOK: String(this.o.usdPerMTok),
+        JEV_DAILY_USD_CAP: String(dailyUsd),
+        JEV_USD_PER_MTOK: String(usdPerMTok),
         DB_PATH: file,
         LOG_LEVEL: "warn",
       },
@@ -137,11 +143,23 @@ export class ArenaRunner {
   private async start(userId: string, bot: BotView): Promise<void> {
     mkdirSync(this.dir(userId), { recursive: true });
     const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
-    const cfg = this.config(bot, file);
+    // The platform's model and its small daily ceiling, or the member's own key, its model and the member's own ceiling.
+    // An agent set to its member's key never falls back to the platform's model: if the key is gone it does not start.
+    let decider = this.o.decider;
+    let dailyUsd = this.o.dailyUsd;
+    let usdPerMTok = this.o.usdPerMTok;
+    if (bot.brainKey) {
+      const k = this.o.vault?.for(this.o.store.tenant(userId), userId, this.o.now).secret(bot.brainKey);
+      if (!k) throw new Error("its own model key is not available");
+      decider = new LlmSystemOne(this.o.vault!.brain(k.provider, k.secret, k.model), `own-${k.provider}`);
+      dailyUsd = k.dailyUsd ?? this.o.ownKeyDailyUsd;
+      usdPerMTok = EST_USD_PER_MTOK[k.provider];
+    }
+    const cfg = this.config(bot, file, dailyUsd, usdPerMTok);
     const db = new Db(file);
     const ctl = { paused: bot.state === "paused", closing: false };
     try {
-      const jev = new Jev({ ...cfg.jev, client: this.o.decider, now: this.o.now });
+      const jev = new Jev({ ...cfg.jev, client: decider, now: this.o.now });
       const engine = new Engine({
         cfg,
         db,
