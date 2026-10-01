@@ -241,6 +241,12 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
 - **`COACH_INTERVAL_MIN`** (0 = off): each brain reviews its bunny's last 24 h (closed trades, P&L, fees, equity change,
   risk vetoes) and re-weights its adopted skills. It may drop a skill but never add one; new skills only come from a
   lab run and the council. It also reviews the watchlist (see below). At most `COACH_MAX_CALLS_DAY` calls a day.
+- **`SELF_RESEARCH_INTERVAL_MIN`** (default 360): every agent's own brain reviews its prior experiments, may select any
+  positively tested skill regardless of its original style, and must propose one new JSON skill hypothesis. The engine
+  compiles it and runs the existing bounded walk-forward test. It is adopted only with a positive out-of-sample score
+  and at least 50% stability. Accepted and rejected attempts are both stored as experiment nodes linked to the agent,
+  brain and skill, and summarized into that agent's long-term memory. `SELF_RESEARCH_MAX_CALLS_DAY` is a separate cap,
+  so research can never consume the emergency survival-council budget. Set the interval to 0 to disable the loop.
 
 ## Which coins each bunny trades: the watchlist
 
@@ -435,21 +441,21 @@ surviving the day**, **+5 for the day's best bunny**. Points never go below zero
 
 | Level | Points | Prizes |
 |---|---|---|
-| 0 | 0 | 3 skills in its playbook |
-| 1 | 50 | 4 skills, **writes new skills** in its councils, +10% max position |
-| 2 | 150 | 5 skills, +20% max position, +1 trade a day |
-| 3 | 300 | 6 skills, **one extra brain** in its councils, +30% max position, **2 positions (multi-orders)** |
-| 4 | 500 | +40% max position, +2 trades a day |
-| 5 | 800 | **two extra brains**, +50% max position (`REWARD_MAX_LIMIT_BOOST`), **3 positions** |
+| 0 | 0 | 3 skills, writes/test skills, **3 positions** |
+| 1 | 50 | 4 skills, +10% max position, **6 positions** |
+| 2 | 150 | 5 skills, +20% max position, +1 trade a day, **9 positions** |
+| 3 | 300 | 6 skills, **one extra brain**, +30% max position, **12 positions** |
+| 4 | 500 | +40% max position, +2 trades a day, **15 positions** |
+| 5 | 800 | **two extra brains**, +50% max position (`REWARD_MAX_LIMIT_BOOST`), **18 positions** |
 
 A level-up wakes a reward council (the prize in action). Leverage is never raised (hard rule: `MAX_LEVERAGE` ≤ 2
 still caps every position), and with real money limit boosts are off unless `REWARDS_IN_LIVE=true`. The Lab page's
 **Evolution** table ranks the bunnies by points with health, level progress, prizes, the last days and deaths.
 
-### Multi-orders (a prize for top performers)
+### Multi-orders
 
-A bunny that performs well earns more **position slots**: **2 at level 3, 3 at level 5** (capped by
-`MAX_POSITIONS_PER_BEE`, default 3; 1 turns it off). While it holds its main position, Jev's menu then also offers
+A bunny starts with up to **3 position slots at level zero** and earns **3 more per level** (capped by
+`MAX_POSITIONS_PER_BEE`, default 18; 1 turns it off). While it holds its main position, Jev's menu then also offers
 `LEG_*` options (the openings the bunny's style would offer if it were flat, on coins it does not hold yet) and
 `CLOSE_LEG_<coin>` for each extra position it holds. What stays fixed:
 
@@ -458,7 +464,7 @@ A bunny that performs well earns more **position slots**: **2 at level 3, 3 at l
 - every leg has its own code stop, trailing and profit lock, and code closes it at its stop, a macro session close,
   a time stop, or the bunny's retire / daily loss stop, whatever Jev says;
 - a bunny in danger or worse is back to one position (legs it holds are still managed to their exits);
-- with real money it follows `REWARDS_IN_LIVE` (off by default, like limit boosts);
+- position count never increases the leverage or notional ceiling; `REWARDS_IN_LIVE` still controls only size/trade-limit boosts;
 - when the main position closes, the oldest leg becomes the main one. Reconciliation (demo/live) compares every
   position against OKX and rebuilds all of them from OKX on a mismatch.
 

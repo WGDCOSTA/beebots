@@ -75,11 +75,11 @@ describe("rewards", () => {
     expect(levelFor(0)).toBe(0);
     expect(levelFor(150)).toBe(2);
     expect(levelFor(10_000)).toBe(5);
-    expect(perksFor(0, OPTS)).toMatchObject({ canAuthorSkills: false, extraBrains: 0, limitBoost: 0 });
+    expect(perksFor(0, OPTS)).toMatchObject({ canAuthorSkills: true, extraBrains: 0, limitBoost: 0, positions: 3 });
     expect(perksFor(3, OPTS)).toMatchObject({ skillSlots: 6, canAuthorSkills: true, extraBrains: 1, limitBoost: 0.3 });
     expect(perksFor(5, OPTS).limitBoost).toBe(0.5);
     expect(perksFor(5, { ...OPTS, boostLimits: false })).toMatchObject({ limitBoost: 0, extraTrades: 0, canAuthorSkills: true });
-    expect(perksFor(5, { ...OPTS, rewards: false }).canAuthorSkills).toBe(false);
+    expect(perksFor(5, { ...OPTS, rewards: false })).toMatchObject({ canAuthorSkills: true, positions: 18 });
   });
 
   it("revival keeps half the points and resets health", () => {
@@ -163,6 +163,8 @@ describe("survival council", () => {
       expect(h.registered).toContain(good!.id);
       expect(h.graph.out(nodeId("bee", "bee1"), "authored")).toHaveLength(1);
     }
+    expect(h.graph.out(nodeId("bee", "bee1"), "tested")).toHaveLength(2);
+    expect(h.graph.nodes("experiment")).toHaveLength(2);
     // Every skill that compiled is handed to the workshop, accepted or not; broken JSON never is. No cached history: synthetic.
     expect(h.drafts).toEqual([{ id: good!.id, accepted: good!.accepted, real: false }]);
     const pb = loadPlaybook(h.playbookPath)!;
@@ -173,12 +175,24 @@ describe("survival council", () => {
     expect(await h.council.convene(h.b, "survival")).toBeNull();
   });
 
-  it("a healthy level-0 bee gets only its own brain and may not write skills", async () => {
+  it("a healthy level-0 bee gets its own brain and may research a backtested skill", async () => {
     const h = setup("healthy", 0);
     expect(h.council.brainsFor(h.b, "healthy")).toEqual(["openai"]);
     await h.council.convene(h.b, "manual");
-    expect(h.openai.asked[0]!.system).toMatch(/has not earned the right/);
+    expect(h.openai.asked[0]!.system).toMatch(/MAY write one new skill/);
     expect(h.claude.asked).toHaveLength(0);
+  });
+
+  it("runs self-research with the agent's own brain and records the result without using peers", async () => {
+    const h = setup("healthy", 0);
+    const out = await h.council.convene(h.b, "research");
+    expect(out?.reason).toBe("research");
+    expect(out?.brains).toEqual(["openai"]);
+    expect(h.openai.asked[0]!.system).toMatch(/MUST propose one new/);
+    expect(h.claude.asked).toHaveLength(0);
+    expect(h.graph.out(nodeId("bee", "bee1"), "tested")).toHaveLength(1);
+    expect(h.graph.lessons(nodeId("bee", "bee1"), 10).some((x) => x.text.startsWith("Research bee1_calm_trend:"))).toBe(true);
+    expect(await h.council.convene(h.b, "research")).toBeNull();
   });
 
   it("a level-3 bee earns one extra brain", () => {

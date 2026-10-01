@@ -82,7 +82,8 @@ describe("rules-only hold: Jev is not asked", () => {
   const market = () => view([ena, coin("SUI", { ret24hPct: 12, ret7dPct: 40 }), coin("BTC", { ret24hPct: 1, ret7dPct: 2 }, 80000)]);
 
   async function harness() {
-    const cfg = testConfig({ DRY_RUN: "true" });
+    // Keep one slot so this suite continues to isolate the rules-only HOLD fast path.
+    const cfg = testConfig({ DRY_RUN: "true", MAX_POSITIONS_PER_BEE: "1" });
     const v = market();
     const feed = { view: () => v, refresh: async () => {}, refreshTickers: async () => {}, lastRefreshAt: NOW } as unknown as MarketFeed;
     const calls: string[] = [];

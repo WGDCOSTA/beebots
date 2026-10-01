@@ -16,7 +16,7 @@ import type { GraphEdge, GraphNode, KnowledgeGraph } from "./graph.js";
 export type Confidence = "EXTRACTED" | "INFERRED" | "AMBIGUOUS";
 
 /** Relations that record something measured (a fill, a backtest, a configuration), not an opinion. */
-const FACT_RELS = new Set(["traded", "performs_on", "ranked", "authored", "restricted_to", "thinks_with", "to", "said", "learned"]);
+const FACT_RELS = new Set(["traded", "performs_on", "ranked", "authored", "tested", "tested_skill", "restricted_to", "thinks_with", "to", "said", "learned"]);
 
 export function confidenceOf(e: Pick<GraphEdge, "rel">): Confidence {
   return FACT_RELS.has(e.rel) ? "EXTRACTED" : "INFERRED";

@@ -4,6 +4,8 @@ services:
   engine:
     image: beebots-engine:local
     build: .
+  arena:
+    image: beebots-engine:local
   web:
     image: beebots-web:local
     build:

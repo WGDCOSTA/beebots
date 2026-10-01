@@ -163,7 +163,8 @@ describe("engine: the macro style end to end", () => {
         { name: "Goldie", style: "breezy" as const, tagline: "", rules: "", coins: ["XAU"], image: false, market: "commodities" as const },
       ],
     };
-    const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), ALLOW_NON_CRYPTO: "true", BEE_START_EQUITY_USD: "1000", MAX_NOTIONAL_USD_PER_BEE: "5000" }, s as never);
+    // This test isolates macro sizing; multi-order progression is covered in multi-orders.test.ts.
+    const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), ALLOW_NON_CRYPTO: "true", BEE_START_EQUITY_USD: "1000", MAX_NOTIONAL_USD_PER_BEE: "5000", MAX_POSITIONS_PER_BEE: "1" }, s as never);
     const v = view([coin("BTC", {}, 80000), coin("XAU", { ret7dPct: 3, ret24hPct: 0.8, macdHistPct: 0.02, rsi14: 48, pctB: 0.4 }, 4000)]);
     const xau = "XAU-USD_UM_XPERP-310404";
     v.instruments.get(xau)!.kind = "commodity";

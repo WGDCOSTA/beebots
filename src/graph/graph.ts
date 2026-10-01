@@ -10,7 +10,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { confidenceOf } from "./memory.js";
 
-export const NODE_TYPES = ["bee", "brain", "skill", "family", "coin", "lesson", "message", "run", "regime", "style", "memory"] as const;
+export const NODE_TYPES = ["bee", "brain", "skill", "family", "coin", "lesson", "message", "run", "experiment", "regime", "style", "memory"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
 export interface GraphNode {

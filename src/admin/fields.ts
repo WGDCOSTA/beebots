@@ -80,6 +80,8 @@ export const ADMIN_FIELDS: AdminField[] = [
   num("CMC_MAX_CALLS_DAY", "learning", "CoinMarketCap calls per day", "Hard daily cap. The free Basic plan has 10,000 credits a month (about 330 a day).", 0, 100_000),
   { key: "BRAIN_WATCHLIST", group: "learning", label: "AI-chosen coins", help: "The brains pick each bunny's watchlist from lab evidence, its record and liquidity. Owner coins, style and survival tier still limit it.", type: "bool" },
   num("COACH_INTERVAL_MIN", "learning", "Coach every (min)", "Each brain reviews its bunny's real results and re-weights its skills. 0 = off.", 0, 10_080),
+  num("SELF_RESEARCH_INTERVAL_MIN", "learning", "Self-research every (min)", "Each agent proposes and walk-forward tests a skill, then records the result in its brain graph. 0 = off.", 0, 10_080),
+  num("SELF_RESEARCH_MAX_CALLS_DAY", "learning", "Self-research calls/day", "Separate hard daily cap for agent-led skill-research brain calls.", 0, 200),
   num("COACH_MAX_CALLS_DAY", "learning", "Coach calls per day", "Hard cap on coach LLM calls per UTC day.", 0, 200),
   // survival and rewards
   { key: "SURVIVAL_MODE", group: "evolution", label: "Survival mode", help: "Health tiers, smaller size in danger, survival line in Jev's state, rescue councils.", type: "bool" },
@@ -88,7 +90,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   num("SURVIVAL_MAX_CALLS_DAY", "evolution", "Council calls per day", "Hard cap on survival and reward council LLM calls per UTC day.", 0, 200),
   { key: "REWARDS", group: "evolution", label: "Rewards", help: "Daily points for gains, levels, and prizes: more skills, skill writing, extra brains, bigger limits.", type: "bool" },
   num("REWARD_MAX_LIMIT_BOOST", "evolution", "Max limit boost", "Largest share a reward adds to max position size (0.5 = +50%). Leverage is never raised.", 0, 1, 0.05),
-  num("MAX_POSITIONS_PER_BEE", "evolution", "Max positions per bunny", "Multi-orders: level 3 earns 2 positions, level 5 earns 3, on different coins inside one leverage cap. 1 = off.", 1, 5),
+  num("MAX_POSITIONS_PER_BEE", "evolution", "Max positions per bunny", "Multi-orders: level 0 starts with 3 and every level adds 3, on different coins inside one shared leverage cap. 1 = off.", 1, 18),
   { key: "REWARDS_IN_LIVE", group: "evolution", label: "Limit boosts with real money", help: "Off: in live mode rewards unlock skills and brains, never bigger limits.", type: "bool" },
   // risk
   num("MAX_LEVERAGE", "risk", "Max leverage", "Never above 2x (hard rule).", 0.1, 2, 0.1),

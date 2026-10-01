@@ -31,10 +31,14 @@ interface EData extends Record<string, unknown> {
   conf: Confidence;
   state: "lit" | "dim" | "";
   w: number;
+  relation: string;
+  motion: boolean;
+  label: boolean;
+  selected: boolean;
 }
 type HEdge = Edge<EData, "float">;
 
-const SIZE: Record<KindId, number> = { bee: 34, brain: 22, skill: 16, coin: 18, style: 20, note: 12, memory: 14, family: 20 };
+const SIZE: Record<KindId, number> = { bee: 34, brain: 22, skill: 16, coin: 18, style: 20, experiment: 18, note: 12, memory: 14, family: 20 };
 const nodeSize = (kind: KindId, degree: number) => Math.round(SIZE[kind] + Math.min(14, Math.sqrt(degree) * 1.6));
 
 function HiveNode({ data }: NodeProps<HNode>) {
@@ -58,7 +62,21 @@ function FloatEdge({ id, source, target, data }: EdgeProps<HEdge>) {
   const p = c(a);
   const q = c(b);
   const [path] = getStraightPath({ sourceX: p.x, sourceY: p.y, targetX: q.x, targetY: q.y });
-  return <path id={id} d={path} className={`hge hge-${data.conf.toLowerCase()} ${data.state}`} style={{ strokeWidth: 0.8 + Math.min(2.2, data.w) }} fill="none" />;
+  return (
+    <g className={data.selected ? "hge-group selected" : "hge-group"}>
+      <path id={id} d={path} className={`hge hge-${data.conf.toLowerCase()} ${data.state}`} style={{ strokeWidth: 0.8 + Math.min(2.2, data.w) }} fill="none" />
+      {data.motion && (data.state === "lit" || data.selected) && (
+        <circle r="2.6" className="hge-particle">
+          <animateMotion dur="1.6s" repeatCount="indefinite" path={path} />
+        </circle>
+      )}
+      {(data.label || data.selected) && (
+        <text className="hge-label" dy="-5">
+          <textPath href={`#${id}`} startOffset="50%" textAnchor="middle">{data.relation.replaceAll("_", " ")}</textPath>
+        </text>
+      )}
+    </g>
+  );
 }
 
 const nodeTypes = { hive: HiveNode };
@@ -96,6 +114,10 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
   const [pinned, setPinned] = useState<string | null>(null);
   const [live, setLive] = useState(true);
   const [table, setTable] = useState(false);
+  const [motion, setMotion] = useState(() => !(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches));
+  const [linkLabels, setLinkLabels] = useState(false);
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  const [layoutEpoch, setLayoutEpoch] = useState(0);
   const [nodes, setNodes] = useState<HNode[]>([]);
 
   // Live off freezes what is on screen; live on follows the poll.
@@ -209,7 +231,7 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
       .alpha(existing.size ? 0.35 : 1)
       .alphaDecay(0.03);
     sim.current = s;
-    const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = !motion || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
     if (still) {
       s.stop();
       s.tick(300);
@@ -224,7 +246,7 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
       raf.current = 0;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view.nodes, view.links]);
+  }, [view.nodes, view.links, layoutEpoch, motion]);
 
   useEffect(() => syncRef.current(), [related, hits, fresh, pinned, focus]);
 
@@ -255,20 +277,42 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
       view.links.map((l, i) => {
         const conf = confidenceOf(l);
         const on = focus !== null && (l.source === focus || l.target === focus);
-        return { id: `${l.source}>${l.target}>${l.relation}>${i}`, source: l.source, target: l.target, type: "float", data: { conf, state: on ? "lit" : focus !== null || hits !== null ? "dim" : "", w: Number(l.weight) || 0.5 } } as HEdge;
+        const id = `${l.source}>${l.target}>${l.relation}>${i}`;
+        return {
+          id,
+          source: l.source,
+          target: l.target,
+          type: "float",
+          data: {
+            conf,
+            state: on || selectedEdge === id ? "lit" : focus !== null || hits !== null || selectedEdge !== null ? "dim" : "",
+            w: Number(l.weight) || 0.5,
+            relation: l.relation,
+            motion,
+            label: linkLabels && (on || focus === null),
+            selected: selectedEdge === id,
+          },
+        } as HEdge;
       }),
-    [view.links, focus, hits],
+    [view.links, focus, hits, motion, linkLabels, selectedEdge],
   );
 
   const toggleKind = (k: KindId) => setHiddenKinds((h) => (h.has(k) ? new Set([...h].filter((x) => x !== k)) : new Set([...h, k])));
   const toggleConf = (c: Confidence) => setHiddenConf((h) => (h.has(c) ? new Set([...h].filter((x) => x !== c)) : new Set([...h, c])));
   const goTo = (ids: string[]) => void rf.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.4, duration: 500, maxZoom: 1.6 });
+  const reflow = () => {
+    pos.current.clear();
+    setLayoutEpoch((n) => n + 1);
+    setTimeout(() => void rf.fitView({ padding: 0.15, duration: 500, maxZoom: 1.2 }), 80);
+  };
 
   if (!raw.length) return <p className="dim">The warren memory is empty. Run the lab and the council (Admin → Lab) and it fills in.</p>;
 
   const hoverNode = hover ? byId.get(hover) : null;
   const pin = pinned ? byId.get(pinned) : null;
   const pinLinks = pinned ? rawLinks.filter((l) => l.source === pinned || l.target === pinned) : [];
+  const selectedLinkIndex = selectedEdge ? edges.findIndex((e) => e.id === selectedEdge) : -1;
+  const selectedLink = selectedLinkIndex >= 0 ? view.links[selectedLinkIndex] : null;
 
   return (
     <div className="hg">
@@ -286,6 +330,13 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
           <button className={`pbtn small ${live ? "" : "ghost"}`} onClick={() => setLive((x) => !x)} aria-pressed={live} title="Follow the 30 s refresh, or freeze the picture">
             {live ? "Live" : "Paused"}
           </button>
+          <button className={`pbtn small ${motion ? "" : "ghost"}`} onClick={() => setMotion((x) => !x)} aria-pressed={motion} title="Animate graph physics and active knowledge flow">
+            {motion ? "Dynamics" : "Still"}
+          </button>
+          <button className={`pbtn small ${linkLabels ? "" : "ghost"}`} onClick={() => setLinkLabels((x) => !x)} aria-pressed={linkLabels} title="Show relation names on links">
+            Relations
+          </button>
+          <button className="pbtn ghost small" onClick={reflow} title="Rebuild the force layout">Reflow</button>
           {onRefresh && (
             <button className="pbtn ghost small" onClick={onRefresh}>
               Refresh
@@ -363,14 +414,24 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
             onNodesChange={onNodesChange}
             onNodeMouseEnter={(_, n) => setHover(n.id)}
             onNodeMouseLeave={() => setHover(null)}
-            onNodeClick={(_, n) => setPinned((p) => (p === n.id ? null : n.id))}
+            onNodeClick={(_, n) => {
+              setPinned((p) => (p === n.id ? null : n.id));
+              setSelectedEdge(null);
+            }}
             onNodeDoubleClick={(_, n) => {
               setEgo(n.id);
               setPinned(n.id);
             }}
-            onPaneClick={() => setPinned(null)}
+            onEdgeClick={(_, e) => {
+              setSelectedEdge((x) => (x === e.id ? null : e.id));
+              setPinned(null);
+            }}
+            onPaneClick={() => {
+              setPinned(null);
+              setSelectedEdge(null);
+            }}
             nodesConnectable={false}
-            elementsSelectable={false}
+            elementsSelectable
             minZoom={0.15}
             maxZoom={2.5}
             colorMode="dark"
@@ -434,6 +495,24 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
               );
             })}
           </ul>
+        </div>
+      )}
+      {selectedLink && (
+        <div className="hg-detail hg-edge-detail">
+          <div className="hg-detail-head">
+            <strong>{selectedLink.relation.replaceAll("_", " ")}</strong>
+            <button className="pbtn ghost small" onClick={() => setSelectedEdge(null)}>Close</button>
+          </div>
+          <p>
+            <button className="hg-jump" onClick={() => (setPinned(selectedLink.source), goTo([selectedLink.source]))}>{byId.get(selectedLink.source)?.label ?? selectedLink.source}</button>
+            <span className="dim"> → </span>
+            <button className="hg-jump" onClick={() => (setPinned(selectedLink.target), goTo([selectedLink.target]))}>{byId.get(selectedLink.target)?.label ?? selectedLink.target}</button>
+          </p>
+          <div className="hg-edge-metrics">
+            <span className={`hg-conf hg-conf-${confidenceOf(selectedLink).toLowerCase()}`}>{confidenceOf(selectedLink).toLowerCase()}</span>
+            <span className="num">weight {Number(selectedLink.weight).toFixed(3)}</span>
+            {typeof selectedLink.count === "number" && <span className="num">{selectedLink.count} observations</span>}
+          </div>
         </div>
       )}
     </div>

@@ -23,6 +23,7 @@ export const KINDS = [
   { id: "skill", label: "Skills", color: "#199e70", radius: 260 },
   { id: "coin", label: "Coins", color: "#d95926", radius: 260 },
   { id: "style", label: "Styles", color: "#9085e9", radius: 200 },
+  { id: "experiment", label: "Experiments", color: "#34d6d1", radius: 300 },
   { id: "note", label: "Lessons & messages", color: "#d55181", radius: 340 },
   { id: "memory", label: "Memories", color: "#e66767", radius: 320 },
   { id: "family", label: "Families", color: "#008300", radius: 300 },
@@ -32,13 +33,14 @@ export const KIND = Object.fromEntries(KINDS.map((k) => [k.id, k])) as Record<Ki
 
 export function kindOf(n: Pick<RawNode, "type">): KindId | null {
   if (n.type === "lesson" || n.type === "message") return "note";
+  if (n.type === "run" || n.type === "experiment") return "experiment";
   return n.type in KIND ? (n.type as KindId) : null;
 }
 
 export type Confidence = "EXTRACTED" | "INFERRED" | "AMBIGUOUS";
 export const CONFIDENCES: Confidence[] = ["EXTRACTED", "INFERRED", "AMBIGUOUS"];
 /** Mirrors src/graph/memory.ts: a measured fact is EXTRACTED, everything a brain concluded is INFERRED. */
-const FACTS = new Set(["traded", "performs_on", "ranked", "authored", "restricted_to", "thinks_with", "to", "said", "learned"]);
+const FACTS = new Set(["traded", "performs_on", "ranked", "authored", "tested", "tested_skill", "restricted_to", "thinks_with", "to", "said", "learned"]);
 export function confidenceOf(l: Pick<RawLink, "relation" | "confidence">): Confidence {
   if (l.confidence === "EXTRACTED" || l.confidence === "INFERRED" || l.confidence === "AMBIGUOUS") return l.confidence;
   return FACTS.has(l.relation) ? "EXTRACTED" : "INFERRED";

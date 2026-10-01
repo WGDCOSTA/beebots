@@ -101,6 +101,8 @@ export interface SurvivalOpts {
   /** Every skill a brain wrote, accepted or not, so the owner can read and improve it (the skill workshop). */
   onDraft?: (d: { slot: BeeId; brain: string; id: string; raw: string; result: Omit<SkillResult, "rank"> | null; real: boolean; datasets: string[]; accepted: boolean }) => void;
   maxCallsPerDay: number;
+  /** Separate budget for scheduled self-research, so it cannot consume emergency council calls. */
+  researchMaxCallsPerDay?: number;
   /** Minimum time between two councils for one bee. */
   cooldownMs?: number;
   /** BRAIN_WATCHLIST: the council also chooses the bee's coins. Live coins, most liquid first. */
@@ -115,7 +117,7 @@ export interface SurvivalOpts {
 
 export interface CouncilOutcome {
   bee: BeeId;
-  reason: "survival" | "reward" | "manual";
+  reason: "survival" | "reward" | "manual" | "research";
   brains: string[];
   skills: PlaybookSkill[];
   newSkills: Array<{ id: string; accepted: boolean; why: string }>;
@@ -180,18 +182,22 @@ export function trySkill(raw: string, slot: BeeId, data: Dataset[]): { skill: Sk
 
 export class SurvivalCouncil {
   private calls = { day: "", n: 0 };
+  private researchCalls = { day: "", n: 0 };
   private running = new Set<BeeId>();
+  private lastResearch = new Map<BeeId, number>();
   private now: () => number;
 
   constructor(private o: SurvivalOpts) {
     this.now = o.now ?? Date.now;
   }
 
-  private budget(n: number): boolean {
+  private budget(n: number, research = false): boolean {
     const d = new Date(this.now()).toISOString().slice(0, 10);
-    if (d !== this.calls.day) this.calls = { day: d, n: 0 };
-    if (this.calls.n + n > this.o.maxCallsPerDay) return false;
-    this.calls.n += n;
+    const bucket = research ? this.researchCalls : this.calls;
+    if (d !== bucket.day) Object.assign(bucket, { day: d, n: 0 });
+    const cap = research ? (this.o.researchMaxCallsPerDay ?? this.o.maxCallsPerDay) : this.o.maxCallsPerDay;
+    if (bucket.n + n > cap) return false;
+    bucket.n += n;
     return true;
   }
 
@@ -206,11 +212,14 @@ export class SurvivalCouncil {
   async convene(bee: CouncilBee, reason: CouncilOutcome["reason"]): Promise<CouncilOutcome | null> {
     const evo = this.o.evolution.bees[bee.slot];
     if (!evo || evo.tier === "dead" || this.running.has(bee.slot)) return null;
-    if (reason !== "manual" && this.now() - evo.lastCouncilAt < (this.o.cooldownMs ?? 6 * 3_600_000)) return null;
-    const brains = this.brainsFor(bee, evo.tier);
-    if (!brains.length || !this.budget(brains.length)) return null;
+    if (reason === "research" && this.now() - (this.lastResearch.get(bee.slot) ?? 0) < (this.o.cooldownMs ?? 6 * 3_600_000)) return null;
+    if (reason !== "manual" && reason !== "research" && this.now() - evo.lastCouncilAt < (this.o.cooldownMs ?? 6 * 3_600_000)) return null;
+    // Scheduled research belongs to the agent's own configured brain. Other councils may use earned/emergency peers.
+    const brains = reason === "research" ? (this.o.clients[bee.brain] ? [bee.brain] : []) : this.brainsFor(bee, evo.tier);
+    if (!brains.length || !this.budget(brains.length, reason === "research")) return null;
     this.running.add(bee.slot);
-    evo.lastCouncilAt = this.now();
+    if (reason === "research") this.lastResearch.set(bee.slot, this.now());
+    else evo.lastCouncilAt = this.now();
     try {
       return await this.run(bee, reason, brains);
     } finally {
@@ -228,13 +237,16 @@ export class SurvivalCouncil {
     const pb = loadPlaybook(this.o.playbookPath);
     const current = pb?.bees[bee.slot]?.skills ?? [];
     const ranked = new Map((ranking?.results ?? []).map((r) => [r.skillId, r]));
-    const candidates = [...new Set([...(ranking?.results ?? []).filter((r) => r.family !== "benchmark" && r.score > 0).slice(0, 15).map((r) => r.skillId), ...current.map((s) => s.id)])];
+    // Any positively tested skill may be used, regardless of the agent's original family or style.
+    const candidates = [...new Set([...(ranking?.results ?? []).filter((r) => r.family !== "benchmark" && r.score > 0).slice(0, 50).map((r) => r.skillId), ...current.map((s) => s.id)])];
 
     const situation =
       reason === "survival"
         ? `${bee.name} is ${evo.tier.toUpperCase()}: health ${evo.health.toFixed(1)}% of its start; it dies at ${evolution.opts.deathPct}%. Its life depends on this council.`
         : reason === "reward"
           ? `${bee.name} reached level ${evo.level} (${evo.points} points) by making money. Its prize: this council may add skills${perks.canAuthorSkills ? " and write a new one" : ""}.`
+          : reason === "research"
+            ? `${bee.name} initiated its own research cycle. It may use any positively tested skill regardless of family and must propose one genuinely new hypothesis to test after reviewing prior attempts.`
           : `The owner called this council for ${bee.name} (health ${evo.health.toFixed(1)}%, level ${evo.level}).`;
 
     const hive = contextFor(graph, bee.slot);
@@ -258,7 +270,7 @@ export class SurvivalCouncil {
         situation,
         `Pick up to ${perks.skillSlots} skills from CANDIDATES (walk-forward, out-of-sample ranked) with weights. ${inDanger ? "Survival first: prefer robust, low-drawdown, stable skills; avoid anything that can blow up." : "Prefer robust skills that fit its style."}`,
         mayAuthor
-          ? `You MAY write one new skill in newSkillJson. It will be backtested walk-forward and adopted only if it holds up out of sample. ${DSL_GUIDE}`
+          ? `${reason === "research" ? "You MUST propose one new, non-duplicate skill hypothesis in newSkillJson." : "You MAY write one new skill in newSkillJson."} It will be backtested walk-forward and adopted only if it holds up out of sample. Long-only, short-only and symmetric skills are all allowed, but the tested evidence decides. ${DSL_GUIDE}`
           : "Leave newSkillJson empty: this bee has not earned the right to write skills yet.",
         watch?.candidates.length
           ? `${WATCHLIST_PROMPT}${inDanger ? " Survival first: pick only liquid coins where the bee's skills held up, no experiments." : ""}`
@@ -323,11 +335,39 @@ export class SurvivalCouncil {
     if (mayAuthor) {
       const drafts = answers.map((x) => ({ brain: x.brain, raw: x.a.newSkillJson.trim() })).filter((d) => d.raw);
       const data = drafts.length ? backtestData(this.o.historyDir) : [];
-      for (const d of drafts.slice(0, 2)) {
+      for (const [testIndex, d] of drafts.slice(0, 2).entries()) {
         const t = trySkill(d.raw, bee.slot, data);
-        const id = t.skill?.id ?? (JSON.parse(safeJson(d.raw)) as { id?: string }).id ?? "?";
+        const rawSpec = JSON.parse(safeJson(d.raw)) as { id?: string; name?: string; family?: string; description?: string };
+        const id = t.skill?.id ?? namespaced(d.raw, bee.slot);
         newSkills.push({ id, accepted: !!t.skill, why: `${brainInfo(d.brain).label}: ${t.why}` });
         if (t.result) this.o.onDraft?.({ slot: bee.slot, brain: brainInfo(d.brain).label, id: t.skill?.id ?? namespaced(d.raw, bee.slot), raw: d.raw, result: t.result, real: data.every((x) => x.source !== "synthetic"), datasets: data.map((x) => x.id), accepted: !!t.skill });
+
+        // Every attempt, including invalid/rejected hypotheses, becomes durable brain memory and graph evidence.
+        const score = t.result ? +t.result.score.toFixed(3) : 0;
+        const skill = graph.upsert("skill", id, t.skill?.name ?? rawSpec.name ?? id, {
+          family: t.skill?.family ?? rawSpec.family ?? "candidate",
+          description: t.skill?.description ?? rawSpec.description ?? "agent-proposed skill",
+          source: t.skill?.source ?? `proposed by ${bee.slot}`,
+          researchStatus: t.skill ? "accepted" : "rejected",
+        });
+        const experiment = graph.upsert("experiment", `${bee.slot}-${this.now()}-${testIndex}-${id}`, `${bee.name} tested ${id}`, {
+          bee: bee.slot,
+          brain: d.brain,
+          skill: id,
+          accepted: !!t.skill,
+          realData: data.every((x) => x.source !== "synthetic"),
+          datasets: data.map((x) => x.id),
+          score: t.result ? score : null,
+          stabilityPct: t.result ? Math.round(t.result.stabilityPct) : null,
+          oosReturnPct: t.result ? +t.result.oos.returnPct.toFixed(2) : null,
+          result: t.why,
+          reason,
+        });
+        graph.link(beeNode(bee.slot), "tested", experiment, t.skill ? 1 : 0, { accepted: !!t.skill, score });
+        graph.link(brainNode(d.brain), "proposed", experiment, 1, { for: bee.slot });
+        graph.link(experiment, "tested_skill", skill, score, { accepted: !!t.skill, datasets: data.length });
+        graph.learn(beeNode(bee.slot), `Research ${id}: ${t.skill ? "accepted" : "rejected"}; ${t.why}`, [experiment, skill], { brain: d.brain, source: "self research", kind: "experiment" });
+
         if (!t.skill || !t.result) continue;
         mkdirSync(this.o.learnedDir, { recursive: true });
         const spec = JSON.parse(d.raw) as Record<string, unknown>;
@@ -335,7 +375,7 @@ export class SurvivalCouncil {
         writeFileSync(join(this.o.learnedDir, `${t.skill.id}.json`), JSON.stringify(spec, null, 2));
         this.o.onNewSkill?.(t.skill);
         evo.skillsAuthored++;
-        const node = graph.upsert("skill", t.skill.id, t.skill.name, { family: t.skill.family, description: t.skill.description, source: t.skill.source, score: +t.result.score.toFixed(3), stabilityPct: Math.round(t.result.stabilityPct) });
+        const node = graph.upsert("skill", t.skill.id, t.skill.name, { family: t.skill.family, description: t.skill.description, source: t.skill.source, score: +t.result.score.toFixed(3), stabilityPct: Math.round(t.result.stabilityPct), researchStatus: "accepted" });
         graph.link(beeNode(bee.slot), "authored", node, t.result.score, { brain: d.brain });
         if (skills.length < perks.skillSlots) skills.push({ id: t.skill.id, params: t.result.params, weight: 0.25, reason: `written by ${brainInfo(d.brain).label}; ${t.why}`, score: +t.result.score.toFixed(3) });
       }

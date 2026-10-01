@@ -81,5 +81,7 @@ describe("config", () => {
     expect(c.jev).toMatchObject({ shadowEnabled: false, shadowDailyUsdCap: 0.25 });
     expect(c.dataRefreshMs).toBe(60_000);
     expect(c.risk.maxLeverage).toBe(2);
+    expect(c.evolution.maxPositions).toBe(18);
+    expect(c.lab).toMatchObject({ selfResearchIntervalMin: 360, selfResearchMaxCallsDay: 12 });
   });
 });

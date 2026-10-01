@@ -92,6 +92,8 @@ services:
       SPECIALIZE_MIN_HOURS: ${SPECIALIZE_MIN_HOURS:-}
       COACH_INTERVAL_MIN: ${COACH_INTERVAL_MIN:-}
       COACH_MAX_CALLS_DAY: ${COACH_MAX_CALLS_DAY:-}
+      SELF_RESEARCH_INTERVAL_MIN: ${SELF_RESEARCH_INTERVAL_MIN:-}
+      SELF_RESEARCH_MAX_CALLS_DAY: ${SELF_RESEARCH_MAX_CALLS_DAY:-}
       SURVIVAL_MODE: ${SURVIVAL_MODE:-}
       SURVIVAL_DANGER_PCT: ${SURVIVAL_DANGER_PCT:-}
       SURVIVAL_CRITICAL_PCT: ${SURVIVAL_CRITICAL_PCT:-}
@@ -149,6 +151,38 @@ services:
       driver: json-file
       options: { max-size: "20m", max-file: "5" }
 
+  # The Arena (src/arena): members' accounts and agents, a separate process with its own data. It shares the engine's
+  # image but none of its database, settings or keys. Off unless .env has COMPOSE_PROFILES=arena.
+  arena:
+    image: ghcr.io/imikerussell/beebots-engine:latest
+    profiles: [arena]
+    restart: always
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    command: ["node", "--disable-warning=ExperimentalWarning", "dist/arena/main.js"]
+    # Only what .env actually sets reaches the Arena (ARENA_*: see src/arena/main.ts). A blank ${VAR:-} would arrive as ""
+    # and override the Arena's own defaults (an empty model name, a $0 paper start).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ARENA_DIR: /data/arena
+      ARENA_BIND: 0.0.0.0
+      ARENA_PORT: "8090"
+      REF_DIR: /app/ref
+    volumes:
+      - arena-data:/data
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
   web:
     image: ghcr.io/imikerussell/beebots-web:latest
     restart: always
@@ -184,6 +218,7 @@ services:
       - bees-data:/data
 
 volumes:
+  arena-data:
   bees-data:
   caddy-data:
   caddy-config:

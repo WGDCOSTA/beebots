@@ -252,9 +252,12 @@ const EnvSchema = z.object({
   REWARD_MAX_LIMIT_BOOST: num(0.5),
   // Limit boosts with real money too (off: in live mode rewards unlock skills and brains, never bigger limits).
   REWARDS_IN_LIVE: bool(false),
-  // Multi-orders: top bunnies (level 3: 2 positions, level 5: 3) may hold several positions on different coins, all
-  // inside one leverage cap. 1 turns multi-orders off.
-  MAX_POSITIONS_PER_BEE: num(3),
+  // Multi-orders: 3 positions at level zero, +3 per level, on different coins inside one shared leverage cap.
+  // This is a hard ceiling; the default covers levels 0..5 (3..18).
+  MAX_POSITIONS_PER_BEE: num(18),
+  // Autonomous research: agents propose, walk-forward test and remember new skills on a separate bounded schedule.
+  SELF_RESEARCH_INTERVAL_MIN: num(360),
+  SELF_RESEARCH_MAX_CALLS_DAY: num(12),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional().default("info"),
   ALERT_WEBHOOK_URL: opt,
 });
@@ -388,7 +391,7 @@ export interface Config {
   alertWebhookUrl?: string;
   /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bunny thinks with. */
   brains: { creds: BrainCreds; slots: Record<BeeId, BrainId> };
-  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; specialization: boolean; specializeMinHours: number; coachIntervalMin: number; coachMaxCallsDay: number };
+  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; specialization: boolean; specializeMinHours: number; coachIntervalMin: number; coachMaxCallsDay: number; selfResearchIntervalMin: number; selfResearchMaxCallsDay: number };
   evolution: {
     survival: boolean;
     dangerPct: number;
@@ -600,6 +603,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       specializeMinHours: Math.max(0, e.SPECIALIZE_MIN_HOURS),
       coachIntervalMin: Math.max(0, e.COACH_INTERVAL_MIN),
       coachMaxCallsDay: Math.max(0, e.COACH_MAX_CALLS_DAY),
+      selfResearchIntervalMin: Math.max(0, e.SELF_RESEARCH_INTERVAL_MIN),
+      selfResearchMaxCallsDay: Math.max(0, e.SELF_RESEARCH_MAX_CALLS_DAY),
     },
     evolution: {
       survival: e.SURVIVAL_MODE,
@@ -609,7 +614,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       rewards: e.REWARDS,
       maxLimitBoost: e.REWARD_MAX_LIMIT_BOOST,
       boostLimits: mode !== "live" || e.REWARDS_IN_LIVE,
-      maxPositions: Math.max(1, Math.min(5, Math.floor(e.MAX_POSITIONS_PER_BEE))),
+      maxPositions: Math.max(1, Math.min(18, Math.floor(e.MAX_POSITIONS_PER_BEE))),
     },
   };
 }
