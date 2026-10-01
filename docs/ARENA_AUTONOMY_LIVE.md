@@ -1,7 +1,7 @@
 # Arena: three plans, autonomous agents, and connecting a real OKX account
 
 Status: design, 1 Oct 2026. Only the plan table (Free, Pro, Premium) is in code. Everything else here is not built.
-Written from the owner's instructions of 1 Oct 2026. Where a point needs the owner or counsel to decide, it says so.
+Written from the owner's instructions of 1 Oct 2026, updated the same day with the owner's answers (section 10). Where a point needs the owner or counsel to decide, it says so.
 
 ## 1. Plans
 
@@ -12,7 +12,9 @@ Written from the owner's instructions of 1 Oct 2026. Where a point needs the own
 | Coins per agent | 3 | 8 | 8 (autonomous agents choose their own, see 3) |
 | Theme packs | free packs | all | all |
 | Autonomous mode (agent picks and changes its style, trades any token or stock, long, short or scalp) | no | no | yes |
-| Several model brains per agent | no | no | yes (see 4) |
+| Model brains per agent | 1 | up to 3 | more than Pro (number open) |
+| Skill slots | not set | 30 | not set (at least Pro's) |
+| Historical market data and simulated training on it | no | yes | yes |
 | Connect a real OKX account | yes, at the member's own risk (see 5) | same | same |
 
 In code now: `Tier = "free" | "pro" | "premium"`, `LIMITS.premium = { bots: 20, autonomy: true, ... }`. No billing exists yet, so nobody can hold Pro or Premium. Price and what Pro adds beyond more agents are still open.
@@ -97,3 +99,12 @@ One Engine per agent, one SQLite file each. 20 agents per Premium member multipl
 3. Does the autonomous agent get one league on the board, or none (private only)?
 4. Live trading: does the owner accept that nothing goes live until counsel has answered section 5, even though the member is willing to take the risk? (The member's consent does not by itself settle what the operator may offer.)
 5. Which stock broker, if any, and which markets.
+
+## 10. Owner's decisions of 1 Oct 2026
+
+1. **Live trading is the member's own act, not ours.** The member puts in the keys of an OKX **sub-account** and runs the agent on their own account, at their own risk, under their own supervision as the agent's creator. The platform does not custody funds and does not trade for anyone; it provides the software. The 7-day paper track stays a recommendation the member may skip. *Caveat recorded, not decided:* "we do not custody funds" is true, but if the agent runs on our servers with the member's trade-only key, our software still places the orders. Counsel should confirm this exact arrangement before live is switched on. The alternative that keeps keys off our servers is a runner the member runs themselves; it is the safer reading for the operator and costs the member more effort. Until counsel answers, live stays off.
+2. **Model brains:** the member's own keys if they want, or the platform pool. With the member's own keys there is no platform cap (the bill is theirs); the page shows usage and lets the member set a cap of their own. On the platform pool a cap per agent per day is needed. *Proposal, for the owner to confirm:* Free $0.50 (today's default), Pro $1.00, Premium $2.00 per agent per day.
+3. **Pro** is up to 9 agents, all styles and packs, plus: up to **3 model brains**, **30 skill slots**, **historical market data**, and **simulated training on historical data** to prepare an agent before it runs on paper. Premium adds autonomy, up to 20 agents and more brains. *Price of Pro and Premium: still open.* *To define:* what "training" means in the product (suggested: replaying the agent over stored candles faster than real time and keeping the result as its record, like the Lab's backtests, kept apart from the paper track and never on the leaderboard); what a "skill" is for a member (the Lab's skills are rule sets that are backtested before use); which data and how much history.
+4. **Autonomous agents** get **their own league** (`premium:autonomous`) and may also be kept **private**.
+
+Still open: prices; the number of brains on Premium; whether Free has skill slots; the training definition above; counsel's answer on item 1.

@@ -2,7 +2,7 @@
 // its owner and its equity samples. No e-mail, no rules, no positions. Samples arrive from the runner; standings are
 // computed from them on request (score.ts has the rules) and cached for a few seconds, so a crowd costs one calculation.
 import type { DatabaseSync } from "node:sqlite";
-import { leagueOf, metricsOf, rankBy, seasonOf, whyNotRanked, MIN_DAYS, MIN_SAMPLES, MIN_TRADES, type Metrics, type Point, type Season } from "./score.js";
+import { leagueOf, metricsOf, needOf, rankBy, seasonOf, whyNotRanked, MIN_DAYS, MIN_SAMPLES, MIN_TRADES, type Metrics, type Need, type Point, type Season } from "./score.js";
 
 export interface Listing {
   botId: string;
@@ -30,6 +30,8 @@ export interface StandingRow {
   league: string;
   metrics: Metrics | null;
   reason: string | null;
+  /** The same as numbers, for pages that word it in the member's language. */
+  need: Need | null;
   /** The viewer owns it. Filled in by the API; the leaderboard itself never reveals who is asking. */
   mine?: boolean;
 }
@@ -112,7 +114,7 @@ export class Leaderboard {
       if (!b) continue;
       const metrics = metricsOf(points);
       const reason = whyNotRanked(metrics);
-      rows.push({ rank: null, botId, name: String(b.name), handle: String(b.handle), theme: String(b.theme), avatar: String(b.avatar), style: String(b.style), tier: String(b.tier), version, league: leagueOf(String(b.tier), String(b.style)), metrics, reason });
+      rows.push({ rank: null, botId, name: String(b.name), handle: String(b.handle), theme: String(b.theme), avatar: String(b.avatar), style: String(b.style), tier: String(b.tier), version, league: leagueOf(String(b.tier), String(b.style)), metrics, reason, need: needOf(metrics) });
     }
 
     const leagues = new Map<string, { ranked: number; waiting: number }>();
