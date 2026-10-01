@@ -182,3 +182,359 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 .lg-toc a { display: inline-flex; align-items: center; min-height: 36px; }
 .lg-links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); }
 .lg-links a { display: inline-flex; align-items: center; min-height: 44px; }
+
+/* ===================================================================================================================
+   The live site's look and motion, carried into the Arena: glowing ground, a "beebots arena" mark with a LIVE dot,
+   cards that glow in their avatar's colour and flash green or red when their money moves, curves with a filled area
+   and a live dot, ranking rows with medals and a score bar, and a parade of every agent racing now.
+   Colour never carries meaning alone: ▲▼, signs and words stay beside it. Motion stops under prefers-reduced-motion.
+   =================================================================================================================== */
+.as {
+  background:
+    radial-gradient(60rem 28rem at 8% -8%, color-mix(in srgb, var(--bizzy) 16%, transparent), transparent 70%),
+    radial-gradient(50rem 26rem at 100% 0%, color-mix(in srgb, var(--breezy) 13%, transparent), transparent 70%),
+    radial-gradient(40rem 30rem at 60% 120%, color-mix(in srgb, var(--boozy) 9%, transparent), transparent 70%),
+    var(--page);
+  background-attachment: fixed;
+}
+.as .num,
+.as .ag-big,
+.as .rk-score strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* the mark and the live dot */
+.as-top {
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bizzy) 55%, transparent), color-mix(in srgb, var(--boozy) 45%, transparent), transparent) 1;
+}
+.as-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: conic-gradient(from 210deg, var(--bizzy), var(--boozy), var(--breezy), var(--bizzy));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--bizzy) 55%, transparent);
+}
+.as-word {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.as-word em {
+  font-style: normal;
+  color: var(--bizzy);
+  margin-left: 4px;
+}
+.as-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--good) 55%, var(--line));
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  color: var(--good-text);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.as-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good-text);
+  animation: as-pulse 1.6s ease-in-out infinite;
+}
+@keyframes as-pulse {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--good) 22%, transparent);
+    opacity: 0.75;
+  }
+}
+
+/* navigation: an amber bar marks where you are, as the live site's tabs do */
+@media (min-width: 900px) {
+  .as-side a {
+    position: relative;
+    transition: background 0.2s, color 0.2s;
+  }
+  .as-side a.on::before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 3px;
+    background: linear-gradient(var(--bizzy), var(--boozy));
+  }
+  .as-side a.cta {
+    box-shadow: 0 0 22px color-mix(in srgb, var(--bizzy) 25%, transparent);
+  }
+}
+.as-tabs {
+  background: color-mix(in srgb, #0d0c13 82%, transparent);
+  backdrop-filter: blur(12px);
+}
+.as-tabs a.plus .as-ico {
+  background: linear-gradient(135deg, var(--bizzy), var(--boozy));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--bizzy) 50%, transparent);
+}
+
+/* the hero */
+.as-hero h1 {
+  background: linear-gradient(100deg, var(--text) 30%, color-mix(in srgb, var(--bizzy) 85%, white) 62%, var(--boozy));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.as-cta .pbtn:not(.ghost) {
+  background: linear-gradient(135deg, var(--bizzy), color-mix(in srgb, var(--boozy) 70%, var(--bizzy)));
+  border-color: transparent;
+  color: #120d02;
+  font-weight: 800;
+  box-shadow: 0 6px 26px color-mix(in srgb, var(--bizzy) 35%, transparent);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.as-cta .pbtn:not(.ghost):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 32px color-mix(in srgb, var(--bizzy) 45%, transparent);
+}
+
+/* every agent racing now, drifting past */
+.as-parade {
+  position: relative;
+  overflow: hidden;
+  margin-top: 6px;
+  padding: 8px 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+.as-parade-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  animation: as-parade 60s linear infinite;
+}
+.as-parade:hover .as-parade-track {
+  animation-play-state: paused;
+}
+.as-parade-av {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+@keyframes as-parade {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* cards: a soft lift and a glow in the avatar's colour */
+.as .pcard.arena-card {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--av, var(--bizzy)) 5%, var(--card)), var(--card) 60%);
+  border-radius: 16px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.25s ease;
+}
+.as a.ag-card:hover,
+.as a.ag-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--av, var(--bizzy)) 60%, var(--line));
+  box-shadow: 0 10px 34px color-mix(in srgb, var(--av, var(--bizzy)) 20%, transparent);
+}
+.as .ag-cards > * {
+  animation: as-rise 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.as .ag-cards > *:nth-child(2) { animation-delay: 0.05s; }
+.as .ag-cards > *:nth-child(3) { animation-delay: 0.1s; }
+.as .ag-cards > *:nth-child(4) { animation-delay: 0.15s; }
+.as .ag-cards > *:nth-child(n + 5) { animation-delay: 0.2s; }
+@keyframes as-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.as .ag-big {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+/* the money moved: a green or red pulse round the card, like a fill on the live board */
+.as .ag-card.flash-up {
+  animation: as-flash-up 1.6s ease-out;
+}
+.as .ag-card.flash-down {
+  animation: as-flash-down 1.6s ease-out;
+}
+@keyframes as-flash-up {
+  0% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--good) 70%, transparent), 0 0 30px color-mix(in srgb, var(--good) 40%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes as-flash-down {
+  0% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--critical) 70%, transparent), 0 0 30px color-mix(in srgb, var(--critical) 40%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* avatars: a ring and a glow, like the bunnies' portraits */
+.as .ab-portrait {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--av) 40%, var(--card-2)), color-mix(in srgb, var(--av) 12%, var(--card-2)) 70%);
+  border: 2px solid var(--av);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--av) 40%, transparent);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.as a.ag-card:hover .ab-portrait,
+.as .rk-row:hover .ab-portrait {
+  transform: scale(1.06);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--av) 60%, transparent);
+}
+
+/* curves: filled below, a live dot at the end */
+.as .ag-spark {
+  color: var(--muted);
+  overflow: visible;
+}
+.as .ag-spark.good { color: var(--good-text); }
+.as .ag-spark.bad { color: #ff6b6b; }
+.as .ag-spark path.ag-spark-line {
+  stroke: currentColor;
+}
+.as .ag-spark .ag-spark-dot {
+  fill: currentColor;
+  stroke: var(--card);
+  stroke-width: 1.5;
+}
+.as .ag-spark .ag-spark-halo {
+  fill: currentColor;
+  opacity: 0.25;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: as-halo 2s ease-out infinite;
+}
+@keyframes as-halo {
+  0% { transform: scale(0.5); opacity: 0.45; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+/* state pills breathe while the agent runs */
+.as .ag-pill.run::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+  animation: as-pulse 1.6s ease-in-out infinite;
+}
+
+/* tabs on the agent page: pills, as on a bunny's profile */
+.as .ag-tabs {
+  gap: 4px;
+  border-bottom: 0;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.as .ag-tabs button {
+  border: 0;
+  border-radius: 10px;
+  transition: background 0.2s, color 0.2s;
+}
+.as .ag-tabs button:hover {
+  color: var(--text);
+  background: var(--card-2);
+}
+.as .ag-tabs button.on {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bizzy) 18%, var(--card-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bizzy) 55%, transparent);
+}
+.as .ag-stats > div {
+  transition: transform 0.2s, border-color 0.2s;
+}
+.as .ag-stats > div:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--bizzy) 45%, var(--line));
+}
+
+/* the leaderboard: medals, a glow per row, a score bar, rows that slide in */
+.as .rk-row {
+  margin: 0 -10px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  border-top-color: transparent;
+  transition: background 0.15s;
+  animation: as-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.as .rk-row + .rk-row {
+  box-shadow: 0 -1px 0 var(--line);
+}
+.as .rk-row:hover {
+  background: color-mix(in srgb, var(--av, var(--bizzy)) 8%, var(--card-2));
+}
+.as .rk-rank {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  background: var(--card-2);
+}
+.as .rk-rank.r1 {
+  background: radial-gradient(circle at 35% 30%, #fde68a, #d97706);
+  color: #1f1300;
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.45);
+}
+.as .rk-rank.r2 {
+  background: radial-gradient(circle at 35% 30%, #f1f5f9, #94a3b8);
+  color: #0f172a;
+}
+.as .rk-rank.r3 {
+  background: radial-gradient(circle at 35% 30%, #fed7aa, #c2410c);
+  color: #1c0a00;
+}
+.rk-bar {
+  display: block;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--card-2);
+  overflow: hidden;
+}
+.rk-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--av, var(--bizzy)) 70%, var(--good)), var(--good));
+  transition: width 0.8s ease;
+}
+.rk-bar i.down {
+  background: var(--critical);
+}
+.as .rk-score strong {
+  font-size: 20px;
+}
+.as-warm {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 50%, var(--line));
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  white-space: nowrap;
+}
+.as .rk-row.wait .ab-portrait {
+  animation: as-breathe 2.4s ease-in-out infinite;
+}
+@keyframes as-breathe {
+  50% { box-shadow: 0 0 26px color-mix(in srgb, var(--av) 55%, transparent); }
+}
+.as .ab-chip.on {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--bizzy) 25%, transparent);
+}

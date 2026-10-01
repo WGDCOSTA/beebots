@@ -41,6 +41,9 @@ interface Theme {
   avatars: Array<{ id: string; glyph: string; color: string }>;
 }
 
+/** An avatar's colour, so a row glows in it (as the live board's rows do in each bunny's colour). */
+const avColor = (themes: Theme[], theme: string, avatar: string) => themes.find((t) => t.id === theme)?.avatars.find((x) => x.id === avatar)?.color ?? "#888";
+
 function Glyph({ themes, theme, avatar }: { themes: Theme[]; theme: string; avatar: string }) {
   const a = themes.find((t) => t.id === theme)?.avatars.find((x) => x.id === avatar);
   return (
@@ -142,7 +145,7 @@ export function ArenaRanking() {
           <div className="pcard arena-card">
             {ranked.length === 0 && <p className="dim">{t("rank.none")}</p>}
             {ranked.map((r) => (
-              <div className={`rk-row ${r.mine ? "mine" : ""}`} key={r.botId}>
+              <div className={`rk-row ${r.mine ? "mine" : ""}`} key={r.botId} style={{ ["--av" as string]: avColor(themes, r.theme, r.avatar) }}>
                 <span className={`rk-rank r${r.rank}`}>{r.rank}</span>
                 <Glyph themes={themes} theme={r.theme} avatar={r.avatar} />
                 <div className="rk-main">
@@ -157,6 +160,9 @@ export function ArenaRanking() {
                     <span title={t("rank.drawdownHelp")}>{t("rank.drawdown", { pct: r.metrics!.maxDrawdownPct.toFixed(1) })}</span>
                     <span>{t("rank.trades", { n: r.metrics!.trades })}</span>
                   </div>
+                  <span className="rk-bar" aria-hidden>
+                    <i className={r.metrics!.score >= 0 ? "up" : "down"} style={{ width: `${Math.max(4, (Math.abs(r.metrics!.score) / Math.max(1e-9, ...ranked.map((x) => Math.abs(x.metrics!.score)))) * 100)}%` }} />
+                  </span>
                 </div>
                 <div className="rk-score" title={t("rank.scoreHelp")}>
                   <strong>{r.metrics!.score.toFixed(2)}</strong>
@@ -170,7 +176,7 @@ export function ArenaRanking() {
             <div className="pcard arena-card">
               <h3>{t("rank.waiting")}</h3>
               {waiting.map((r) => (
-                <div className={`rk-row wait ${r.mine ? "mine" : ""}`} key={r.botId}>
+                <div className={`rk-row wait ${r.mine ? "mine" : ""}`} key={r.botId} style={{ ["--av" as string]: avColor(themes, r.theme, r.avatar) }}>
                   <Glyph themes={themes} theme={r.theme} avatar={r.avatar} />
                   <div className="rk-main">
                     <div>

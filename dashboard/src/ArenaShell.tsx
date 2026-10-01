@@ -52,7 +52,13 @@ export function ArenaShell({ tab, mode, onPickLocale, children }: { tab: Tab; mo
       <header className="as-top">
         <a className="as-brand" href="#/arena" aria-label="Arena">
           <span className="as-logo" aria-hidden="true" />
-          Arena
+          <span className="as-word">
+            beebots<em>arena</em>
+          </span>
+          <span className="as-live" aria-hidden="true">
+            <i />
+            LIVE
+          </span>
         </a>
         <div className="as-top-end">
           {mode === "out" && (

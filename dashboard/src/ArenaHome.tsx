@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
 import { checklist, fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, seasonEndsSay, type RunStatus } from "./arenaModel";
-import { Portrait, Spark, StatePill, type ArenaData } from "./ArenaParts";
+import { avatarColor, Portrait, Spark, StatePill, useFlash, type Agent, type ArenaData } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
 interface Standing {
@@ -127,34 +127,9 @@ export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Lim
       )}
 
       <div className="ag-cards">
-        {agents.map((a) => {
-          const run: RunStatus | undefined = runner.runs[a.id];
-          const pnl = run?.pnlUsd;
-          const tone = pnlTone(pnl);
-          const pos = run?.position;
-          return (
-            <a key={a.id} className="pcard arena-card ag-card" href={`#/arena/agent/${a.id}`}>
-              <div className="ag-card-top">
-                <Portrait cat={cat} theme={a.theme} avatar={a.avatar} botId={a.image ? a.id : undefined} size={44} />
-                <div className="ag-card-name">
-                  <strong>{a.name}</strong>
-                  <span className="dim small">
-                    {a.listed ? t("card.listed") : t("card.private")} · v{a.version}
-                  </span>
-                </div>
-                <StatePill enabled={runner.enabled} state={a.state} run={run} />
-              </div>
-              <div className="ag-card-nums">
-                <div>
-                  <div className="num ag-big">{run?.equityUsd !== undefined ? fmtUsd(run.equityUsd, locale) : "—"}</div>
-                  <div className={`num small ${tone}`}>{run?.pnlPct !== undefined ? `${fmtPct(run.pnlPct, locale)} · ${fmtUsd(pnl ?? 0, locale, true)}` : t("card.starting")}</div>
-                </div>
-                <Spark values={data.curves[a.id] ?? []} tone={tone} />
-              </div>
-              <div className="dim small">{a.state === "quarantined" ? t("card.quarantineLeft", { n: quarantineDaysLeft(a.quarantinedAt, Date.now(), days) }) : pos ? t("card.holding", { side: t(pos.side === "short" ? "side.short" : "side.long"), coin: pos.coin }) : t("card.flat")}</div>
-            </a>
-          );
-        })}
+        {agents.map((a) => (
+          <AgentCard key={a.id} a={a} data={data} days={days} />
+        ))}
         {agents.length > 0 && (
           <button className="pcard arena-card ag-card ag-new" disabled={full} onClick={open("#/arena/new")}>
             <span className="ag-plus" aria-hidden>
@@ -188,5 +163,38 @@ export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Lim
       )}
       <p className="dim small">{t("home.paperNote")}</p>
     </>
+  );
+}
+
+/** One agent on Home: its avatar's glow, its paper account flashing green or red when it moves, its curve. */
+function AgentCard({ a, data, days }: { a: Agent; data: ArenaData; days: number }) {
+  const { t, locale } = useI18n();
+  const { cat, runner } = data;
+  const run: RunStatus | undefined = runner.runs[a.id];
+  const pnl = run?.pnlUsd;
+  const tone = pnlTone(pnl);
+  const pos = run?.position;
+  const flash = useFlash(run?.equityUsd);
+  return (
+            <a className={`pcard arena-card ag-card ${flash ? `flash-${flash}` : ""}`} href={`#/arena/agent/${a.id}`} style={{ ["--av" as string]: avatarColor(cat, a.theme, a.avatar) }}>
+              <div className="ag-card-top">
+                <Portrait cat={cat} theme={a.theme} avatar={a.avatar} botId={a.image ? a.id : undefined} size={44} />
+                <div className="ag-card-name">
+                  <strong>{a.name}</strong>
+                  <span className="dim small">
+                    {a.listed ? t("card.listed") : t("card.private")} · v{a.version}
+                  </span>
+                </div>
+                <StatePill enabled={runner.enabled} state={a.state} run={run} />
+              </div>
+              <div className="ag-card-nums">
+                <div>
+                  <div className="num ag-big">{run?.equityUsd !== undefined ? fmtUsd(run.equityUsd, locale) : "—"}</div>
+                  <div className={`num small ${tone}`}>{run?.pnlPct !== undefined ? `${fmtPct(run.pnlPct, locale)} · ${fmtUsd(pnl ?? 0, locale, true)}` : t("card.starting")}</div>
+                </div>
+                <Spark values={data.curves[a.id] ?? []} tone={tone} />
+              </div>
+              <div className="dim small">{a.state === "quarantined" ? t("card.quarantineLeft", { n: quarantineDaysLeft(a.quarantinedAt, Date.now(), days) }) : pos ? t("card.holding", { side: t(pos.side === "short" ? "side.short" : "side.long"), coin: pos.coin }) : t("card.flat")}</div>
+            </a>
   );
 }

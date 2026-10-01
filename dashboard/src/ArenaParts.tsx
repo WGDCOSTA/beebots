@@ -1,5 +1,5 @@
 // Small pieces the Arena's agent screens share: the portrait, the little equity curve, the state pill, and the data they read.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
 import { sparkPath, statePill, type AgentState, type BotDraft, type RunStatus } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
@@ -130,15 +130,47 @@ export function Portrait({ cat, theme, avatar, size = 44, botId }: { cat: Catalo
   );
 }
 
-/** A small curve of an agent's paper account. Decorative: the numbers beside it say the same thing. */
+/** A small curve of an agent's paper account, filled below and with a live dot at the end, as on the live board. Decorative: the numbers beside it say the same thing. */
 export function Spark({ values, w = 120, h = 36, tone = "flat" }: { values: number[]; w?: number; h?: number; tone?: "good" | "bad" | "flat" }) {
+  const gid = useId().replace(/:/g, "");
   const d = sparkPath(values, w, h, 2, (values[0] ?? 0) * 0.01);
   if (!d) return <span className="ag-spark empty" style={{ width: w, height: h }} aria-hidden />;
+  const end = d.slice(d.lastIndexOf("L") + 1).trim().split(" ").map(Number);
+  const [ex, ey] = [end[0] ?? w, end[1] ?? h / 2];
   return (
     <svg className={`ag-spark ${tone}`} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
-      <path d={d} fill="none" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <defs>
+        <linearGradient id={`sg${gid}`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path className="ag-spark-area" d={`${d}L${ex} ${h}L2 ${h}Z`} fill={`url(#sg${gid})`} stroke="none" />
+      <path className="ag-spark-line" d={d} fill="none" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle className="ag-spark-halo" cx={ex} cy={ey} r="6" />
+      <circle className="ag-spark-dot" cx={ex} cy={ey} r="3" />
     </svg>
   );
+}
+
+/** "up" or "down" for a moment after a number changes, so a card can flash green or red like the live board's ticker. */
+export function useFlash(value: number | undefined): "" | "up" | "down" {
+  const prev = useRef(value);
+  const [dir, setDir] = useState<"" | "up" | "down">("");
+  useEffect(() => {
+    const was = prev.current;
+    prev.current = value;
+    if (value === undefined || was === undefined || value === was) return;
+    setDir(value > was ? "up" : "down");
+    const id = setTimeout(() => setDir(""), 1600);
+    return () => clearTimeout(id);
+  }, [value]);
+  return dir;
+}
+
+/** An avatar's colour, for the glow around its card. */
+export function avatarColor(cat: Catalogue | null | undefined, theme: string, avatar: string): string {
+  return cat?.themes.find((t) => t.id === theme)?.avatars.find((x) => x.id === avatar)?.color ?? "#f0b43c";
 }
 
 export function StatePill({ enabled, state, run }: { enabled: boolean; state: AgentState; run: RunStatus | undefined }) {
