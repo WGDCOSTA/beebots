@@ -5,6 +5,7 @@
 //   #/arena/agent/<id> one agent: performance, decisions, versions, settings
 //   #/arena/ranking    the leaderboard, public
 //   #/arena/me         account, plan, public name, language
+//   #/arena/skills     the member's skills (rule sets an agent can trade by)
 //   #/arena/plans      the plans and what they cost (payment is on Stripe's own page)
 //   #/arena/legal/<x>  terms, privacy, risk, cookies (drafts until counsel signs them off)
 //   #/arena/verify?token=...  the page the e-mailed link opens
@@ -17,6 +18,7 @@ import { ArenaLegal } from "./ArenaLegal";
 import { ArenaMe } from "./ArenaMe";
 import { ArenaNew } from "./ArenaNew";
 import { ArenaPlans } from "./ArenaPlans";
+import { ArenaSkills } from "./ArenaSkills";
 import { useArenaData } from "./ArenaParts";
 import { ArenaRanking } from "./ArenaRanking";
 import { ArenaShell, type Mode, type Tab } from "./ArenaShell";
@@ -45,6 +47,7 @@ function ArenaApp({ view, limits, days }: { view: ArenaView; limits: Limits; day
     );
   if (!data) return <div className="pcard arena-card dim">{t("common.loading")}</div>;
   if (view.kind === "new") return <ArenaNew data={data} limits={limits} onDone={(id) => go(`#/arena/agent/${id}`)} onCancel={() => go("#/arena")} />;
+  if (view.kind === "skills") return <ArenaSkills data={data} />;
   if (view.kind === "agent") return <ArenaAgent data={data} limits={limits} days={days} id={view.id} onGone={() => go("#/arena")} />;
   return <ArenaHome data={data} limits={limits} days={days} />;
 }
@@ -118,7 +121,7 @@ function Arena() {
   const member = me !== "loading" && me !== null ? me : null;
   const gated = !!member && !!consent?.needed;
   const mode: Mode = member ? (gated ? "gate" : "in") : "out";
-  const tab: Tab = view.kind === "ranking" ? "board" : view.kind === "me" || view.kind === "plans" ? "me" : view.kind === "new" ? "new" : view.kind === "home" || view.kind === "agent" ? "home" : null;
+  const tab: Tab = view.kind === "ranking" ? "board" : view.kind === "me" || view.kind === "plans" ? "me" : view.kind === "skills" ? "home" : view.kind === "new" ? "new" : view.kind === "home" || view.kind === "agent" ? "home" : null;
   const signOut = () => {
     setNotice("");
     setMe(null);

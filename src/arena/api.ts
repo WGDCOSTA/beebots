@@ -14,6 +14,8 @@ import { CONSENT_ITEMS, CONSENT_VERSION } from "./store.js";
 import { Billing, BillingError } from "./billing.js";
 import { PLAN_PRICES } from "./plans.js";
 import { TEMPLATES } from "./templates.js";
+import type { Skill } from "../lab/skills/index.js";
+import { libraryOf, SkillBank, SkillError } from "./skills.js";
 import { PROVIDERS, DEFAULT_MODEL, MAX_KEYS, VaultError, type Vault } from "./vault.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
@@ -32,6 +34,8 @@ export interface ApiOpts {
   aiDailyLimit?: number;
   /** The public leaderboard (null = none). */
   leaderboard?: Leaderboard | null;
+  /** The platform's skill library members can keep in their slots. */
+  library?: readonly Skill[];
   /** The key vault for members' own model keys (null = closed). */
   vault?: Vault | null;
   /** Plans and payment (null = payments are not open: everyone is on Free). */
@@ -154,6 +158,14 @@ export class ArenaApi {
       const me = this.auth.user(sessionOf(req));
       const plans = (["free", "pro", "premium"] as const).map((id) => ({ id, price: id === "free" ? null : PLAN_PRICES[id], limits: LIMITS[id] }));
       return this.send(res, 200, { open: this.billing().open, plans, current: me ? this.billing().view(me) : null });
+    }
+    if (req.method === "GET" && route === "/skills") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      const bank = new SkillBank(this.store.tenant(u.id), u.tier, this.opts.library ?? [], this.now);
+      const bots = new Bots(this.store.tenant(u.id), u.tier, this.now).list();
+      const skills = bank.list().map((s) => ({ ...s, usedBy: bots.filter((b) => b.skill === s.id).map((b) => ({ id: b.id, name: b.name })) }));
+      return this.send(res, 200, { slots: bank.slots, skills, library: libraryOf(this.opts.library ?? []) });
     }
     if (req.method === "GET" && route === "/keys") {
       // Never the secret: provider, name, model, the last four characters.
@@ -323,6 +335,28 @@ export class ArenaApi {
           return this.send(res, 200, { bot: bots.find(bot.id), ai: ai.status() });
         } catch (e) {
           if (e instanceof AiError || e instanceof BotError) return this.send(res, e.status, { error: e.message });
+          throw e;
+        }
+      }
+      case "/skills/add":
+      case "/skills/delete": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        if (this.blockedByConsent(res, u)) return true;
+        const bank = new SkillBank(this.store.tenant(u.id), u.tier, this.opts.library ?? [], this.now);
+        try {
+          if (route === "/skills/add") {
+            if (this.store.tooMany(`skills:${u.id}`, 60, this.now())) return this.send(res, 429, { error: "Too many tries. Wait a little and try again." });
+            return this.send(res, 200, { skill: body.from !== undefined ? bank.addFromLibrary(body.from) : bank.addOwn(body.spec) });
+          }
+          const id = typeof body.id === "string" ? body.id : "";
+          // A skill an agent trades by cannot be removed from under it.
+          const using = new Bots(this.store.tenant(u.id), u.tier, this.now).list().filter((b) => b.skill === id);
+          if (using.length) return this.send(res, 409, { error: `Agents still trade by this skill: ${using.map((b) => b.name).join(", ")}. Change them first.` });
+          bank.remove(id);
+          return this.send(res, 200, { ok: true });
+        } catch (e) {
+          if (e instanceof SkillError) return this.send(res, e.status, { error: e.message });
           throw e;
         }
       }

@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS bots (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, theme TEXT NOT NULL, avatar TEXT NOT NULL, style TEXT NOT NULL,
   coins TEXT NOT NULL, rules TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
   tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0,
-  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER, brain_key TEXT, mode TEXT NOT NULL DEFAULT 'fixed', brains TEXT NOT NULL DEFAULT ''
+  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER, brain_key TEXT, mode TEXT NOT NULL DEFAULT 'fixed', brains TEXT NOT NULL DEFAULT '', skill TEXT
 );
 -- An autonomous agent's own record of the style it chose and when, with the reason its model gave.
 CREATE TABLE IF NOT EXISTS style_log (
@@ -187,7 +187,7 @@ export class ArenaStore {
       db.exec(TENANT);
       // Databases made before a column existed get it here (CREATE TABLE IF NOT EXISTS does not add columns).
       const have = new Set((db.prepare("PRAGMA table_info(bots)").all() as Array<{ name: string }>).map((c) => c.name));
-      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"], ["brain_key", "TEXT"], ["mode", "TEXT NOT NULL DEFAULT 'fixed'"], ["brains", "TEXT NOT NULL DEFAULT ''"]] as const)
+      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"], ["brain_key", "TEXT"], ["mode", "TEXT NOT NULL DEFAULT 'fixed'"], ["brains", "TEXT NOT NULL DEFAULT ''"], ["skill", "TEXT"]] as const)
         if (!have.has(col)) db.exec(`ALTER TABLE bots ADD COLUMN ${col} ${ddl}`);
       this.tenants.set(userId, db);
     }

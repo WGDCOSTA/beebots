@@ -17,6 +17,8 @@ import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, PLATFORM, type BotView } from "./bots.js";
 import { readInsights, type Insights } from "./insights.js";
+import { SkillBank } from "./skills.js";
+import type { Skill } from "../lab/skills/index.js";
 import type { LlmClient } from "../brains/llm.js";
 import type { StyleId } from "../settings.js";
 import { chooseStyle, marketLines } from "./autonomy.js";
@@ -49,6 +51,8 @@ export interface RunnerOpts {
   sampleMs?: number;
   /** The key vault: an agent set to think with its member's own key gets that key's model and the member's own daily ceiling. */
   vault?: Vault;
+  /** The platform's skill library (the lab's built-in and imported skills), for agents that trade by a skill. */
+  library?: readonly Skill[];
   /** The platform's chat model, for an autonomous agent's style calls when it thinks with the platform's model. Without it such an agent keeps Momentum. */
   llm?: LlmClient;
   /** How long an autonomous agent keeps a style before it asks again, and the least time between two switches (engine rule). Hours. */
@@ -113,7 +117,7 @@ export class ArenaRunner {
   private runs = new Map<string, Run>();
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
-  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm">;
+  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">;
   private timer: NodeJS.Timeout | null = null;
   private sampler: NodeJS.Timeout | null = null;
   private settler: NodeJS.Timeout | null = null;
@@ -194,6 +198,14 @@ export class ArenaRunner {
     if (members.length === 0) throw new Error("it has no model to think with");
     const decider: SystemOne = members.length === 1 ? members[0]!.sys : new EnsembleSystemOne(members);
     const usdPerMTok = rates.reduce((s, x) => s + x, 0) / rates.length;
+    // Skill mode: the member's skill, compiled now. If it is gone or beyond the plan's slots the agent does not start, and it
+    // never quietly trades as something else.
+    let skill: Skill | null = null;
+    if (bot.mode === "skill") {
+      const user = this.o.store.userById(userId);
+      skill = user && bot.skill ? new SkillBank(this.o.store.tenant(userId), user.tier, this.o.library ?? [], this.o.now).resolve(bot.skill) : null;
+      if (!skill) throw new Error("its skill is not available");
+    }
     const cfg = this.config(bot, file, dailyUsd, usdPerMTok);
     const db = new Db(file);
     const ctl = { paused: bot.state === "paused", closing: false };
@@ -213,7 +225,8 @@ export class ArenaRunner {
         now: this.o.now,
         paused: () => ctl.paused,
         closeRequested: () => ctl.closing,
-        specialization: bot.mode === "autonomous" ? () => (auto.style ? { kind: "style" as const, id: auto.style } : null) : undefined,
+        specialization: bot.mode === "autonomous" ? () => (auto.style ? { kind: "style" as const, id: auto.style } : null) : skill ? () => ({ kind: "skill" as const, id: bot.skill! }) : undefined,
+        skillById: skill ? (sid: string) => (sid === bot.skill ? skill : undefined) : undefined,
       });
       await engine.start();
       this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, usdPerMTok, dailyUsd, file, startedAt: this.o.now(), ctl, auto });
@@ -340,7 +353,7 @@ export class ArenaRunner {
       const user = this.o.store.userById(r.userId);
       const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
       if (!user || !b) continue;
-      lb.record({ botId: r.botId, userId: r.userId, handle: user.handle, name: r.bot.name, theme: r.bot.theme, avatar: r.bot.avatar, style: r.bot.mode === "autonomous" ? "autonomous" : r.bot.style, tier: user.tier, version: r.version }, b.equityUsd, b.totals.orders, ts);
+      lb.record({ botId: r.botId, userId: r.userId, handle: user.handle, name: r.bot.name, theme: r.bot.theme, avatar: r.bot.avatar, style: r.bot.mode === "autonomous" ? "autonomous" : r.bot.mode === "skill" ? "skill" : r.bot.style, tier: user.tier, version: r.version }, b.equityUsd, b.totals.orders, ts);
     }
     lb.prune(ts);
   }

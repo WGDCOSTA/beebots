@@ -166,3 +166,9 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 .ab-brains label { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); cursor: pointer; overflow-wrap: anywhere; }
 .ab-brains label.on { border-color: var(--bizzy); background: color-mix(in srgb, var(--bizzy) 16%, var(--card-2)); }
 .ab-brains input { width: 22px; height: 22px; accent-color: #c98500; flex: none; }
+/* Step 8: skills. */
+.sk-list { list-style: none; margin: 8px 0; padding: 0; display: grid; }
+.sk-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.sk-list li.locked { opacity: 0.7; }
+.sk-main { min-width: 0; overflow-wrap: anywhere; }
+.sk-spec { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; width: 100%; box-sizing: border-box; }

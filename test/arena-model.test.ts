@@ -157,7 +157,9 @@ describe("words for what an agent did", () => {
   it("translates menu labels it knows and keeps the rest readable", () => {
     expect(choiceText("LONG_BTC", t as never)).toBe('choice.long{"coin":"BTC"}');
     expect(choiceText("SHORT_ETH", t as never)).toBe('choice.short{"coin":"ETH"}');
+    expect(choiceText("SMA_CROSS_LONG_BTC", t as never)).toBe('choice.long{"coin":"BTC"}');
     expect(choiceText("HOLD_WINNER", t as never)).toBe("choice.hold");
+    expect(choiceText("WAIT", t as never)).toMatch(/wait/i);
     expect(choiceText("FT_SOMETHING_ODD", t as never)).toMatch(/something odd/i);
   });
   it("ticks the getting-started list from real data", () => {

@@ -195,7 +195,7 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
         {step === "style" && (
           <>
             <ModeField d={d} set={setD} limits={limits} />
-            <StyleFields cat={data.cat} limits={limits} d={d} set={setD} />
+            <StyleFields cat={data.cat} limits={limits} d={d} set={setD} skills={data.skills} />
           </>
         )}
         {step === "rules" && <RulesField d={d} set={setD} />}
