@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { BIZZY_BREAKOUT_COINS } from "../bees/bizzy.js";
 import { BREEZY_COINS } from "../bees/breezy.js";
 import { MAX_BEES } from "../config.js";
+import { QUARANTINE_DAYS } from "./plans.js";
 import { STYLES, STYLE_INFO, isReservedName, type StyleId } from "../settings.js";
 import type { Tier } from "./store.js";
 import { avatarOf, themeById } from "./themes.js";
@@ -17,19 +18,26 @@ export interface PlanLimits {
   proThemes: boolean;
   /** May run an agent in autonomous mode: it picks and changes its own style, coins and instruments. */
   autonomy: boolean;
+  /** Model brains an agent may use together. Not enforced yet: the feature does not exist. */
+  brains: number;
+  /** Skills a member may keep active. Not enforced yet: the skill bank does not exist. */
+  skillSlots: number;
+  /** Stored historical candles and simulated training on them. Not built yet. */
+  history: boolean;
 }
 
 /** Free: one agent, simple styles, three coins. Pro: up to nine, every style, more coins and every pack. Premium: up to 20 and autonomy. */
 export const LIMITS: Record<Tier, PlanLimits> = {
-  free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false },
-  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: false },
-  premium: { bots: 20, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: true },
+  free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false, brains: 1, skillSlots: 5, history: false },
+  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: false, brains: 3, skillSlots: 30, history: true },
+  // Premium's skill slots were not given: it has at least Pro's, so it gets Pro's until the owner says otherwise.
+  premium: { bots: 20, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: true, brains: 6, skillSlots: 30, history: true },
 };
 
 export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] as const;
 
-/** running: trades. paused: keeps what it holds under its stops, opens nothing new. stopped: closed out and finished. */
-export type BotState = "running" | "paused" | "stopped";
+/** running: trades. paused: keeps what it holds under its stops, opens nothing new. stopped: closed out and finished. quarantined: the plan no longer allows it; stopped, off the board, kept for QUARANTINE_DAYS, restored by upgrading. */
+export type BotState = "running" | "paused" | "stopped" | "quarantined";
 
 export interface BotView {
   id: string;
@@ -46,6 +54,8 @@ export interface BotView {
   /** Shown on the public leaderboard (name, style and results only; never positions or rules). */
   listed: boolean;
   state: BotState;
+  /** When it went into quarantine, or null. */
+  quarantinedAt: number | null;
   version: number;
   createdAt: number;
 }
@@ -68,6 +78,7 @@ export class BotError extends Error {
   }
 }
 
+const QUARANTINED_MSG = "This agent is in quarantine because your plan no longer includes it. Upgrade to restore it.";
 const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} '-]{0,22}[\p{L}\p{N}]$/u;
 const MIN_RULES = 8;
 const MAX_RULES = 500;
@@ -85,10 +96,11 @@ interface Row {
   image: number;
   listed: number;
   state: string;
+  quarantined_at: number | null;
   version: number;
   created_at: number;
 }
-const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, version: r.version, createdAt: r.created_at });
+const toView = (r: Row): BotView => ({ id: r.id, name: r.name, theme: r.theme, avatar: r.avatar, style: r.style as StyleId, coins: JSON.parse(r.coins) as string[], rules: r.rules, tagline: r.tagline, look: r.look, image: r.image === 1, listed: r.listed === 1, state: r.state as BotState, quarantinedAt: r.quarantined_at, version: r.version, createdAt: r.created_at });
 
 /** The coins a style can trade at all (Momentum ranks every coin that passes the gates). */
 export const STYLE_COINS: Partial<Record<StyleId, readonly string[]>> = { breezy: BREEZY_COINS, bizzy: BIZZY_BREAKOUT_COINS };
@@ -196,6 +208,7 @@ export class Bots {
   /** Name, theme and avatar change in place; a new style, coin set or rules text is a new version. */
   update(id: unknown, i: BotInput): BotView {
     const cur = this.get(id);
+    if (cur.state === "quarantined") throw new BotError(QUARANTINED_MSG, 409);
     const c = this.clean(i, cur.id);
     const same = c.style === cur.style && c.rules === cur.rules && JSON.stringify(c.coins) === cur.coins;
     const version = same ? cur.version : cur.version + 1;
@@ -215,6 +228,7 @@ export class Bots {
   /** Pause keeps the positions under their stops and opens nothing new; resume undoes it. Stop closes everything and ends this run. */
   setState(id: unknown, to: BotState): BotView {
     const cur = this.get(id);
+    if (cur.state === "quarantined") throw new BotError(QUARANTINED_MSG, 409);
     const from = cur.state as BotState;
     const ok = (from === "running" && (to === "paused" || to === "stopped")) || (from === "paused" && (to === "running" || to === "stopped"));
     if (!ok) throw new BotError(from === "stopped" ? "This agent is stopped. Start it again to run it." : `This agent is already ${from}.`, 409);
@@ -225,6 +239,7 @@ export class Bots {
   /** A stopped agent runs again as a new version: a fresh paper account, the old run kept in its history. */
   startAgain(id: unknown): BotView {
     const cur = this.get(id);
+    if (cur.state === "quarantined") throw new BotError(QUARANTINED_MSG, 409);
     if (cur.state !== "stopped") throw new BotError("Only a stopped agent can be started again.", 409);
     const version = cur.version + 1;
     this.db.exec("BEGIN");
@@ -237,6 +252,42 @@ export class Bots {
       throw e;
     }
     return toView(this.get(cur.id));
+  }
+
+  /**
+   * Brings the agents in line with the plan. The oldest agents the plan allows (by count and by style) stay; the rest go into
+   * quarantine: stopped, off the board, kept for QUARANTINE_DAYS. Agents in quarantine that fit again (the member upgraded) are
+   * restored as stopped, so nothing starts trading without the member pressing Start again. Returns what changed.
+   */
+  reconcile(now: number): { quarantined: string[]; restored: string[] } {
+    const lim = LIMITS[this.tier];
+    const rows = this.db.prepare("SELECT * FROM bots ORDER BY created_at, rowid").all() as unknown as Row[];
+    const quarantined: string[] = [];
+    const restored: string[] = [];
+    let kept = 0;
+    for (const r of rows) {
+      const fits = lim.styles.includes(r.style as StyleId) && kept < lim.bots;
+      if (fits) kept++;
+      if (fits && r.state === "quarantined") {
+        this.db.prepare("UPDATE bots SET state = 'stopped', quarantined_at = NULL WHERE id = ?").run(r.id);
+        restored.push(r.id);
+      } else if (!fits && r.state !== "quarantined") {
+        this.db.prepare("UPDATE bots SET state = 'quarantined', quarantined_at = ? WHERE id = ?").run(now, r.id);
+        quarantined.push(r.id);
+      }
+    }
+    return { quarantined, restored };
+  }
+
+  /** Deletes the agents whose quarantine is over. Returns their ids so the caller can remove their portraits and ranking rows. */
+  purgeQuarantined(now: number): string[] {
+    const cutoff = now - QUARANTINE_DAYS * 86_400_000;
+    const ids = (this.db.prepare("SELECT id FROM bots WHERE state = 'quarantined' AND quarantined_at IS NOT NULL AND quarantined_at <= ?").all(cutoff) as Array<{ id: string }>).map((r) => r.id);
+    for (const id of ids) {
+      this.db.prepare("DELETE FROM bot_versions WHERE bot_id = ?").run(id);
+      this.db.prepare("DELETE FROM bots WHERE id = ?").run(id);
+    }
+    return ids;
   }
 
   /** Pauses every running agent (the Home's "Pause all"), or resumes every paused one. Returns how many changed. */

@@ -11,6 +11,8 @@ import type { Leaderboard } from "./ranking.js";
 import type { RunStatus } from "./runner.js";
 import { isLocale } from "./locales.js";
 import { CONSENT_ITEMS, CONSENT_VERSION } from "./store.js";
+import { Billing, BillingError } from "./billing.js";
+import { PLAN_PRICES } from "./plans.js";
 import { TEMPLATES } from "./templates.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
@@ -29,6 +31,8 @@ export interface ApiOpts {
   aiDailyLimit?: number;
   /** The public leaderboard (null = none). */
   leaderboard?: Leaderboard | null;
+  /** Plans and payment (null = payments are not open: everyone is on Free). */
+  billing?: Billing | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
   runner?: {
     update(userId: string): Promise<void>;
@@ -68,6 +72,11 @@ export class ArenaApi {
     return true;
   }
 
+  /** The billing service, or a closed one when payments are not set up. */
+  private billing(): Billing {
+    return this.opts.billing ?? new Billing(this.store, null, null, () => {}, this.now);
+  }
+
   private memberAi(u: ArenaUser): MemberAi {
     return new MemberAi(this.store.tenant(u.id), u.tier, this.opts.ai ?? null, {
       now: this.now,
@@ -91,7 +100,7 @@ export class ArenaApi {
     if (req.method === "GET" && route === "/me") {
       const u = this.auth.user(sessionOf(req));
       if (!u) reply(res, 401, { error: "not signed in" });
-      else reply(res, 200, { user: view(u), limits: LIMITS[u.tier], consent: { needed: this.store.consentNeeded(u.id), version: CONSENT_VERSION, items: CONSENT_ITEMS } });
+      else reply(res, 200, { user: view(u), limits: LIMITS[u.tier], consent: { needed: this.store.consentNeeded(u.id), version: CONSENT_VERSION, items: CONSENT_ITEMS }, billing: this.billing().view(u) });
       return true;
     }
     if (req.method === "GET" && route.startsWith("/bot-image/")) {
@@ -131,6 +140,12 @@ export class ArenaApi {
       reply(res, 200, { themes: THEMES, coins: COINS, limits: LIMITS });
       return true;
     }
+    if (req.method === "GET" && route === "/billing/plans") {
+      // Public, like the catalogue: what each plan includes and costs.
+      const me = this.auth.user(sessionOf(req));
+      const plans = (["free", "pro", "premium"] as const).map((id) => ({ id, price: id === "free" ? null : PLAN_PRICES[id], limits: LIMITS[id] }));
+      return this.send(res, 200, { open: this.billing().open, plans, current: me ? this.billing().view(me) : null });
+    }
     if (req.method === "GET" && route === "/templates") {
       // Starter agents: examples to edit, never advice. Public, like the catalogue.
       reply(res, 200, { templates: TEMPLATES });
@@ -167,6 +182,25 @@ export class ArenaApi {
     if (req.method !== "POST") {
       reply(res, 405, { error: "method not allowed" });
       return true;
+    }
+    if (route === "/billing/webhook") {
+      // Stripe calls this, so it has no x-arena header and no cookie: the signature over the exact bytes is the whole proof.
+      let raw = "";
+      try {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const c of req) {
+          size += (c as Buffer).length;
+          if (size > 512 * 1024) throw new Error("too large");
+          chunks.push(c as Buffer);
+        }
+        raw = Buffer.concat(chunks).toString("utf8");
+        await this.billing().webhook(raw, typeof req.headers["stripe-signature"] === "string" ? req.headers["stripe-signature"] : undefined);
+        return this.send(res, 200, { received: true });
+      } catch (e) {
+        if (e instanceof BillingError) return this.send(res, e.status, { error: e.message });
+        return this.send(res, 400, { error: "bad request" });
+      }
     }
     if (req.headers["x-arena"] !== "1") {
       reply(res, 403, { error: "missing x-arena header" });
@@ -270,6 +304,19 @@ export class ArenaApi {
           throw e;
         }
       }
+      case "/billing/checkout":
+      case "/billing/portal": {
+        const u = this.auth.user(sessionOf(req));
+        if (!u) return this.send(res, 401, { error: "not signed in" });
+        if (this.blockedByConsent(res, u)) return true;
+        try {
+          const url = route === "/billing/checkout" ? await this.billing().checkout(u, body.plan, u.locale) : await this.billing().portal(u);
+          return this.send(res, 200, { url });
+        } catch (e) {
+          if (e instanceof BillingError) return this.send(res, e.status, { error: e.message });
+          return this.send(res, 502, { error: "Could not reach the payment service. Try again in a minute." });
+        }
+      }
       case "/account/consent": {
         const u = this.auth.user(sessionOf(req));
         if (!u) return this.send(res, 401, { error: "not signed in" });
@@ -299,6 +346,8 @@ export class ArenaApi {
         if (!u) reply(res, 401, { error: "not signed in" });
         else if (body.confirm !== u.email) reply(res, 400, { error: "Type your e-mail address to confirm." });
         else {
+          // A subscription must not outlive the account: if Stripe cannot be told, the account stays and the member can retry.
+          if (!(await this.billing().cancelFor(u.id))) return this.send(res, 502, { error: "Could not cancel your subscription. Try again in a minute, or cancel it from Manage billing first." });
           await this.opts.runner?.forget(u.id); // close the paper files before they are deleted
           this.store.deleteUser(u.id, this.now());
           reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
