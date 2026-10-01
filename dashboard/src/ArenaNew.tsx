@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { arena, type Limits } from "./arenaApi";
 import { stepIssue, STYLE_KEYS, WIZARD_STEPS, type BotDraft, type Say, type WizardStep } from "./arenaModel";
-import { ListedField, LookFields, RulesField, StyleFields } from "./ArenaFields";
+import { BrainField, ListedField, LookFields, RulesField, StyleFields } from "./ArenaFields";
 import { Portrait, type ArenaData } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
@@ -205,6 +205,7 @@ export function ArenaNew({ data, limits, onDone, onCancel }: { data: ArenaData; 
               <dt>{t("field.coins")}</dt>
               <dd>{d.coins.join(", ")}</dd>
             </dl>
+            <BrainField d={d} set={setD} keys={data.keys} />
             <ListedField d={d} set={setD} />
           </>
         )}

@@ -1,6 +1,7 @@
 // "Me": the person, apart from the agents. Who they are, their public name, their language, signing out, and leaving.
 import { useState } from "react";
 import { arena, type BillingView, type Member } from "./arenaApi";
+import { ArenaKeys } from "./ArenaKeys";
 import { handleIssue, TIER_LABEL } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
 import { LOCALES, LOCALE_NAMES, type Locale } from "./i18n/locales";
@@ -141,6 +142,8 @@ export function ArenaMe({ me, billing, onOut, onHandle, onPickLocale }: { me: Me
         </div>
         {billError && <p className="bad">{billError}</p>}
       </div>
+
+      <ArenaKeys />
 
       <div className="pcard arena-card">
         <h3>{t("me.language")}</h3>
