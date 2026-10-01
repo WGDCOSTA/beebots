@@ -191,3 +191,26 @@ describe("HTTP", () => {
     expect(store.userById(auth.user(session)!.id)!.tier).toBe("free");
   });
 });
+
+describe("the Premium plan", () => {
+  it("is read from the account, and only Premium gets autonomy and up to 20 agents", () => {
+    const store = new ArenaStore(mkdtempSync(join(tmpdir(), "arena-prem-")));
+    const u = store.createUser("b".repeat(32), "bo@example.com", 1);
+    expect(store.userById(u.id)!.tier).toBe("free");
+    store.dir.prepare("UPDATE users SET tier = 'premium' WHERE id = ?").run(u.id);
+    expect(store.userById(u.id)!.tier).toBe("premium");
+    store.dir.prepare("UPDATE users SET tier = 'whatever' WHERE id = ?").run(u.id);
+    expect(store.userById(u.id)!.tier).toBe("free"); // an unknown value is never a paid plan
+    expect(LIMITS.free.autonomy).toBe(false);
+    expect(LIMITS.pro.autonomy).toBe(false);
+    expect(LIMITS.premium).toMatchObject({ autonomy: true, bots: 20, proThemes: true, maxCoins: 8 });
+    expect(LIMITS.premium.bots).toBeGreaterThan(LIMITS.pro.bots);
+  });
+  it("lets a Premium member create 20 agents and no more", () => {
+    const store = new ArenaStore(mkdtempSync(join(tmpdir(), "arena-prem-")));
+    const u = store.createUser("c".repeat(32), "cy@example.com", 1);
+    const bots = new Bots(store.tenant(u.id), "premium", () => 1000);
+    for (let i = 0; i < 20; i++) bots.create({ ...good, name: `Agent ${String.fromCharCode(65 + i)}${i}` });
+    expect(fails(() => bots.create({ ...good, name: "One Too Many" }), 403)).toMatch(/reached 20/);
+  });
+});

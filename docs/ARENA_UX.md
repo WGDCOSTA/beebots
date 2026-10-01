@@ -11,7 +11,7 @@ Every function in `docs/ARENA_PLAN.md` and in the later conversations was listed
 | Built | 6 | Works as it is: e-mail sign-in, theme and avatar picker, and, since step 1, the Arena's own frame, the landing page, the consent screen and six languages. Step 2 also built (not counted here): Home, the agent page, the five-step create wizard, pause, stop and start again, and the three example agents |
 | Built, needs redesign | 8 | Exists, but the screen is wrong for what it has to do |
 | Drawn | 32 | A mockup shows it, with its rules |
-| Not in v1 | 2 | Decided: follow and comments; live trading opt-in |
+| Not in v1 | 2 | Decided: follow and comments; live trading opt-in (now wanted, but gated on counsel; see `ARENA_AUTONOMY_LIVE.md`) |
 
 The full table, with the screen number of each function, is in the HTML file.
 

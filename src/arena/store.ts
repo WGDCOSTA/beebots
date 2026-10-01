@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "./locales.js";
 
-export type Tier = "free" | "pro";
+/** free: one agent. pro: extra benefits over free (more agents, all styles, packs). premium: full autonomy and up to 20 agents. */
+export type Tier = "free" | "pro" | "premium";
 export interface ArenaUser {
   id: string;
   email: string;
@@ -93,7 +94,7 @@ interface UserRow {
   locale: string | null;
 }
 
-const toUser = (r: UserRow): ArenaUser => ({ id: r.id, email: r.email, tier: r.tier === "pro" ? "pro" : "free", handle: r.handle ?? `bunny-${r.id.slice(0, 4)}`, locale: isLocale(r.locale) ? r.locale : DEFAULT_LOCALE, createdAt: r.created_at });
+const toUser = (r: UserRow): ArenaUser => ({ id: r.id, email: r.email, tier: r.tier === "premium" ? "premium" : r.tier === "pro" ? "pro" : "free", handle: r.handle ?? `bunny-${r.id.slice(0, 4)}`, locale: isLocale(r.locale) ? r.locale : DEFAULT_LOCALE, createdAt: r.created_at });
 
 export class ArenaStore {
   readonly dir: DatabaseSync;

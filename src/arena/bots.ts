@@ -15,12 +15,15 @@ export interface PlanLimits {
   styles: readonly StyleId[];
   /** May use the Pro theme packs. */
   proThemes: boolean;
+  /** May run an agent in autonomous mode: it picks and changes its own style, coins and instruments. */
+  autonomy: boolean;
 }
 
-/** Free: one bot, simple styles, three coins. Pro: up to the engine's nine slots, every style, more coins and every pack. */
+/** Free: one agent, simple styles, three coins. Pro: up to nine, every style, more coins and every pack. Premium: up to 20 and autonomy. */
 export const LIMITS: Record<Tier, PlanLimits> = {
-  free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false },
-  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true },
+  free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false },
+  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: false },
+  premium: { bots: 20, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: true },
 };
 
 export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] as const;

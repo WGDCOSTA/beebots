@@ -5,7 +5,7 @@ export interface Member {
   id: string;
   email: string;
   handle: string;
-  tier: "free" | "pro";
+  tier: "free" | "pro" | "premium";
   locale: Locale;
   createdAt: number;
 }
@@ -15,6 +15,7 @@ export interface Limits {
   maxCoins: number;
   styles: string[];
   proThemes: boolean;
+  autonomy: boolean;
 }
 
 export interface ConsentState {

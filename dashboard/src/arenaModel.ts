@@ -27,7 +27,7 @@ export function memberSince(ts: number): string {
   return `Member since ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-export const TIER_LABEL: Record<"free" | "pro", string> = { free: "Free", pro: "Pro" };
+export const TIER_LABEL: Record<"free" | "pro" | "premium", string> = { free: "Free", pro: "Pro", premium: "Premium" };
 
 export function looksLikeEmail(v: string): boolean {
   const e = v.trim();
@@ -241,7 +241,7 @@ export function seasonEndsSay(end: number, now: number): Say {
 /** A league id such as "free:breezy" in words. */
 export function leagueLabel(id: string): string {
   const [tier = "", style = ""] = id.split(":");
-  return `${tier === "pro" ? "Pro" : "Free"} · ${STYLE_LABEL[style]?.label ?? style}`;
+  return `${TIER_LABEL[tier as "free" | "pro" | "premium"] ?? "Free"} · ${STYLE_LABEL[style]?.label ?? style}`;
 }
 
 const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;

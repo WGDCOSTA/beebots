@@ -99,7 +99,7 @@ export function ArenaMe({ me, onOut, onHandle, onPickLocale }: { me: Member; onO
             <div className="arena-email mono">{me.email}</div>
             <div className="dim small">{memberSince(me.createdAt)}</div>
           </div>
-          <span className={`badge ${me.tier === "pro" ? "ok" : ""}`}>{TIER_LABEL[me.tier]}</span>
+          <span className={`badge ${me.tier !== "free" ? "ok" : ""}`}>{TIER_LABEL[me.tier]}</span>
         </div>
         <PublicName me={me} onChange={onHandle} />
         <div className="arena-actions">
