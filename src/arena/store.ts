@@ -58,6 +58,13 @@ CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS attempts_key ON attempts(key, ts);
 CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, user_id TEXT, event TEXT NOT NULL);
+-- Billing: the member's Stripe ids and the state of the subscription. No card data ever reaches this server.
+CREATE TABLE IF NOT EXISTS billing (
+  user_id TEXT PRIMARY KEY, customer TEXT, subscription TEXT, status TEXT, period_end INTEGER, updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS billing_customer ON billing(customer);
+-- Stripe events already handled, so a repeated delivery changes nothing.
+CREATE TABLE IF NOT EXISTS stripe_events (id TEXT PRIMARY KEY, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS ai_usage (day TEXT PRIMARY KEY, n INTEGER NOT NULL);
 -- The public leaderboard: only bots their owners chose to list, and only what is shown there (ranking.ts).
 CREATE TABLE IF NOT EXISTS lb_bots (
@@ -77,7 +84,7 @@ CREATE TABLE IF NOT EXISTS bots (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, theme TEXT NOT NULL, avatar TEXT NOT NULL, style TEXT NOT NULL,
   coins TEXT NOT NULL, rules TEXT NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
   tagline TEXT NOT NULL DEFAULT '', look TEXT NOT NULL DEFAULT '', image INTEGER NOT NULL DEFAULT 0,
-  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running'
+  listed INTEGER NOT NULL DEFAULT 1, state TEXT NOT NULL DEFAULT 'running', quarantined_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS bot_versions (
   bot_id TEXT NOT NULL, version INTEGER NOT NULL, style TEXT NOT NULL, coins TEXT NOT NULL, rules TEXT NOT NULL,
@@ -175,7 +182,7 @@ export class ArenaStore {
       db.exec(TENANT);
       // Databases made before a column existed get it here (CREATE TABLE IF NOT EXISTS does not add columns).
       const have = new Set((db.prepare("PRAGMA table_info(bots)").all() as Array<{ name: string }>).map((c) => c.name));
-      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"]] as const)
+      for (const [col, ddl] of [["tagline", "TEXT NOT NULL DEFAULT ''"], ["look", "TEXT NOT NULL DEFAULT ''"], ["image", "INTEGER NOT NULL DEFAULT 0"], ["listed", "INTEGER NOT NULL DEFAULT 1"], ["state", "TEXT NOT NULL DEFAULT 'running'"], ["quarantined_at", "INTEGER"]] as const)
         if (!have.has(col)) db.exec(`ALTER TABLE bots ADD COLUMN ${col} ${ddl}`);
       this.tenants.set(userId, db);
     }
@@ -220,6 +227,7 @@ export class ArenaStore {
     this.tenants.delete(userId);
     this.dir.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
     this.dir.prepare("DELETE FROM consents WHERE user_id = ?").run(userId);
+    this.dir.prepare("DELETE FROM billing WHERE user_id = ?").run(userId);
     // Their bots leave the public leaderboard with them.
     this.dir.prepare("DELETE FROM lb_points WHERE bot_id IN (SELECT bot_id FROM lb_bots WHERE user_id = ?)").run(userId);
     this.dir.prepare("DELETE FROM lb_bots WHERE user_id = ?").run(userId);
@@ -227,6 +235,35 @@ export class ArenaStore {
     for (const ext of ["", "-wal", "-shm"]) rmSync(join(this.root, "tenants", `${userId}.db${ext}`), { force: true });
     rmSync(join(this.root, "tenants", userId), { recursive: true, force: true });
     this.audit(userId, "account deleted", now);
+  }
+
+  /** Sets the plan. Callers (billing.ts) are the only ones that should. */
+  setTier(userId: string, tier: Tier): void {
+    this.dir.prepare("UPDATE users SET tier = ? WHERE id = ?").run(tier, userId);
+  }
+
+  billingOf(userId: string): { customer: string | null; subscription: string | null; status: string | null; periodEnd: number | null } {
+    const r = this.dir.prepare("SELECT customer, subscription, status, period_end FROM billing WHERE user_id = ?").get(userId) as { customer: string | null; subscription: string | null; status: string | null; period_end: number | null } | undefined;
+    return { customer: r?.customer ?? null, subscription: r?.subscription ?? null, status: r?.status ?? null, periodEnd: r?.period_end ?? null };
+  }
+
+  setBilling(userId: string, b: Partial<{ customer: string | null; subscription: string | null; status: string | null; periodEnd: number | null }>, now: number): void {
+    const cur = this.billingOf(userId);
+    const n = { ...cur, ...b };
+    this.dir.prepare("INSERT INTO billing (user_id, customer, subscription, status, period_end, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET customer = excluded.customer, subscription = excluded.subscription, status = excluded.status, period_end = excluded.period_end, updated_at = excluded.updated_at").run(userId, n.customer, n.subscription, n.status, n.periodEnd, now);
+  }
+
+  userIdByCustomer(customer: string): string | null {
+    return (this.dir.prepare("SELECT user_id FROM billing WHERE customer = ?").get(customer) as { user_id: string } | undefined)?.user_id ?? null;
+  }
+
+  /** True the first time an event id is seen, false for a repeat. */
+  firstSight(eventId: string, now: number): boolean {
+    return Number(this.dir.prepare("INSERT OR IGNORE INTO stripe_events (id, ts) VALUES (?, ?)").run(eventId, now).changes) === 1;
+  }
+
+  allUserIds(): string[] {
+    return (this.dir.prepare("SELECT id FROM users ORDER BY created_at, id").all() as Array<{ id: string }>).map((r) => r.id);
   }
 
   close(): void {

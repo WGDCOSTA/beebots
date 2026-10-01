@@ -44,6 +44,9 @@ export interface RunnerOpts {
   sampleMs?: number;
 }
 
+/** A stopped agent, or one in quarantine: no engine, no ranking, positions closed. */
+const ended = (b: { state: string } | undefined): boolean => b?.state === "stopped" || b?.state === "quarantined";
+
 export type RunState = "running" | "paused" | "stopping" | "stopped" | "queued" | "error";
 export interface RunStatus {
   state: RunState;
@@ -180,16 +183,16 @@ export class ArenaRunner {
         else {
           r.bot = b; // a cosmetic edit keeps the account, and the ranking shows the new name and avatar
           r.ctl.paused = b.state === "paused";
-          if (b.state === "stopped") r.ctl.closing = true; // close what it holds, then the run ends (settle)
+          if (ended(b)) r.ctl.closing = true; // close what it holds, then the run ends (settle)
         }
       }
       await this.settle(userId);
       // A bot that is gone, or that its owner took off the leaderboard, leaves it with every sample.
-      for (const id of this.o.leaderboard?.listedBots(userId) ?? []) if (!byId.get(id)?.listed || byId.get(id)?.state === "stopped") this.o.leaderboard?.remove(id);
+      for (const id of this.o.leaderboard?.listedBots(userId) ?? []) if (!byId.get(id)?.listed || ended(byId.get(id))) this.o.leaderboard?.remove(id);
       // Old versions' files are not needed once their engine is gone.
       if (user) this.prune(userId, bots);
       for (const b of bots) {
-        if (this.runs.has(b.id) || b.state === "stopped") continue;
+        if (this.runs.has(b.id) || ended(b)) continue;
         if (this.runs.size >= this.o.maxRunners) continue;
         try {
           await this.start(userId, b);
@@ -292,7 +295,7 @@ export class ArenaRunner {
     } catch {
       return undefined;
     }
-    if (bot.state !== "stopped") return undefined;
+    if (!ended(bot)) return undefined;
     const ins = readInsights(this.fileOf(userId, bot), { decisions: 0, trades: 0 });
     const last = ins?.equity.at(-1)?.[1] ?? this.o.startUsd;
     return { state: "stopped", equityUsd: last, startEquityUsd: this.o.startUsd, pnlUsd: last - this.o.startUsd, pnlPct: ((last - this.o.startUsd) / this.o.startUsd) * 100, position: null, decisions: undefined };
