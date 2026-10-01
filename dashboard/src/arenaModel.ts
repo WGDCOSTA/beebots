@@ -33,7 +33,11 @@ export function resendIn(sentAt: number, now: number, cooldownMs = 30_000): numb
   return Math.max(0, Math.ceil((sentAt + cooldownMs - now) / 1000));
 }
 
+export const PROVIDER_LABEL: Record<string, string> = { openai: "OpenAI", claude: "Claude (Anthropic)", zai: "Z.ai (GLM)", kimi: "Kimi (Moonshot)" };
+
 export interface BotDraft {
+  /** The member's own model key it thinks with; null or missing = the platform's model. */
+  brainKey?: string | null;
   name: string;
   theme: string;
   avatar: string;

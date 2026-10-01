@@ -1,7 +1,7 @@
 // The fields of an agent, in groups, shared by the create wizard (one group per step) and the agent's Settings (all at once).
 // What the plan leaves out is shown locked, with the reason, and a coin a style cannot trade is greyed out, not hidden.
-import { coinFits, STYLE_COINS, STYLE_KEYS, toggleCoin, withStyle, type BotDraft } from "./arenaModel";
-import { Portrait, type Catalogue, type Limits } from "./ArenaParts";
+import { coinFits, PROVIDER_LABEL, STYLE_COINS, STYLE_KEYS, toggleCoin, withStyle, type BotDraft } from "./arenaModel";
+import { Portrait, type Catalogue, type KeysState, type Limits } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
 interface Props {
@@ -140,5 +140,32 @@ export function ListedField({ d, set }: Pick<Props, "d" | "set">) {
         <span className="dim small"> {t("field.listedHelp")}</span>
       </span>
     </label>
+  );
+}
+
+/** Which model an agent thinks with: the platform's shared one, or one of the member's own keys. Hidden while the member has no key and the vault is closed. */
+export function BrainField({ d, set, keys }: Pick<Props, "d" | "set"> & { keys: KeysState }) {
+  const { t } = useI18n();
+  if (!keys.open && !d.brainKey) return null;
+  return (
+    <>
+      <label className="eyebrow" htmlFor="af-brain">
+        {t("brain.field")}
+      </label>
+      <select id="af-brain" className="pinput" value={d.brainKey ?? ""} onChange={(e) => set({ ...d, brainKey: e.target.value || null })}>
+        <option value="">{t("brain.platform")}</option>
+        {keys.keys.map((k) => (
+          <option key={k.id} value={k.id}>
+            {k.label} · {PROVIDER_LABEL[k.provider] ?? k.provider} · {k.model}
+          </option>
+        ))}
+      </select>
+      <p className="dim small">{t("brain.help")}</p>
+      {keys.keys.length === 0 && (
+        <a className="small" href="#/arena/me">
+          {t("brain.addKey")}
+        </a>
+      )}
+    </>
   );
 }
