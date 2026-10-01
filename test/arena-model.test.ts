@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { arenaView, draftProblem, handleProblem, leagueLabel, looksLikeEmail, memberSince, pctText, resendIn, runSummary, seasonEnds, toggleCoin } from "../dashboard/src/arenaModel.js";
+import { agoParts, arenaView, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleProblem, leagueLabel, looksLikeEmail, memberSince, pctText, pnlTone, resendIn, riskSay, seasonEnds, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
+import { en } from "../dashboard/src/i18n/en.js";
 
 describe("arenaView", () => {
   it("reads the e-mailed link", () => {
@@ -46,50 +47,137 @@ describe("memberSince", () => {
   });
 });
 
-describe("draftProblem", () => {
-  const ok = { name: "Fluffy", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "Trade carefully always.", tagline: "", look: "", listed: true };
-  it("accepts a complete draft", () => expect(draftProblem(ok, 3)).toBeNull());
-  it("says what is missing, one thing at a time", () => {
-    expect(draftProblem({ ...ok, name: " a " }, 3)).toMatch(/name/);
-    expect(draftProblem({ ...ok, avatar: "" }, 3)).toMatch(/avatar/);
-    expect(draftProblem({ ...ok, style: "" }, 3)).toMatch(/style/);
-    expect(draftProblem({ ...ok, coins: [] }, 3)).toMatch(/coin/);
-    expect(draftProblem({ ...ok, coins: ["BTC", "ETH", "SOL", "HYPE"] }, 3)).toMatch(/up to 3/);
-    expect(draftProblem({ ...ok, coins: ["BTC", "SOL"] }, 3)).toMatch(/only trades BTC, ETH/);
-    expect(draftProblem({ ...ok, style: "boozy", coins: ["XRP"] }, 3)).toBeNull();
-    expect(draftProblem({ ...ok, rules: "short" }, 3)).toMatch(/8 characters/);
-    expect(draftProblem({ ...ok, rules: "x".repeat(501) }, 3)).toMatch(/500/);
+describe("arenaView: an agent's page", () => {
+  it("reads the agent id, and refuses anything that is not one", () => {
+    expect(arenaView("#/arena/agent/ab12cd34ef56")).toEqual({ kind: "agent", id: "ab12cd34ef56" });
+    expect(arenaView("#/arena/agent/")).toEqual({ kind: "home" });
+    expect(arenaView("#/arena/agent/a b")).toEqual({ kind: "home" });
   });
 });
 
-describe("toggleCoin", () => {
-  it("adds, removes and stops at the limit", () => {
+describe("draftIssue", () => {
+  const ok = { name: "Fluffy", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "Trade carefully always.", tagline: "", look: "", listed: true };
+  it("accepts a complete draft", () => expect(draftIssue(ok, 3)).toBeNull());
+  it("says what is missing, one thing at a time, as keys to translate", () => {
+    expect(draftIssue({ ...ok, name: " a " }, 3)?.key).toBe("prob.name");
+    expect(draftIssue({ ...ok, avatar: "" }, 3)?.key).toBe("prob.avatar");
+    expect(draftIssue({ ...ok, style: "" }, 3)?.key).toBe("prob.style");
+    expect(draftIssue({ ...ok, coins: [] }, 3)?.key).toBe("prob.coins");
+    expect(draftIssue({ ...ok, coins: ["BTC", "ETH", "SOL", "HYPE"] }, 3)).toEqual({ key: "prob.maxCoins", vars: { n: 3 } });
+    expect(draftIssue({ ...ok, coins: ["BTC", "SOL"] }, 3, () => "Trend")).toEqual({ key: "prob.styleCoins", vars: { style: "Trend", coins: "BTC, ETH" } });
+    expect(draftIssue({ ...ok, style: "boozy", coins: ["XRP"] }, 3)).toBeNull();
+    expect(draftIssue({ ...ok, rules: "short" }, 3)?.key).toBe("prob.rulesShort");
+    expect(draftIssue({ ...ok, rules: "x".repeat(501) }, 3)?.key).toBe("prob.rulesLong");
+  });
+  it("every message it can give exists in English", () => {
+    for (const k of ["prob.name", "prob.avatar", "prob.style", "prob.coins", "prob.maxCoins", "prob.styleCoins", "prob.rulesShort", "prob.rulesLong"]) expect(en).toHaveProperty(k);
+  });
+});
+
+describe("the wizard's steps", () => {
+  const blank = { name: "", theme: "bunnies", avatar: "scout", style: "breezy", coins: ["BTC"], rules: "", tagline: "", look: "", listed: true };
+  it("each step stops only for what it owns", () => {
+    expect(stepIssue("start", blank, 3)).toBeNull();
+    expect(stepIssue("look", blank, 3)?.key).toBe("prob.name");
+    expect(stepIssue("style", blank, 3)).toBeNull(); // the name is a Look matter
+    expect(stepIssue("rules", blank, 3)?.key).toBe("prob.rulesShort");
+    expect(stepIssue("review", blank, 3)?.key).toBe("prob.name");
+    expect(stepIssue("look", { ...blank, name: "Fluffy" }, 3)).toBeNull();
+  });
+});
+
+describe("coins and styles", () => {
+  it("toggles a coin, refusing the limit and a coin the style cannot trade", () => {
     expect(toggleCoin(["BTC"], "ETH", 2)).toEqual(["BTC", "ETH"]);
     expect(toggleCoin(["BTC", "ETH"], "SOL", 2)).toEqual(["BTC", "ETH"]);
     expect(toggleCoin(["BTC", "ETH"], "BTC", 2)).toEqual(["ETH"]);
+    expect(toggleCoin(["BTC"], "SOL", 3, "breezy")).toEqual(["BTC"]);
+    expect(toggleCoin(["BTC"], "SOL", 3, "boozy")).toEqual(["BTC", "SOL"]);
+  });
+  it("knows which coins a style takes", () => {
+    expect(coinFits("breezy", "BTC")).toBe(true);
+    expect(coinFits("breezy", "SOL")).toBe(false);
+    expect(coinFits("boozy", "DOGE")).toBe(true);
+  });
+  it("switching style drops the coins it cannot trade and keeps the draft valid", () => {
+    const d = { name: "x", theme: "bunnies", avatar: "scout", style: "boozy", coins: ["BTC", "XRP"], rules: "", tagline: "", look: "", listed: true };
+    expect(withStyle(d, "breezy").coins).toEqual(["BTC"]);
+    expect(withStyle({ ...d, coins: ["XRP"] }, "breezy").coins).toEqual(["BTC"]);
   });
 });
 
-describe("runSummary", () => {
-  const run = { state: "running" as const, equityUsd: 1012.5, pnlUsd: 12.5, pnlPct: 1.25, decisions: 40, position: null, last: { choice: "HOLD_WINNER", confidence: 0.82, status: "ok", ts: 1 } };
-  it("explains a bot that is not trading, in words", () => {
-    expect(runSummary(false, undefined).headline).toMatch(/not trading yet/);
-    expect(runSummary(true, undefined).headline).toMatch(/Waiting for a free slot/);
-    expect(runSummary(true, { state: "error" })).toMatchObject({ headline: "Could not start", tone: "bad" });
-  });
-  it("shows the paper account, the position and the last call", () => {
-    const s = runSummary(true, run);
-    expect(s.headline).toBe("Paper account $1,012.50 (+$12.50, +1.25%)");
-    expect(s.detail).toBe("Flat, waiting for a setup. 40 decisions. Last call: Hold the winner (82% sure).");
-    expect(s.tone).toBe("good");
-    const p = runSummary(true, { ...run, pnlUsd: -3, pnlPct: -0.3, equityUsd: 997, position: { coin: "BTC", side: "long", sizeUsd: 500, uplUsd: -3, minutesHeld: 5 }, capped: true });
-    expect(p.headline).toBe("Paper account $997.00 (-$3.00, -0.30%)");
-    expect(p.detail).toContain("LONG BTC $500.00, -$3.00 open");
-    expect(p.detail).toContain("holds until 00:00 UTC");
-    expect(p.tone).toBe("bad");
+describe("statePill", () => {
+  it("says what an agent is doing", () => {
+    expect(statePill(false, "running", undefined).key).toBe("state.saved");
+    expect(statePill(true, "running", undefined).key).toBe("state.waiting");
+    expect(statePill(true, "running", { state: "queued" }).key).toBe("state.waiting");
+    expect(statePill(true, "running", { state: "error" })).toEqual({ key: "state.error", tone: "bad" });
+    expect(statePill(true, "running", { state: "running" })).toEqual({ key: "state.running", tone: "run" });
+    expect(statePill(true, "paused", { state: "paused" }).key).toBe("state.paused");
+    expect(statePill(true, "paused", undefined).key).toBe("state.paused");
+    expect(statePill(true, "stopped", { state: "stopping" }).key).toBe("state.stopping");
+    expect(statePill(true, "stopped", { state: "stopped" }).key).toBe("state.stopped");
   });
 });
 
+describe("numbers and curves", () => {
+  it("tones a result", () => {
+    expect(pnlTone(12)).toBe("good");
+    expect(pnlTone(-3)).toBe("bad");
+    expect(pnlTone(0)).toBe("flat");
+    expect(pnlTone(undefined)).toBe("flat");
+  });
+  it("formats money and percentages in the member's language", () => {
+    expect(fmtUsd(1012.5)).toBe("$1,012.50");
+    expect(fmtUsd(-3, "en", true)).toBe("-$3.00");
+    expect(fmtUsd(12.5, "en", true)).toBe("+$12.50");
+    expect(fmtUsd(1012.5, "de")).toContain("1.012,50");
+    expect(fmtPct(1.25)).toBe("+1.25%");
+    expect(fmtPct(-0.3)).toBe("-0.30%");
+  });
+  it("draws a curve inside its box, and nothing for fewer than two points", () => {
+    expect(sparkPath([1], 100, 20)).toBe("");
+    const d = sparkPath([1, 3, 2], 100, 20, 2);
+    expect(d.startsWith("M2.0 18.0")).toBe(true);
+    expect(sparkPath([5, 5, 5], 100, 20)).toBe("M2.0 10.0 L50.0 10.0 L98.0 10.0");
+    // a tiny move stays tiny: 0.01 on a 10-wide minimum span uses a thousandth of the height
+    const flat = sparkPath([1000, 1000.01], 100, 20, 2, 10).match(/L98\.0 ([\d.]+)/)![1]!;
+    expect(Math.abs(Number(flat) - 10)).toBeLessThan(0.1);
+  });
+  it("says how long ago", () => {
+    expect(agoParts(1000, 31_000)).toEqual({ n: -30, unit: "second" });
+    expect(agoParts(0, 5 * 60_000)).toEqual({ n: -5, unit: "minute" });
+    expect(agoParts(0, 3 * 3_600_000)).toEqual({ n: -3, unit: "hour" });
+    expect(agoParts(0, 2 * 86_400_000)).toEqual({ n: -2, unit: "day" });
+  });
+});
+
+describe("words for what an agent did", () => {
+  const t = (key: string, vars?: Record<string, string | number>) => `${key}${vars ? JSON.stringify(vars) : ""}`;
+  it("names a risk rule, and never hides an unknown one", () => {
+    expect(riskSay("stop")).toEqual({ key: "risk.stop" });
+    expect(riskSay("max_flat").key).toBe("risk.max_flat");
+    expect(riskSay("some_new_rule")).toEqual({ key: "risk.other", vars: { name: "some new rule" } });
+    for (const r of ["stop", "time_stop", "max_flat", "jev_unreachable", "jev_daily_cap", "loss_stop", "retired", "experiment_closed", "trade_cap", "fee_budget"]) expect(en).toHaveProperty(riskSay(r).key);
+  });
+  it("translates menu labels it knows and keeps the rest readable", () => {
+    expect(choiceText("LONG_BTC", t as never)).toBe('choice.long{"coin":"BTC"}');
+    expect(choiceText("SHORT_ETH", t as never)).toBe('choice.short{"coin":"ETH"}');
+    expect(choiceText("HOLD_WINNER", t as never)).toBe("choice.hold");
+    expect(choiceText("FT_SOMETHING_ODD", t as never)).toMatch(/something odd/i);
+  });
+  it("ticks the getting-started list from real data", () => {
+    expect(checklist(0, 0, false).map((s) => s.done)).toEqual([false, false, false]);
+    expect(checklist(1, 0, false).map((s) => s.done)).toEqual([true, false, false]);
+    expect(checklist(1, 5, true).map((s) => s.done)).toEqual([true, true, true]);
+  });
+  it("says when the season ends", () => {
+    const now = Date.UTC(2026, 8, 30, 12);
+    expect(seasonEndsSay(now + 2 * 86_400_000 + 5 * 3_600_000, now)).toEqual({ key: "season.endsDays", vars: { d: 2, h: 5 } });
+    expect(seasonEndsSay(now + 60_000, now)).toEqual({ key: "season.endsHours", vars: { h: 1 } });
+    expect(seasonEndsSay(now - 1, now)).toEqual({ key: "season.ended" });
+  });
+});
 
 describe("leaderboard words", () => {
   it("names a league by plan and style", () => {

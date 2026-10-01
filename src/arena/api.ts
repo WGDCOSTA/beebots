@@ -34,7 +34,7 @@ export interface ApiOpts {
     update(userId: string): Promise<void>;
     forget(userId: string): Promise<void>;
     status(userId: string, botIds: string[]): Record<string, RunStatus>;
-    insights?(userId: string, bot: BotView): Insights | null;
+    insights?(userId: string, bot: BotView, opts?: { decisions?: number; trades?: number; points?: number }): Insights | null;
   } | null;
 }
 
@@ -154,7 +154,13 @@ export class ArenaApi {
       if (!u) reply(res, 401, { error: "not signed in" });
       else {
         const bots = new Bots(this.store.tenant(u.id), u.tier, this.now).list();
-        reply(res, 200, { bots, runner: this.opts.runner ? { enabled: true, runs: this.opts.runner.status(u.id, bots.map((b) => b.id)) } : { enabled: false, runs: {} } });
+        // The small equity curve on each card comes with the list, so the Home needs one call.
+        const curves: Record<string, number[]> = {};
+        for (const b of bots) {
+          const c = this.opts.runner?.insights?.(u.id, b, { decisions: 0, trades: 0, points: 30 })?.equity;
+          if (c && c.length > 1) curves[b.id] = c.map((p) => p[1]);
+        }
+        reply(res, 200, { bots, curves, runner: this.opts.runner ? { enabled: true, runs: this.opts.runner.status(u.id, bots.map((b) => b.id)) } : { enabled: false, runs: {} } });
       }
       return true;
     }

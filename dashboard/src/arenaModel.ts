@@ -1,9 +1,10 @@
+import type { Key } from "./i18n/en.js";
 import { humanLabel } from "./tickerModel.js";
 
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
 export type LegalDocId = "terms" | "privacy" | "risk" | "cookies";
-export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
+export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
 
 /** #/arena is home (or the landing page when signed out); #/arena/verify?token=... is the page the e-mailed link opens. */
 export function arenaView(hash: string): ArenaView {
@@ -13,6 +14,7 @@ export function arenaView(hash: string): ArenaView {
   if (sub === "ranking") return { kind: "ranking" };
   if (sub === "me") return { kind: "me" };
   if (sub === "new") return { kind: "new" };
+  if (sub === "agent" && /^[\w-]{1,40}$/.test(parts[2] ?? "")) return { kind: "agent", id: parts[2]! };
   if (sub === "legal" && (["terms", "privacy", "risk", "cookies"] as string[]).includes(parts[2] ?? "")) return { kind: "legal", doc: parts[2] as LegalDocId };
   const token = new URLSearchParams(query).get("token");
   return sub === "verify" && token ? { kind: "verify", token } : { kind: "home" };
@@ -59,30 +61,78 @@ export interface BotDraft {
 /** The coins a style can trade at all (Momentum takes any). Mirrors the server's check, which has the last word. */
 export const STYLE_COINS: Record<string, string[]> = { breezy: ["BTC", "ETH"], bizzy: ["BTC", "ETH", "SOL", "HYPE"] };
 
-/** The first thing wrong with a draft, in words, or null when it can be sent. The server checks everything again. */
-export function draftProblem(d: BotDraft, maxCoins: number): string | null {
+export const STYLE_KEYS: Record<string, { title: Key; blurb: Key }> = {
+  breezy: { title: "style.breezy.t", blurb: "style.breezy.b" },
+  bizzy: { title: "style.bizzy.t", blurb: "style.bizzy.b" },
+  boozy: { title: "style.boozy.t", blurb: "style.boozy.b" },
+};
+
+/** A message the page can say in the member's language: a key and what fills its {markers}. */
+export interface Say {
+  key: Key;
+  vars?: Record<string, string | number>;
+}
+
+/** Whether a coin can be picked for a style (false = shown greyed out, with the reason). */
+export const coinFits = (style: string, coin: string): boolean => !STYLE_COINS[style] || STYLE_COINS[style]!.includes(coin);
+
+type Names = (id: string) => string;
+const lookIssue = (d: BotDraft): Say | null => {
   const name = d.name.trim();
-  if (name.length < 2 || name.length > 24) return "Give it a name of 2 to 24 characters.";
-  if (!d.theme || !d.avatar) return "Pick a theme and an avatar.";
-  if (!d.style) return "Pick a trading style.";
-  if (d.coins.length === 0) return "Pick at least one coin.";
-  if (d.coins.length > maxCoins) return `Your plan allows up to ${maxCoins} coins.`;
+  if (name.length < 2 || name.length > 24) return { key: "prob.name" };
+  if (!d.theme || !d.avatar) return { key: "prob.avatar" };
+  return null;
+};
+const styleIssue = (d: BotDraft, maxCoins: number, styleName: Names): Say | null => {
+  if (!d.style) return { key: "prob.style" };
+  if (d.coins.length === 0) return { key: "prob.coins" };
+  if (d.coins.length > maxCoins) return { key: "prob.maxCoins", vars: { n: maxCoins } };
   const only = STYLE_COINS[d.style];
-  if (only && d.coins.some((c) => !only.includes(c))) return `${STYLE_LABEL[d.style]?.label ?? d.style} only trades ${only.join(", ")}. Pick those coins, or another style.`;
+  if (only && d.coins.some((c) => !only.includes(c))) return { key: "prob.styleCoins", vars: { style: styleName(d.style), coins: only.join(", ") } };
+  return null;
+};
+const rulesIssue = (d: BotDraft): Say | null => {
   const n = d.rules.trim().length;
-  if (n < 8) return "Write a few words about how it should trade (8 characters or more).";
-  if (n > 500) return "Keep the rules under 500 characters.";
+  if (n < 8) return { key: "prob.rulesShort" };
+  if (n > 500) return { key: "prob.rulesLong" };
+  return null;
+};
+
+/** The first thing wrong with a draft, as a message to translate, or null when it can be sent. The server checks everything again. */
+export function draftIssue(d: BotDraft, maxCoins: number, styleName: Names = (id) => id): Say | null {
+  return lookIssue(d) ?? styleIssue(d, maxCoins, styleName) ?? rulesIssue(d);
+}
+
+/** The wizard's steps, in order. A step is done when nothing it asks for is wrong. */
+export const WIZARD_STEPS = ["start", "look", "style", "rules", "review"] as const;
+export type WizardStep = (typeof WIZARD_STEPS)[number];
+
+/** What stops the member from leaving a step: only the fields that step owns. */
+export function stepIssue(step: WizardStep, d: BotDraft, maxCoins: number, styleName: Names = (id) => id): Say | null {
+  if (step === "look") return lookIssue(d);
+  if (step === "style") return styleIssue(d, maxCoins, styleName);
+  if (step === "rules") return rulesIssue(d);
+  if (step === "review") return draftIssue(d, maxCoins, styleName);
   return null;
 }
 
-/** Toggles a coin, refusing to go past the plan's limit. */
-export function toggleCoin(coins: string[], coin: string, max: number): string[] {
+/** Toggles a coin, refusing to go past the plan's limit or a coin the style cannot trade. */
+export function toggleCoin(coins: string[], coin: string, max: number, style?: string): string[] {
   if (coins.includes(coin)) return coins.filter((c) => c !== coin);
+  if (style && !coinFits(style, coin)) return coins;
   return coins.length >= max ? coins : [...coins, coin];
 }
 
+/** Moving to another style drops the coins it cannot trade, so the draft stays valid. */
+export function withStyle(d: BotDraft, style: string): BotDraft {
+  const coins = d.coins.filter((c) => coinFits(style, c));
+  return { ...d, style, coins: coins.length ? coins : STYLE_COINS[style]?.slice(0, 1) ?? d.coins };
+}
+
+export type AgentState = "running" | "paused" | "stopped";
+
 export interface RunStatus {
-  state: "running" | "queued" | "error";
+  state: "running" | "paused" | "stopping" | "stopped" | "queued" | "error";
   error?: string;
   equityUsd?: number;
   startEquityUsd?: number;
@@ -91,31 +141,102 @@ export interface RunStatus {
   position?: { coin: string; side: string; sizeUsd: number | null; uplUsd: number; minutesHeld: number } | null;
   tradesToday?: number;
   decisions?: number;
+  orders?: number;
   spentUsd?: number;
   capped?: boolean;
   last?: { choice: string | null; confidence: number | null; status: string; ts: number } | null;
 }
 
-const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const signed = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(n).toFixed(2)}`;
+export type Pill = { key: Key; tone: "run" | "pause" | "stop" | "wait" | "bad" };
 
-/** What to show under an agent: one headline, one detail line, and whether the news is good, bad or neutral. */
-export function runSummary(enabled: boolean, run: RunStatus | undefined): { headline: string; detail: string; tone: "good" | "bad" | "flat" } {
-  if (!enabled) return { headline: "Saved, not trading yet", detail: "Trading is not switched on yet. Your agent is saved and ready.", tone: "flat" };
-  if (!run || run.state === "queued") return { headline: "Waiting for a free slot", detail: "All slots are in use. It starts on its own when one frees up.", tone: "flat" };
-  if (run.state === "error") return { headline: "Could not start", detail: run.error ?? "It will be retried.", tone: "bad" };
-  const pnl = run.pnlUsd ?? 0;
-  const pos = run.position;
-  const where = pos ? `${pos.side.toUpperCase()} ${pos.coin}${pos.sizeUsd !== null ? ` ${usd(pos.sizeUsd)}` : ""}, ${signed(pos.uplUsd)} open` : "Flat, waiting for a setup";
-  const last = run.last ? ` Last call: ${humanLabel(run.last.choice)}${run.last.confidence !== null ? ` (${Math.round(run.last.confidence * 100)}% sure)` : ""}.` : "";
-  const cap = run.capped ? " Today's decision budget is used up, so it holds until 00:00 UTC." : "";
-  return {
-    headline: `Paper account ${usd(run.equityUsd ?? 0)} (${signed(pnl)}, ${(run.pnlPct ?? 0) >= 0 ? "+" : ""}${(run.pnlPct ?? 0).toFixed(2)}%)`,
-    detail: `${where}. ${run.decisions ?? 0} decisions.${last}${cap}`,
-    tone: pnl > 0 ? "good" : pnl < 0 ? "bad" : "flat",
-  };
+/** The one word that says what an agent is doing right now. */
+export function statePill(enabled: boolean, botState: AgentState, run: RunStatus | undefined): Pill {
+  if (!enabled) return { key: "state.saved", tone: "wait" };
+  if (run?.state === "error") return { key: "state.error", tone: "bad" };
+  if (run?.state === "stopped" || (!run && botState === "stopped")) return { key: "state.stopped", tone: "stop" };
+  if (run?.state === "stopping") return { key: "state.stopping", tone: "stop" };
+  if (run?.state === "paused" || (!run && botState === "paused")) return { key: "state.paused", tone: "pause" };
+  if (!run || run.state === "queued") return { key: "state.waiting", tone: "wait" };
+  return { key: "state.running", tone: "run" };
 }
 
+export const pnlTone = (n: number | undefined): "good" | "bad" | "flat" => ((n ?? 0) > 0.005 ? "good" : (n ?? 0) < -0.005 ? "bad" : "flat");
+
+export function fmtUsd(n: number, locale = "en", signed = false): string {
+  const f = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", signDisplay: signed ? "exceptZero" : "auto" });
+  return f.format(n);
+}
+
+export function fmtPct(n: number, locale = "en"): string {
+  return new Intl.NumberFormat(locale, { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }).format(n / 100);
+}
+
+/** An SVG path for a small curve, scaled to its own range so a flat line stays in the middle. */
+export function sparkPath(values: number[], w: number, h: number, pad = 2, minSpan = 0): string {
+  if (values.length < 2) return "";
+  let lo = Math.min(...values);
+  let hi = Math.max(...values);
+  // A paper account that moved a cent should look like it moved a cent: never stretch a tiny range to fill the box.
+  if (hi - lo < minSpan) {
+    const mid = (hi + lo) / 2;
+    lo = mid - minSpan / 2;
+    hi = mid + minSpan / 2;
+  }
+  const span = hi - lo || 1;
+  return values
+    .map((v, i) => {
+      const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+      const y = hi === lo ? h / 2 : h - pad - ((v - lo) / span) * (h - 2 * pad);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+/** How long ago, as a number and a unit that Intl.RelativeTimeFormat understands. */
+export function agoParts(ts: number, now: number): { n: number; unit: "second" | "minute" | "hour" | "day" } {
+  const s = Math.max(0, Math.round((now - ts) / 1000));
+  if (s < 60) return { n: -s, unit: "second" };
+  if (s < 3600) return { n: -Math.round(s / 60), unit: "minute" };
+  if (s < 86_400) return { n: -Math.round(s / 3600), unit: "hour" };
+  return { n: -Math.round(s / 86_400), unit: "day" };
+}
+
+const RISK: Record<string, Key> = {
+  stop: "risk.stop",
+  time_stop: "risk.time_stop",
+  max_flat: "risk.max_flat",
+  jev_unreachable: "risk.jev_unreachable",
+  jev_daily_cap: "risk.jev_daily_cap",
+  loss_stop: "risk.loss_stop",
+  retired: "risk.retired",
+  experiment_closed: "risk.experiment_closed",
+  trade_cap: "risk.trade_cap",
+  fee_budget: "risk.fee_budget",
+};
+/** The rule that overruled or acted for an agent, in words. An unknown rule is named as it is, never hidden. */
+export function riskSay(name: string): Say {
+  return RISK[name] ? { key: RISK[name]! } : { key: "risk.other", vars: { name: name.replace(/_/g, " ") } };
+}
+
+const DID: Record<string, Key> = { open: "did.open", close: "did.close", add: "did.add", trim: "did.trim", switch: "did.switch", hold: "did.hold", none: "did.hold" };
+export const didKey = (kind: string): Key => DID[kind] ?? "did.hold";
+
+/** The "getting started" list: what is done is read from the member's real data, never ticked by hand. */
+export function checklist(agents: number, decisions: number, ranked: boolean): Array<{ key: Key; done: boolean }> {
+  return [
+    { key: "home.check.create", done: agents > 0 },
+    { key: "home.check.decide", done: decisions > 0 },
+    { key: "home.check.rank", done: ranked },
+  ];
+}
+
+/** "Ends in 2d 5h" as a message to translate. */
+export function seasonEndsSay(end: number, now: number): Say {
+  const ms = end - now;
+  if (ms <= 0) return { key: "season.ended" };
+  const h = Math.floor(ms / 3_600_000);
+  return h >= 24 ? { key: "season.endsDays", vars: { d: Math.floor(h / 24), h: h % 24 } } : { key: "season.endsHours", vars: { h: Math.max(1, h) } };
+}
 
 /** A league id such as "free:breezy" in words. */
 export function leagueLabel(id: string): string {
@@ -139,4 +260,13 @@ export function handleProblem(raw: string): string | null {
   const h = raw.trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9_-]{2,19}$/.test(h)) return "3 to 20 letters, numbers, - or _.";
   return null;
+}
+
+/** A menu label such as LONG_BTC or HOLD_WINNER in the member's language. Labels it does not know keep their English wording. */
+export function choiceText(label: string, t: (key: Key, vars?: Record<string, string | number>) => string): string {
+  const m = /^(LONG|SHORT)_([A-Z0-9]+)$/.exec(label);
+  if (m) return t(m[1] === "LONG" ? "choice.long" : "choice.short", { coin: m[2]! });
+  if (/^HOLD/.test(label)) return t("choice.hold");
+  if (/^(CLOSE|EXIT|FLAT)/.test(label)) return t("choice.close");
+  return humanLabel(label);
 }

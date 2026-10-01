@@ -8,7 +8,7 @@ Every function in `docs/ARENA_PLAN.md` and in the later conversations was listed
 
 | Status | Count | Meaning |
 |---|---|---|
-| Built | 6 | Works as it is: e-mail sign-in, theme and avatar picker, and, since step 1, the Arena's own frame, the landing page, the consent screen and six languages |
+| Built | 6 | Works as it is: e-mail sign-in, theme and avatar picker, and, since step 1, the Arena's own frame, the landing page, the consent screen and six languages. Step 2 also built (not counted here): Home, the agent page, the five-step create wizard, pause, stop and start again, and the three example agents |
 | Built, needs redesign | 8 | Exists, but the screen is wrong for what it has to do |
 | Drawn | 32 | A mockup shows it, with its rules |
 | Not in v1 | 2 | Decided: follow and comments; live trading opt-in |
@@ -75,11 +75,11 @@ Each step is a normal slice with tests, and each can ship on its own.
 | 4 | Downgrade: extra agents go into 10-day quarantine, then are deleted (to confirm). |
 | 5 | Reviews and star ratings: dropped. |
 | 6 | Follow and comments: not in v1. |
-| 7 | Templates: three, written by us, labelled as examples. Still to write. |
+| 7 | Templates: three, written by us, labelled as examples. Written in step 2 (`src/arena/templates.ts`). |
 | 8 | Legal texts stay drafts until counsel signs them off; the operator is in Ireland (see `ARENA_LEGAL_OUTLINE.md`). |
 | 9 | Payments on the operator's own Stripe account; launch from Ireland into the EU. Price still open. |
 
-Step 1 of the build order (shell, landing, consent) is built; see the plan's build status.
+Steps 1 (shell, landing, consent) and 2 (home, agent page, create wizard, pause and stop) of the build order are built; see the plan's build status.
 
 ## 7. Decisions that were needed (kept for the record)
 

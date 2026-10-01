@@ -299,8 +299,8 @@ export class ArenaRunner {
   }
 
   /** What the agent page shows: the curve, the decisions with their facts, the trades. Null before the first sample. */
-  insights(userId: string, bot: BotView): Insights | null {
-    return readInsights(this.fileOf(userId, bot));
+  insights(userId: string, bot: BotView, opts?: { decisions?: number; trades?: number; points?: number }): Insights | null {
+    return readInsights(this.fileOf(userId, bot), opts);
   }
 
   /** Where each of a member's bots stands. */

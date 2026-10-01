@@ -56,8 +56,8 @@ describe("the dictionaries", () => {
       const text = Object.values(DICTS[l]).join(" ");
       expect(text).not.toMatch(/\b(bot|bots|bunny|bunnies)\b/i);
       const same = Object.entries(DICTS[l]).filter(([k, v]) => v === en[k as keyof typeof en]).map(([k]) => k);
-      // a few words are the same everywhere (the brand, "Cookies", "Home"); a real translation does not copy most of the file
-      expect(same.length, `copied from English: ${same.join(", ")}`).toBeLessThan(8);
+      // some words are the same everywhere (the brand, "Cookies", "Long", "Short", "Momentum", "Pro"); a real translation does not copy most of the file
+      expect(same.length, `copied from English: ${same.join(", ")}`).toBeLessThan(20);
     });
   }
   it("English has no empty strings and uses the word agent", () => {
@@ -68,14 +68,21 @@ describe("the dictionaries", () => {
 
 describe("the code only asks for keys that exist", () => {
   const dir = join(__dirname, "..", "dashboard", "src");
-  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page)\./.test(f));
+  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Home|Agent|New|Fields|Parts|Decisions|Settings)\./.test(f));
   const used = new Set<string>();
   for (const f of files) {
     const src = readFileSync(join(dir, f), "utf8");
     for (const m of src.matchAll(/\bt\("([\w.]+)"/g)) used.add(m[1]!);
     for (const m of src.matchAll(/\bkey: "([\w.]+)"/g)) used.add(m[1]!);
   }
+  // The pure model names keys as string literals (the page translates them): any literal there that is an English key is a use.
+  const model = readFileSync(join(dir, "arenaModel.ts"), "utf8");
+  for (const m of model.matchAll(/"([a-z]+(?:\.[\w]+)+)"/g)) if (m[1]! in en) used.add(m[1]!);
+  // keys chosen by a condition or a lookup in the page
+  for (const k of ["home.quotaFull1", "home.quotaFull", "home.loadError", "trade.buy", "trade.sell", "dec.ruleActed", "dec.ruleBlocked", "set.paint", "set.repaint", "new.tpl.steady", "new.tpl.breakout", "new.tpl.momentum"]) used.add(k);
   // keys built from a variable
+  for (const s of ["start", "look", "style", "rules", "review"]) used.add(`new.step.${s}`);
+  for (const s of ["performance", "decisions", "versions", "settings"]) used.add(`agent.tab.${s}`);
   for (const n of ["1", "2", "3"]) for (const p of ["t", "b"]) used.add(`landing.how${n}.${p}`);
   for (const i of ["terms", "sim", "age"]) used.add(`consent.${i}.t`);
   for (const i of ["terms", "sim"]) used.add(`consent.${i}.b`);

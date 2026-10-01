@@ -70,4 +70,77 @@ html:has(.as) { font-size: 16px; }
   .as-lang select { max-width: 112px; }
   .as-top { gap: 6px; }
 }
+
+/* Step 2: home, agent page, create wizard. */
+.ag-season { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 4px; }
+.ag-check ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.ag-check li { display: flex; gap: 10px; min-height: 36px; align-items: center; color: var(--text-2); }
+.ag-check li.done { color: var(--muted); text-decoration: line-through; }
+.ag-check li.done span { color: var(--good-text); }
+.ag-cards { display: grid; gap: 12px; grid-template-columns: 1fr; }
+.as .ag-cards .pcard { margin: 0; }
+.ag-card { display: grid; gap: 10px; text-decoration: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(--bizzy) 60%, var(--line)); }
+.ag-card-top { display: flex; align-items: center; gap: 12px; }
+.ag-card-name { display: grid; min-width: 0; flex: 1; }
+.ag-card-name strong, .ag-name { overflow-wrap: anywhere; }
+.as h1.ag-name { font-size: 22px; margin: 0; }
+.ag-card-nums { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.ag-big { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
+.ag-new { place-items: center; align-content: center; min-height: 120px; border-style: dashed; background: transparent; }
+.ag-new:disabled { opacity: 0.55; cursor: default; }
+.ag-plus { font-size: 30px; line-height: 1; color: #f0b43c; }
+.ag-spark { flex: none; }
+.ag-spark path, .ag-curve path { stroke: var(--muted); }
+.ag-spark.good path, .ag-curve.good path { stroke: var(--good-text); }
+.ag-spark.bad path, .ag-curve.bad path { stroke: #ff6b6b; }
+.ag-curve { width: 100%; height: auto; max-height: 170px; display: block; }
+.ag-pill { flex: none; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); color: var(--text-2); white-space: nowrap; }
+.ag-pill.run { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 60%, var(--line)); }
+.ag-pill.pause { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 60%, var(--line)); }
+.ag-pill.bad { color: #ff6b6b; border-color: color-mix(in srgb, #ff6b6b 60%, var(--line)); }
+.ag-back { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
+.ag-confirm { border: 1px solid color-mix(in srgb, #ff6b6b 50%, var(--line)); border-radius: 12px; padding: 10px 12px; background: color-mix(in srgb, #ff6b6b 7%, var(--card)); }
+.ag-confirm p { margin: 4px 0; }
+.ag-tabs { display: flex; gap: 2px; margin: 12px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.ag-tabs button { min-height: 44px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 14px; white-space: nowrap; flex: 1 0 auto; }
+.ag-tabs button.on { color: var(--text); border-bottom-color: #f0b43c; }
+.ag-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px; margin: 12px 0; }
+.ag-stats > div { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); }
+.ag-stats strong { font-size: 18px; }
+.ag-trades, .ag-versions, .dc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.ag-trades li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; min-height: 44px; border-top: 1px solid var(--line); }
+.ag-versions li { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
+.ag-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.ag-danger .eyebrow { color: #ff6b6b; }
+.dc { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.dc-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.dc-odds { display: grid; gap: 4px; }
+.dc-odd { display: grid; grid-template-columns: minmax(70px, 120px) 1fr 44px; gap: 8px; align-items: center; }
+.dc-bar { height: 8px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
+.dc-bar i { display: block; height: 100%; background: #f0b43c; }
+.dc-rule { padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); }
+.dc-rule.forced { border-color: color-mix(in srgb, var(--warning) 55%, var(--line)); }
+.dc-rule.veto { border-color: color-mix(in srgb, #ff6b6b 45%, var(--line)); }
+.dc-saw { overflow-x: auto; }
+.dc-table { display: grid; min-width: max-content; font-size: 12px; }
+.dc-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, auto); gap: 10px; padding: 4px 0; }
+.dc-row.head { color: var(--muted); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; }
+.dc-row > :first-child { min-width: 44px; }
+.nw-steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; list-style: none; margin: 10px 0 12px; padding: 0; }
+.nw-steps li { border-top: 3px solid var(--line); padding-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--muted); overflow-wrap: anywhere; }
+.nw-steps li.done { border-top-color: color-mix(in srgb, var(--bizzy) 60%, var(--line)); color: var(--text-2); }
+.nw-steps li.on { border-top-color: #f0b43c; color: var(--text); }
+.nw-preview { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); margin-bottom: 12px; }
+.nw-tpls { display: grid; gap: 8px; }
+.nw-tpl { text-align: left; }
+.nw-review { display: grid; gap: 4px; margin: 0 0 12px; }
+.nw-review dt { color: var(--muted); font-size: 12px; font-weight: 700; margin-top: 8px; }
+.nw-review dd { margin: 0; overflow-wrap: anywhere; }
+@media (min-width: 700px) {
+  .ag-cards { grid-template-columns: repeat(2, 1fr); }
+  .ag-stats { grid-template-columns: repeat(3, 1fr); }
+  .nw-tpls { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1100px) { .ag-cards { grid-template-columns: repeat(3, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .as * { animation: none !important; transition: none !important; } }

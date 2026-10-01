@@ -1,21 +1,25 @@
 // #/arena and everything under it: the Arena's pages. It is its own service (/arena/*), separate from the owner's engine and admin
 // panel, and it has its own frame (ArenaShell): nothing on these pages can reach the owner's side, and it cannot reach a member's data.
 //   #/arena            home (the member's agents), or the landing page when signed out
-//   #/arena/new        home with the create form open (the centre button)
+//   #/arena/new        the create wizard (the centre button)
+//   #/arena/agent/<id> one agent: performance, decisions, versions, settings
 //   #/arena/ranking    the leaderboard, public
 //   #/arena/me         account, public name, language
 //   #/arena/legal/<x>  terms, privacy, risk, cookies (drafts until counsel signs them off)
 //   #/arena/verify?token=...  the page the e-mailed link opens
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArenaBots } from "./ArenaBots";
+import { ArenaAgent } from "./ArenaAgent";
 import { ArenaConsent } from "./ArenaConsent";
+import { ArenaHome } from "./ArenaHome";
 import { ArenaLanding } from "./ArenaLanding";
 import { ArenaLegal } from "./ArenaLegal";
 import { ArenaMe } from "./ArenaMe";
+import { ArenaNew } from "./ArenaNew";
+import { useArenaData } from "./ArenaParts";
 import { ArenaRanking } from "./ArenaRanking";
 import { ArenaShell, type Mode, type Tab } from "./ArenaShell";
 import { arena, type ConsentState, type Limits, type Member } from "./arenaApi";
-import { arenaView } from "./arenaModel";
+import { arenaView, type ArenaView } from "./arenaModel";
 import { I18nProvider, useI18n } from "./i18n/I18n";
 import type { Locale } from "./i18n/locales";
 
@@ -23,6 +27,25 @@ export type { Limits } from "./arenaApi";
 
 // A sign-in link works once, and React's StrictMode runs effects twice in development: remember what was already spent.
 const spent = new Set<string>();
+
+/** The signed-in screens that work on the member's agents: home, the create wizard, and one agent's page. */
+function ArenaApp({ view, limits }: { view: ArenaView; limits: Limits }) {
+  const { t } = useI18n();
+  const { data, error } = useArenaData();
+  const go = (hash: string) => {
+    location.hash = hash;
+  };
+  if (error && !data)
+    return (
+      <div className="pcard arena-card">
+        <p className="bad">{t(error === "down" ? "common.down" : "home.loadError")}</p>
+      </div>
+    );
+  if (!data) return <div className="pcard arena-card dim">{t("common.loading")}</div>;
+  if (view.kind === "new") return <ArenaNew data={data} limits={limits} onDone={(id) => go(`#/arena/agent/${id}`)} onCancel={() => go("#/arena")} />;
+  if (view.kind === "agent") return <ArenaAgent data={data} limits={limits} id={view.id} onGone={() => go("#/arena")} />;
+  return <ArenaHome data={data} limits={limits} />;
+}
 
 function Arena() {
   const { t, choose, adopt } = useI18n();
@@ -91,7 +114,7 @@ function Arena() {
   const member = me !== "loading" && me !== null ? me : null;
   const gated = !!member && !!consent?.needed;
   const mode: Mode = member ? (gated ? "gate" : "in") : "out";
-  const tab: Tab = view.kind === "ranking" ? "board" : view.kind === "me" ? "me" : view.kind === "new" ? "new" : view.kind === "home" ? "home" : null;
+  const tab: Tab = view.kind === "ranking" ? "board" : view.kind === "me" ? "me" : view.kind === "new" ? "new" : view.kind === "home" || view.kind === "agent" ? "home" : null;
   const signOut = () => {
     setNotice("");
     setMe(null);
@@ -99,14 +122,6 @@ function Arena() {
     history.replaceState(null, "", "#/arena");
     setView({ kind: "home" });
   };
-
-  // The create form was opened by the centre button and is now done or cancelled: go back to plain home.
-  const closeNew = useCallback(() => {
-    if (location.hash.startsWith("#/arena/new")) {
-      history.replaceState(null, "", "#/arena");
-      setView({ kind: "home" });
-    }
-  }, []);
 
   let body: React.ReactNode;
   if (view.kind === "legal") body = <ArenaLegal doc={view.doc} />;
@@ -131,7 +146,7 @@ function Arena() {
   else if (gated) body = <ArenaConsent email={member.email} onDone={() => void load()} onSignOut={() => void arena("POST", "auth/logout").finally(signOut)} />;
   else if (view.kind === "me") body = <ArenaMe me={member} onOut={signOut} onHandle={(handle) => setMe({ ...member, handle })} onPickLocale={pickLocale} />;
   else if (!limits) body = <div className="pcard arena-card dim">{t("common.loading")}</div>;
-  else body = <ArenaBots limits={limits} openNew={view.kind === "new"} onCloseNew={closeNew} />;
+  else body = <ArenaApp view={view} limits={limits} />;
 
   return (
     <ArenaShell tab={tab} mode={mode} onPickLocale={pickLocale}>
