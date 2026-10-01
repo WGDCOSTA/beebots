@@ -2,7 +2,7 @@
 // ticks itself from real data, the plan's quota, and Pause all. Pausing keeps positions under their stops and opens nothing new.
 import { useEffect, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
-import { checklist, fmtPct, fmtUsd, pnlTone, seasonEndsSay, type RunStatus } from "./arenaModel";
+import { checklist, fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, seasonEndsSay, type RunStatus } from "./arenaModel";
 import { Portrait, Spark, StatePill, type ArenaData } from "./ArenaParts";
 import { useI18n } from "./i18n/I18n";
 
@@ -21,7 +21,7 @@ const hidden = (): boolean => {
   }
 };
 
-export function ArenaHome({ data, limits }: { data: ArenaData; limits: Limits }) {
+export function ArenaHome({ data, limits, days }: { data: ArenaData; limits: Limits; days: number }) {
   const { t, locale } = useI18n();
   const [board, setBoard] = useState<Standing | null>(null);
   const [hide, setHide] = useState(hidden);
@@ -41,6 +41,7 @@ export function ArenaHome({ data, limits }: { data: ArenaData; limits: Limits })
   const anyRunning = agents.some((a) => a.state === "running");
   const anyPaused = agents.some((a) => a.state === "paused");
   const full = agents.length >= limits.bots;
+  const quarantined = agents.filter((a) => a.state === "quarantined");
 
   const pauseAll = async (to: "pause" | "resume") => {
     setBusy(true);
@@ -72,6 +73,16 @@ export function ArenaHome({ data, limits }: { data: ArenaData; limits: Limits })
             <strong>{t("home.season", { id: board.season.id })}</strong> <span className="dim small">{ends && t(ends.key, ends.vars)}</span>
           </span>
           <span className="small">{best ? t("home.rank", { rank: best.rank!, league: best.league.replace(":", " · ") }) : t("home.unranked", { days: board.minimums.minDays, trades: board.minimums.minTrades })}</span>
+        </div>
+      )}
+
+      {quarantined.length > 0 && (
+        <div className="pcard arena-card ag-quarantine" role="status">
+          <h3>{t("home.quarantine.title")}</h3>
+          <p>{t("home.quarantine.body", { days })}</p>
+          <a className="pbtn" href="#/arena/plans">
+            {t("home.quarantine.cta")}
+          </a>
         </div>
       )}
 
@@ -140,7 +151,7 @@ export function ArenaHome({ data, limits }: { data: ArenaData; limits: Limits })
                 </div>
                 <Spark values={data.curves[a.id] ?? []} tone={tone} />
               </div>
-              <div className="dim small">{pos ? t("card.holding", { side: t(pos.side === "short" ? "side.short" : "side.long"), coin: pos.coin }) : t("card.flat")}</div>
+              <div className="dim small">{a.state === "quarantined" ? t("card.quarantineLeft", { n: quarantineDaysLeft(a.quarantinedAt, Date.now(), days) }) : pos ? t("card.holding", { side: t(pos.side === "short" ? "side.short" : "side.long"), coin: pos.coin }) : t("card.flat")}</div>
             </a>
           );
         })}

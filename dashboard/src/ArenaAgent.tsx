@@ -3,7 +3,7 @@
 // Pause keeps the position under its stop and opens nothing new. Stop closes the position and ends this run.
 import { useCallback, useEffect, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
-import { fmtPct, fmtUsd, pnlTone, sparkPath, STYLE_KEYS } from "./arenaModel";
+import { fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, sparkPath, STYLE_KEYS } from "./arenaModel";
 import { ArenaDecisions, useAgo, type DecisionFact } from "./ArenaDecisions";
 import { ArenaSettings } from "./ArenaSettings";
 import { Portrait, StatePill, type ArenaData } from "./ArenaParts";
@@ -52,7 +52,7 @@ function Curve({ points, start }: { points: Array<[number, number]>; start: numb
   );
 }
 
-export function ArenaAgent({ data, limits, id, onGone }: { data: ArenaData; limits: Limits; id: string; onGone: () => void }) {
+export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData; limits: Limits; days: number; id: string; onGone: () => void }) {
   const { t, locale } = useI18n();
   const ago = useAgo();
   const agent = data.agents.find((a) => a.id === id);
@@ -140,7 +140,15 @@ export function ArenaAgent({ data, limits, id, onGone }: { data: ArenaData; limi
           </div>
         </div>
 
-        {agent.state !== "stopped" && !confirmStop && (
+        {agent.state === "quarantined" && (
+          <div className="ag-confirm" role="status">
+            <p>{t("agent.quarantine", { n: quarantineDaysLeft(agent.quarantinedAt, Date.now(), days) })}</p>
+            <a className="pbtn" href="#/arena/plans">
+              {t("home.quarantine.cta")}
+            </a>
+          </div>
+        )}
+        {agent.state !== "stopped" && agent.state !== "quarantined" && !confirmStop && (
           <div className="arena-actions">
             {agent.state === "running" && (
               <button className="pbtn ghost" disabled={busy} title={t("act.pauseHelp")} onClick={() => void act("pause")}>
@@ -264,7 +272,7 @@ export function ArenaAgent({ data, limits, id, onGone }: { data: ArenaData; limi
             </ul>
           </>
         )}
-        {tab === "settings" && <ArenaSettings data={data} limits={limits} agent={agent} onGone={onGone} />}
+        {tab === "settings" && agent.state !== "quarantined" && <ArenaSettings data={data} limits={limits} agent={agent} onGone={onGone} />}
       </div>
     </>
   );

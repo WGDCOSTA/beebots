@@ -4,7 +4,7 @@ import { humanLabel } from "./tickerModel.js";
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
 export type LegalDocId = "terms" | "privacy" | "risk" | "cookies";
-export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
+export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "me" } | { kind: "plans"; paid: boolean } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
 
 /** #/arena is home (or the landing page when signed out); #/arena/verify?token=... is the page the e-mailed link opens. */
 export function arenaView(hash: string): ArenaView {
@@ -13,6 +13,7 @@ export function arenaView(hash: string): ArenaView {
   const sub = parts[1];
   if (sub === "ranking") return { kind: "ranking" };
   if (sub === "me") return { kind: "me" };
+  if (sub === "plans") return { kind: "plans", paid: new URLSearchParams(query).get("paid") === "1" };
   if (sub === "new") return { kind: "new" };
   if (sub === "agent" && /^[\w-]{1,40}$/.test(parts[2] ?? "")) return { kind: "agent", id: parts[2]! };
   if (sub === "legal" && (["terms", "privacy", "risk", "cookies"] as string[]).includes(parts[2] ?? "")) return { kind: "legal", doc: parts[2] as LegalDocId };
@@ -116,7 +117,7 @@ export function withStyle(d: BotDraft, style: string): BotDraft {
   return { ...d, style, coins: coins.length ? coins : STYLE_COINS[style]?.slice(0, 1) ?? d.coins };
 }
 
-export type AgentState = "running" | "paused" | "stopped";
+export type AgentState = "running" | "paused" | "stopped" | "quarantined";
 
 export interface RunStatus {
   state: "running" | "paused" | "stopping" | "stopped" | "queued" | "error";
@@ -138,11 +139,13 @@ export type Pill = { key: Key; tone: "run" | "pause" | "stop" | "wait" | "bad" }
 
 /** The one word that says what an agent is doing right now. */
 export function statePill(enabled: boolean, botState: AgentState, run: RunStatus | undefined): Pill {
-  if (!enabled) return { key: "state.saved", tone: "wait" };
+  if (botState === "quarantined") return { key: "state.quarantined", tone: "stop" };
   if (run?.state === "error") return { key: "state.error", tone: "bad" };
-  if (run?.state === "stopped" || (!run && botState === "stopped")) return { key: "state.stopped", tone: "stop" };
   if (run?.state === "stopping") return { key: "state.stopping", tone: "stop" };
-  if (run?.state === "paused" || (!run && botState === "paused")) return { key: "state.paused", tone: "pause" };
+  // What the member chose shows whether or not trading is switched on.
+  if (botState === "stopped" || run?.state === "stopped") return { key: "state.stopped", tone: "stop" };
+  if (botState === "paused" || run?.state === "paused") return { key: "state.paused", tone: "pause" };
+  if (!enabled) return { key: "state.saved", tone: "wait" };
   if (!run || run.state === "queued") return { key: "state.waiting", tone: "wait" };
   return { key: "state.running", tone: "run" };
 }
@@ -260,4 +263,40 @@ export function choiceText(label: string, t: (key: Key, vars?: Record<string, st
   if (/^HOLD/.test(label)) return t("choice.hold");
   if (/^(CLOSE|EXIT|FLAT)/.test(label)) return t("choice.close");
   return humanLabel(label);
+}
+
+/** Whole days left before an agent in quarantine is deleted (never below 0). */
+export function quarantineDaysLeft(quarantinedAt: number | null, now: number, days: number): number {
+  if (quarantinedAt === null) return days;
+  return Math.max(0, Math.ceil((quarantinedAt + days * 86_400_000 - now) / 86_400_000));
+}
+
+export function fmtPrice(amountCents: number, currency: string, locale = "en"): string {
+  return new Intl.NumberFormat(locale, { style: "currency", currency: currency.toUpperCase() }).format(amountCents / 100);
+}
+
+export interface PlanLimits {
+  bots: number;
+  maxCoins: number;
+  styles: string[];
+  proThemes: boolean;
+  autonomy: boolean;
+  brains: number;
+  skillSlots: number;
+  history: boolean;
+}
+
+/** What a plan includes, as messages to translate. `soon` marks what the plan promises but the Arena does not do yet: it is never sold as if it worked. */
+export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
+  const out: Array<Say & { soon?: boolean }> = [
+    { key: "plans.f.agents", vars: { n: l.bots } },
+    { key: "plans.f.coins", vars: { n: l.maxCoins } },
+    { key: l.styles.length > 2 ? "plans.f.stylesAll" : "plans.f.stylesBasic" },
+    { key: l.proThemes ? "plans.f.packsAll" : "plans.f.packsFree" },
+    { key: "plans.f.brains", vars: { n: l.brains }, soon: l.brains > 1 },
+    { key: "plans.f.skills", vars: { n: l.skillSlots }, soon: true },
+  ];
+  if (l.history) out.push({ key: "plans.f.history", soon: true });
+  if (l.autonomy) out.push({ key: "plans.f.auto", soon: true });
+  return out;
 }

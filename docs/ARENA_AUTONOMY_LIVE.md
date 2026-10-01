@@ -12,12 +12,12 @@ Written from the owner's instructions of 1 Oct 2026, updated the same day with t
 | Coins per agent | 3 | 8 | 8 (autonomous agents choose their own, see 3) |
 | Theme packs | free packs | all | all |
 | Autonomous mode (agent picks and changes its style, trades any token or stock, long, short or scalp) | no | no | yes |
-| Model brains per agent | 1 | up to 3 | more than Pro (number open) |
-| Skill slots | not set | 30 | not set (at least Pro's) |
+| Model brains per agent | 1 | up to 3 | up to 6 at once |
+| Skill slots | 5 | 30 | 30 (not stated; Pro's until the owner says otherwise) |
 | Historical market data and simulated training on it | no | yes | yes |
 | Connect a real OKX account | yes, at the member's own risk (see 5) | same | same |
 
-In code now: `Tier = "free" | "pro" | "premium"`, `LIMITS.premium = { bots: 20, autonomy: true, ... }`. No billing exists yet, so nobody can hold Pro or Premium. Price and what Pro adds beyond more agents are still open.
+In code now: `Tier = "free" | "pro" | "premium"` and `LIMITS` with agents, brains and skill slots. Prices: **Pro 9.99, Premium 15.99** (the owner gave no currency or period; euro and month are assumed, in `plans.ts`). Billing exists (see the plan's build status). Brains, skill slots, historical data and autonomy are not built, so the plans page marks them "coming soon".
 
 ## 2. The 7-day paper recommendation
 
@@ -108,3 +108,9 @@ One Engine per agent, one SQLite file each. 20 agents per Premium member multipl
 4. **Autonomous agents** get **their own league** (`premium:autonomous`) and may also be kept **private**.
 
 Still open: prices; the number of brains on Premium; whether Free has skill slots; the training definition above; counsel's answer on item 1.
+
+### Answers of 1 Oct 2026, second round
+- Prices: Pro 9.99, Premium 15.99. Premium runs up to **6 model brains at once**. Free gets **5 skill slots**.
+- **Simulated training** (defined by the owner): replay the agent over historical candles faster than real time and keep the result as its own record, separate from the paper track and outside the ranking.
+- **Skills:** a skill bank and a marketplace, where a member picks skills made by others or creates their own. (The Lab's skills are rule sets that are backtested before use. A marketplace brings seller payouts, review of what is sold and liability for it; those are separate decisions and stay in the plan's marketplace step.)
+- Risk to settle with counsel: the plans page lists brains, skill slots, historical data and autonomy, which the Arena cannot do yet. They are marked "coming soon", but selling a subscription for features that do not exist is a consumer-law question. The safe order is to open payments when most of them work, or to word them as roadmap, not as included.

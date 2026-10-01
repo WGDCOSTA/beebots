@@ -16,6 +16,18 @@ export interface Limits {
   styles: string[];
   proThemes: boolean;
   autonomy: boolean;
+  brains: number;
+  skillSlots: number;
+  history: boolean;
+}
+
+export interface BillingView {
+  open: boolean;
+  plan: "free" | "pro" | "premium";
+  status: string | null;
+  periodEnd: number | null;
+  canManage: boolean;
+  quarantineDays: number;
 }
 
 export interface ConsentState {
