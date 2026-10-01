@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DAY_MS, leagueOf, metricsOf, MIN_DAYS, MIN_SAMPLES, MIN_TRADES, rankBy, seasonOf, whyNotRanked, type Point } from "../src/arena/score.js";
+import { DAY_MS, leagueOf, metricsOf, MIN_DAYS, MIN_SAMPLES, MIN_TRADES, needOf, rankBy, seasonOf, whyNotRanked, type Point } from "../src/arena/score.js";
 
 const T0 = Date.UTC(2026, 8, 28); // Monday 28 Sep 2026, 00:00 UTC
 const series = (equities: number[], stepMs = 600_000, orders = (i: number) => i): Point[] => equities.map((equity, i) => ({ ts: T0 + i * stepMs, equity, orders: orders(i) }));
@@ -75,5 +75,14 @@ describe("rankBy and leagues", () => {
   });
   it("Free and Pro never share a league", () => {
     expect(leagueOf("free", "breezy")).not.toBe(leagueOf("pro", "breezy"));
+  });
+});
+
+describe("needOf", () => {
+  const base = { days: 5, trades: 20, samples: 500 } as never;
+  it("is null when eligible, and gives numbers a page can word", () => {
+    expect(needOf(base)).toBeNull();
+    expect(needOf(null)).toMatchObject({ started: false });
+    expect(needOf({ ...(base as object), days: 1, trades: 2 } as never)).toMatchObject({ started: true, days: Number((MIN_DAYS - 1).toFixed(1)), trades: MIN_TRADES - 2, history: false });
   });
 });

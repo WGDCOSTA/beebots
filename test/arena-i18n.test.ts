@@ -68,7 +68,7 @@ describe("the dictionaries", () => {
 
 describe("the code only asks for keys that exist", () => {
   const dir = join(__dirname, "..", "dashboard", "src");
-  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Home|Agent|New|Fields|Parts|Decisions|Settings)\./.test(f));
+  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Ranking|Home|Agent|New|Fields|Parts|Decisions|Settings)\./.test(f));
   const used = new Set<string>();
   for (const f of files) {
     const src = readFileSync(join(dir, f), "utf8");

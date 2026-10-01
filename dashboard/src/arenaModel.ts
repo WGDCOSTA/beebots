@@ -20,13 +20,6 @@ export function arenaView(hash: string): ArenaView {
   return sub === "verify" && token ? { kind: "verify", token } : { kind: "home" };
 }
 
-/** A member-since line such as "Member since 30 Sep 2026". */
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export function memberSince(ts: number): string {
-  const d = new Date(ts);
-  return `Member since ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
-
 export const TIER_LABEL: Record<"free" | "pro" | "premium", string> = { free: "Free", pro: "Pro", premium: "Premium" };
 
 export function looksLikeEmail(v: string): boolean {
@@ -38,12 +31,6 @@ export function looksLikeEmail(v: string): boolean {
 export function resendIn(sentAt: number, now: number, cooldownMs = 30_000): number {
   return Math.max(0, Math.ceil((sentAt + cooldownMs - now) / 1000));
 }
-
-export const STYLE_LABEL: Record<string, { label: string; blurb: string }> = {
-  breezy: { label: "Trend", blurb: "Follows BTC and ETH trends. Few trades, calm." },
-  bizzy: { label: "Breakout", blurb: "One volatility breakout a day, ridden to the close." },
-  boozy: { label: "Momentum", blurb: "Chases fast moves. Busier and riskier." },
-};
 
 export interface BotDraft {
   name: string;
@@ -238,28 +225,32 @@ export function seasonEndsSay(end: number, now: number): Say {
   return h >= 24 ? { key: "season.endsDays", vars: { d: Math.floor(h / 24), h: h % 24 } } : { key: "season.endsHours", vars: { h: Math.max(1, h) } };
 }
 
-/** A league id such as "free:breezy" in words. */
-export function leagueLabel(id: string): string {
+/** A league id such as "free:breezy" in words ("Free · Trend"). */
+export function leagueText(id: string, t: (key: Key) => string): string {
   const [tier = "", style = ""] = id.split(":");
-  return `${TIER_LABEL[tier as "free" | "pro" | "premium"] ?? "Free"} · ${STYLE_LABEL[style]?.label ?? style}`;
+  const name = style === "autonomous" ? t("league.autonomous") : STYLE_KEYS[style] ? t(STYLE_KEYS[style]!.title) : style;
+  return `${TIER_LABEL[tier as "free" | "pro" | "premium"] ?? "Free"} · ${name}`;
 }
 
-const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
-export const pctText = pct;
-
-/** "Ends in 2d 5h", "Ends in 3h", "Ended". */
-export function seasonEnds(end: number, now: number): string {
-  const ms = end - now;
-  if (ms <= 0) return "Ended";
-  const h = Math.floor(ms / 3_600_000);
-  return h >= 24 ? `Ends in ${Math.floor(h / 24)}d ${h % 24}h` : `Ends in ${Math.max(1, h)}h`;
+/** What an agent still needs before it is ranked, as messages to translate (the server sends the numbers). */
+export interface Need {
+  started: boolean;
+  days: number;
+  trades: number;
+  history: boolean;
+}
+export function needSays(n: Need): Say[] {
+  if (!n.started) return [{ key: "rank.need.started" }];
+  const out: Say[] = [];
+  if (n.days) out.push({ key: "rank.need.days", vars: { n: n.days.toFixed(1) } });
+  if (n.trades) out.push({ key: "rank.need.trades", vars: { n: n.trades } });
+  if (n.history) out.push({ key: "rank.need.history" });
+  return out;
 }
 
-/** Mirrors the server's public-name rule (the server has the last word). */
-export function handleProblem(raw: string): string | null {
-  const h = raw.trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9_-]{2,19}$/.test(h)) return "3 to 20 letters, numbers, - or _.";
-  return null;
+/** Mirrors the server's public-name rule (the server has the last word). Null when fine, else the message to show. */
+export function handleIssue(raw: string): Key | null {
+  return /^[a-z0-9][a-z0-9_-]{2,19}$/.test(raw.trim().toLowerCase()) ? null : "me.handleRule";
 }
 
 /** A menu label such as LONG_BTC or HOLD_WINNER in the member's language. Labels it does not know keep their English wording. */

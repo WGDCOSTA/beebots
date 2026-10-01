@@ -85,14 +85,35 @@ export function metricsOf(points: Point[]): Metrics | null {
   };
 }
 
-/** What a bot still needs before it is ranked, in words, or null when it is eligible. */
+/** What a bot still needs before it is ranked, as numbers a page can word in any language; null when it is eligible. */
+export interface Need {
+  /** No samples yet. */
+  started: boolean;
+  days: number;
+  trades: number;
+  history: boolean;
+}
+export function needOf(m: Metrics | null): Need | null {
+  if (!m) return { started: false, days: MIN_DAYS, trades: MIN_TRADES, history: true };
+  const need: Need = {
+    started: true,
+    days: m.days < MIN_DAYS ? Number(Math.max(0.1, MIN_DAYS - m.days).toFixed(1)) : 0,
+    trades: Math.max(0, MIN_TRADES - m.trades),
+    history: m.samples < MIN_SAMPLES,
+  };
+  return need.days || need.trades || need.history ? need : null;
+}
+
+/** What a bot still needs before it is ranked, in English words, or null when it is eligible. */
 export function whyNotRanked(m: Metrics | null): string | null {
-  if (!m) return "Just started. Rankings begin once it has a little history.";
+  const n = needOf(m);
+  if (!n) return null;
+  if (!n.started) return "Just started. Rankings begin once it has a little history.";
   const need: string[] = [];
-  if (m.days < MIN_DAYS) need.push(`${Math.max(0.1, MIN_DAYS - m.days).toFixed(1)} more days`);
-  if (m.trades < MIN_TRADES) need.push(`${MIN_TRADES - m.trades} more ${MIN_TRADES - m.trades === 1 ? "trade" : "trades"}`);
-  if (m.samples < MIN_SAMPLES) need.push("more history");
-  return need.length ? `Needs ${need.join(", ")} to be ranked.` : null;
+  if (n.days) need.push(`${n.days.toFixed(1)} more days`);
+  if (n.trades) need.push(`${n.trades} more ${n.trades === 1 ? "trade" : "trades"}`);
+  if (n.history) need.push("more history");
+  return `Needs ${need.join(", ")} to be ranked.`;
 }
 
 export interface Ranked<T> {

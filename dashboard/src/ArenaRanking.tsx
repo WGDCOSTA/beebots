@@ -1,7 +1,8 @@
 // The Arena leaderboard: public, read-only, a season at a time, one league at a time. A league is a plan and a style,
 // because Free and Pro never compete together. It shows only what owners chose to show: bot, style, public name, results.
 import { useEffect, useMemo, useState } from "react";
-import { leagueLabel, pctText, seasonEnds, STYLE_LABEL } from "./arenaModel";
+import { fmtPct, leagueText, needSays, seasonEndsSay, STYLE_KEYS, type Need } from "./arenaModel";
+import { useI18n } from "./i18n/I18n";
 
 interface Metrics {
   samples: number;
@@ -24,7 +25,7 @@ interface Row {
   version: number;
   league: string;
   metrics: Metrics | null;
-  reason: string | null;
+  need: Need | null;
   mine: boolean;
 }
 interface Board {
@@ -50,6 +51,7 @@ function Glyph({ themes, theme, avatar }: { themes: Theme[]; theme: string; avat
 }
 
 export function ArenaRanking() {
+  const { t, locale } = useI18n();
   const [board, setBoard] = useState<Board | null>(null);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [season, setSeason] = useState<string | undefined>(undefined);
@@ -70,7 +72,7 @@ export function ArenaRanking() {
           setNow(Date.now());
         }
       } catch {
-        if (alive) setError("The leaderboard is not reachable right now.");
+        if (alive) setError(t("rank.error"));
       }
     };
     void load();
@@ -79,7 +81,7 @@ export function ArenaRanking() {
       alive = false;
       clearInterval(id);
     };
-  }, [season]);
+  }, [season, t]);
 
   useEffect(() => {
     void fetch("/arena/catalogue")
@@ -95,21 +97,21 @@ export function ArenaRanking() {
   const waiting = rows.filter((r) => r.rank === null);
 
   if (error) return <div className="pcard arena-card"><p className="bad">{error}</p></div>;
-  if (!board) return <div className="pcard arena-card dim">Loading the leaderboard…</div>;
-  if (!board.enabled) return <div className="pcard arena-card dim">The leaderboard is not open yet.</div>;
+  if (!board) return <div className="pcard arena-card dim">{t("rank.loading")}</div>;
+  if (!board.enabled) return <div className="pcard arena-card dim">{t("rank.closed")}</div>;
 
   return (
     <>
       <div className="pcard arena-card">
         <div className="arena-who">
           <div>
-            <div className="eyebrow">Season</div>
+            <div className="eyebrow">{t("rank.season")}</div>
             <h3 className="rk-season">
-              {board.season.id} <span className="dim small">{board.season.current ? seasonEnds(board.season.end, now) : "Finished"}</span>
+              {board.season.id} <span className="dim small">{(() => { const e = board.season.current ? seasonEndsSay(board.season.end, now) : { key: "rank.finished" as const }; return t(e.key, "vars" in e ? e.vars : undefined); })()}</span>
             </h3>
           </div>
           {board.seasons.length > 1 && (
-            <select className="pinput rk-select" aria-label="Season" value={board.season.id} onChange={(e) => setSeason(e.target.value)}>
+            <select className="pinput rk-select" aria-label={t("rank.season")} value={board.season.id} onChange={(e) => setSeason(e.target.value)}>
               {board.seasons.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -118,51 +120,47 @@ export function ArenaRanking() {
             </select>
           )}
         </div>
-        <p className="dim small">Everyone starts with the same paper money on the same prices. Free and Pro race in separate leagues, and each style has its own. Simulated money only.</p>
+        <p className="dim small">{t("rank.intro")}</p>
         <details className="rk-how">
-          <summary>How the score works</summary>
-          <p className="small">
-            Score = return % minus half of the worst drop from a peak (max drawdown) %. An agent that earns a lot by risking a lot loses points for its deep drops.
-            To be ranked an agent needs at least {board.minimums.minDays} days of history, {board.minimums.minTrades} trades and enough samples, so a lucky hour does not count. Open positions and rules are never shown.
-            Changing an agent's rules starts a fresh account, and its ranking starts over.
-          </p>
+          <summary>{t("rank.how.t")}</summary>
+          <p className="small">{t("rank.how.b", { days: board.minimums.minDays, trades: board.minimums.minTrades })}</p>
         </details>
       </div>
 
       {board.leagues.length === 0 ? (
-        <div className="pcard arena-card dim">Nobody is on the board yet. Create an agent in the Arena and leave "Show on the leaderboard" ticked.</div>
+        <div className="pcard arena-card dim">{t("rank.empty")}</div>
       ) : (
         <>
           <div className="ab-chips rk-leagues">
             {board.leagues.map((l) => (
               <button key={l.id} className={`ab-chip ${active === l.id ? "on" : ""}`} aria-pressed={active === l.id} onClick={() => setLeague(l.id)}>
-                {leagueLabel(l.id)} <small className="dim">{l.ranked}</small>
+                {leagueText(l.id, t)} <small className="dim">{l.ranked}</small>
               </button>
             ))}
           </div>
 
           <div className="pcard arena-card">
-            {ranked.length === 0 && <p className="dim">No agent is ranked in this league yet.</p>}
+            {ranked.length === 0 && <p className="dim">{t("rank.none")}</p>}
             {ranked.map((r) => (
               <div className={`rk-row ${r.mine ? "mine" : ""}`} key={r.botId}>
                 <span className={`rk-rank r${r.rank}`}>{r.rank}</span>
                 <Glyph themes={themes} theme={r.theme} avatar={r.avatar} />
                 <div className="rk-main">
                   <div>
-                    <strong>{r.name}</strong> {r.mine && <span className="badge ok">You</span>}
+                    <strong>{r.name}</strong> {r.mine && <span className="badge ok">{t("rank.you")}</span>}
                   </div>
                   <div className="dim small">
-                    @{r.handle} · {STYLE_LABEL[r.style]?.label ?? r.style} · v{r.version}
+                    @{r.handle} · {STYLE_KEYS[r.style] ? t(STYLE_KEYS[r.style]!.title) : r.style} · v{r.version}
                   </div>
                   <div className="rk-stats small">
-                    <span className={r.metrics!.returnPct >= 0 ? "good" : "bad"}>{pctText(r.metrics!.returnPct)}</span>
-                    <span title="Worst drop from a peak">drawdown {r.metrics!.maxDrawdownPct.toFixed(1)}%</span>
-                    <span>{r.metrics!.trades} trades</span>
+                    <span className={r.metrics!.returnPct >= 0 ? "good" : "bad"}>{fmtPct(r.metrics!.returnPct, locale)}</span>
+                    <span title={t("rank.drawdownHelp")}>{t("rank.drawdown", { pct: r.metrics!.maxDrawdownPct.toFixed(1) })}</span>
+                    <span>{t("rank.trades", { n: r.metrics!.trades })}</span>
                   </div>
                 </div>
-                <div className="rk-score" title="Return minus half the drawdown">
+                <div className="rk-score" title={t("rank.scoreHelp")}>
                   <strong>{r.metrics!.score.toFixed(2)}</strong>
-                  <span className="dim small">score</span>
+                  <span className="dim small">{t("rank.score")}</span>
                 </div>
               </div>
             ))}
@@ -170,16 +168,16 @@ export function ArenaRanking() {
 
           {waiting.length > 0 && (
             <div className="pcard arena-card">
-              <h3>Not ranked yet</h3>
+              <h3>{t("rank.waiting")}</h3>
               {waiting.map((r) => (
                 <div className={`rk-row wait ${r.mine ? "mine" : ""}`} key={r.botId}>
                   <Glyph themes={themes} theme={r.theme} avatar={r.avatar} />
                   <div className="rk-main">
                     <div>
-                      <strong>{r.name}</strong> {r.mine && <span className="badge ok">You</span>}
+                      <strong>{r.name}</strong> {r.mine && <span className="badge ok">{t("rank.you")}</span>}
                     </div>
                     <div className="dim small">@{r.handle}</div>
-                    <div className="dim small">{r.reason}</div>
+                    <div className="dim small">{r.need ? needSays(r.need).map((m) => t(m.key, m.vars)).join(" · ") : ""}</div>
                   </div>
                 </div>
               ))}

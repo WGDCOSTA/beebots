@@ -1,7 +1,7 @@
 // "Me": the person, apart from the agents. Who they are, their public name, their language, signing out, and leaving.
 import { useState } from "react";
 import { arena, type Member } from "./arenaApi";
-import { handleProblem, memberSince, TIER_LABEL } from "./arenaModel";
+import { handleIssue, TIER_LABEL } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
 import { LOCALES, LOCALE_NAMES, type Locale } from "./i18n/locales";
 
@@ -11,7 +11,7 @@ function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) =
   const [value, setValue] = useState(me.handle);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const problem = handleProblem(value);
+  const problem = handleIssue(value);
   const save = async () => {
     setBusy(true);
     setError("");
@@ -20,7 +20,7 @@ function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) =
       if (r.status === 200 && r.data.handle) {
         onChange(r.data.handle);
         setEditing(false);
-      } else setError(r.data.error ?? "Could not change it.");
+      } else setError(r.data.error ?? t("me.handleError"));
     } catch {
       setError(t("common.down"));
     } finally {
@@ -29,14 +29,14 @@ function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) =
   };
   return (
     <div className="arena-handle">
-      <div className="eyebrow">Public name</div>
+      <div className="eyebrow">{t("me.publicName")}</div>
       {!editing ? (
         <div className="arena-actions">
           <span className="mono strong">@{me.handle}</span>
           <button className="pbtn ghost small" onClick={() => setEditing(true)}>
-            Change
+            {t("me.change")}
           </button>
-          <span className="dim small">This is what others see on the leaderboard, never your e-mail.</span>
+          <span className="dim small">{t("me.publicNameHelp")}</span>
         </div>
       ) : (
         <form
@@ -46,12 +46,12 @@ function PublicName({ me, onChange }: { me: Member; onChange: (handle: string) =
             void save();
           }}
         >
-          <input className="pinput" value={value} maxLength={20} autoFocus onChange={(e) => setValue(e.target.value)} aria-label="Public name" />
-          <button className="pbtn" disabled={busy || problem !== null} title={problem ?? undefined}>
-            {busy ? "Saving…" : "Save"}
+          <input className="pinput" value={value} maxLength={20} autoFocus onChange={(e) => setValue(e.target.value)} aria-label={t("me.publicName")} />
+          <button className="pbtn" disabled={busy || problem !== null} title={problem ? t(problem) : undefined}>
+            {busy ? t("me.saving") : t("me.save")}
           </button>
           <button type="button" className="pbtn ghost" onClick={() => setEditing(false)}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </form>
       )}
@@ -95,16 +95,16 @@ export function ArenaMe({ me, onOut, onHandle, onPickLocale }: { me: Member; onO
       <div className="pcard arena-card">
         <div className="arena-who">
           <div>
-            <div className="eyebrow">Signed in as</div>
+            <div className="eyebrow">{t("me.signedInAs")}</div>
             <div className="arena-email mono">{me.email}</div>
-            <div className="dim small">{memberSince(me.createdAt)}</div>
+            <div className="dim small">{t("me.since", { date: new Date(me.createdAt).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) })}</div>
           </div>
           <span className={`badge ${me.tier !== "free" ? "ok" : ""}`}>{TIER_LABEL[me.tier]}</span>
         </div>
         <PublicName me={me} onChange={onHandle} />
         <div className="arena-actions">
           <button className="pbtn ghost" disabled={busy} onClick={() => void out()}>
-            Sign out
+            {t("me.signOut")}
           </button>
         </div>
       </div>
@@ -123,11 +123,11 @@ export function ArenaMe({ me, onOut, onHandle, onPickLocale }: { me: Member; onO
       </div>
 
       <div className="pcard arena-card arena-danger">
-        <h3>Delete my account</h3>
-        <p className="dim small">Removes your account, your sessions and your whole private database. This cannot be undone.</p>
+        <h3>{t("me.deleteTitle")}</h3>
+        <p className="dim small">{t("me.deleteHelp")}</p>
         {!open ? (
           <button className="pbtn ghost small" onClick={() => setOpen(true)}>
-            Delete my account…
+            {t("me.deleteOpen")}
           </button>
         ) : (
           <form
@@ -137,9 +137,9 @@ export function ArenaMe({ me, onOut, onHandle, onPickLocale }: { me: Member; onO
               void erase();
             }}
           >
-            <input className="pinput" type="email" placeholder={`Type ${me.email} to confirm`} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoFocus />
+            <input className="pinput" type="email" placeholder={t("me.deleteConfirm", { email: me.email })} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoFocus />
             <button className="pbtn danger" disabled={busy || confirm.trim().toLowerCase() !== me.email}>
-              {busy ? "Deleting…" : "Delete forever"}
+              {busy ? t("me.deleting") : t("me.deleteGo")}
             </button>
           </form>
         )}

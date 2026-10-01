@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agoParts, arenaView, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleProblem, leagueLabel, looksLikeEmail, memberSince, pctText, pnlTone, resendIn, riskSay, seasonEnds, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
+import { agoParts, arenaView, checklist, choiceText, coinFits, draftIssue, fmtPct, fmtUsd, handleIssue, leagueText, looksLikeEmail, needSays, pnlTone, resendIn, riskSay, seasonEndsSay, sparkPath, statePill, stepIssue, toggleCoin, withStyle } from "../dashboard/src/arenaModel.js";
 import { en } from "../dashboard/src/i18n/en.js";
 
 describe("arenaView", () => {
@@ -38,12 +38,6 @@ describe("resendIn", () => {
     expect(resendIn(1000, 1000)).toBe(30);
     expect(resendIn(1000, 16_000)).toBe(15);
     expect(resendIn(1000, 999_999)).toBe(0);
-  });
-});
-
-describe("memberSince", () => {
-  it("words the join date in UTC", () => {
-    expect(memberSince(Date.UTC(2026, 8, 30, 23, 59))).toBe("Member since 30 Sep 2026");
   });
 });
 
@@ -180,23 +174,19 @@ describe("words for what an agent did", () => {
 });
 
 describe("leaderboard words", () => {
+  const t = (k: string) => ({ "style.breezy.t": "Trend", "style.boozy.t": "Momentum", "league.autonomous": "Autonomous" })[k] ?? k;
   it("names a league by plan and style", () => {
-    expect(leagueLabel("free:breezy")).toBe("Free · Trend");
-    expect(leagueLabel("pro:boozy")).toBe("Pro · Momentum");
+    expect(leagueText("free:breezy", t as never)).toBe("Free · Trend");
+    expect(leagueText("pro:boozy", t as never)).toBe("Pro · Momentum");
+    expect(leagueText("premium:autonomous", t as never)).toBe("Premium · Autonomous");
   });
-  it("says when a season ends", () => {
-    const now = Date.UTC(2026, 8, 30, 12);
-    expect(seasonEnds(now + 2 * 86_400_000 + 5 * 3_600_000, now)).toBe("Ends in 2d 5h");
-    expect(seasonEnds(now + 3 * 3_600_000, now)).toBe("Ends in 3h");
-    expect(seasonEnds(now + 60_000, now)).toBe("Ends in 1h");
-    expect(seasonEnds(now - 1, now)).toBe("Ended");
-  });
-  it("signs percentages", () => {
-    expect(pctText(3.456)).toBe("+3.46%");
-    expect(pctText(-0.5)).toBe("-0.50%");
+  it("words what an agent still needs, from numbers", () => {
+    expect(needSays({ started: false, days: 3, trades: 3, history: true })).toEqual([{ key: "rank.need.started" }]);
+    expect(needSays({ started: true, days: 2.5, trades: 0, history: false })).toEqual([{ key: "rank.need.days", vars: { n: "2.5" } }]);
+    expect(needSays({ started: true, days: 0.5, trades: 3, history: true }).map((m) => m.key)).toEqual(["rank.need.days", "rank.need.trades", "rank.need.history"]);
   });
   it("checks a public name the way the server does", () => {
-    expect(handleProblem("fast-ana")).toBeNull();
-    for (const bad of ["", "ab", "a".repeat(21), "no spaces", "-x-"]) expect(handleProblem(bad)).not.toBeNull();
+    expect(handleIssue("fast-ana")).toBeNull();
+    for (const bad of ["", "ab", "a".repeat(21), "no spaces", "-x-"]) expect(handleIssue(bad)).toBe("me.handleRule");
   });
 });

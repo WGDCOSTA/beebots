@@ -1,7 +1,7 @@
 // What a visitor sees before signing in: what the Arena is, the real leaderboard so they see people and not promises, and the way in.
 import { useEffect, useState } from "react";
 import { ArenaSignIn } from "./ArenaSignIn";
-import { leagueLabel, pctText } from "./arenaModel";
+import { fmtPct, leagueText } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
 
 interface Row {
@@ -24,7 +24,7 @@ interface Theme {
 }
 
 export function ArenaLanding({ notice }: { notice?: string }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [themes, setThemes] = useState<Theme[]>([]);
 
@@ -74,7 +74,7 @@ export function ArenaLanding({ notice }: { notice?: string }) {
         <ArenaSignIn notice={notice} />
         <div>
           <div className="pcard arena-card">
-            <span className="eyebrow">{league ? t("landing.preview", { league: leagueLabel(league) }) : t("nav.board")}</span>
+            <span className="eyebrow">{league ? t("landing.preview", { league: leagueText(league, t) }) : t("nav.board")}</span>
             {rows !== null && top.length === 0 && <p className="dim">{t("landing.previewEmpty")}</p>}
             {top.map((r) => (
               <div className="rk-row" key={r.botId}>
@@ -86,7 +86,7 @@ export function ArenaLanding({ notice }: { notice?: string }) {
                   <strong>{r.name}</strong>
                   <div className="dim small">@{r.handle}</div>
                 </div>
-                <strong className={`num ${(r.metrics?.returnPct ?? 0) >= 0 ? "good" : "bad"}`}>{pctText(r.metrics?.returnPct ?? 0)}</strong>
+                <strong className={`num ${(r.metrics?.returnPct ?? 0) >= 0 ? "good" : "bad"}`}>{fmtPct(r.metrics?.returnPct ?? 0, locale)}</strong>
               </div>
             ))}
           </div>
