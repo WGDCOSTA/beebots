@@ -1,6 +1,7 @@
 // The Arena's own frame: its brand, its navigation and its footer. Nothing of the owner's dashboard (Live, Lab, Admin) appears here.
 // Signed in: a bottom tab bar on a phone, a left sidebar on a wider screen. Signed out: a slim top bar with the way in.
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { seasonEndsSay } from "./arenaModel";
 import { useI18n } from "./i18n/I18n";
 import { LOCALES, LOCALE_NAMES, type Locale } from "./i18n/locales";
 import "./arena.css";
@@ -44,23 +45,91 @@ export function LanguagePicker({ onPick }: { onPick: (l: Locale) => void }) {
   );
 }
 
+/** What the public board says right now, for the header's counters and the system bar (read every 30 s, like a live feed). */
+interface Pulse {
+  agents: number;
+  ranked: number;
+  leagues: number;
+  season: string;
+  end: number;
+  days: number;
+  trades: number;
+}
+function usePulse(): Pulse | null {
+  const [p, setP] = useState<Pulse | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      void fetch("/arena/leaderboard", { cache: "no-store" })
+        .then((r) => r.json() as Promise<{ season?: { id: string; end: number }; leagues?: unknown[]; minimums?: { minDays: number; minTrades: number }; rows?: Array<{ rank: number | null }> }>)
+        .then((b) => {
+          if (!alive || !b.season) return;
+          const rows = b.rows ?? [];
+          setP({ agents: rows.length, ranked: rows.filter((r) => r.rank !== null).length, leagues: b.leagues?.length ?? 0, season: b.season.id, end: b.season.end, days: b.minimums?.minDays ?? 3, trades: b.minimums?.minTrades ?? 3 });
+        })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 30_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  return p;
+}
+
+/** The UTC clock of the live site's header. */
+function Clock() {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <span className="num">{new Date(now).toISOString().slice(11, 19)} UTC</span>;
+}
+
+function Counter({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "good" | "bad" }) {
+  return (
+    <div className="counter">
+      <div className="eyebrow">{label}</div>
+      <div className={`counter-value num ${tone ?? ""}`}>{value}</div>
+      {sub && <div className="counter-sub num">{sub}</div>}
+    </div>
+  );
+}
+
 export function ArenaShell({ tab, mode, onPickLocale, children }: { tab: Tab; mode: Mode; onPickLocale: (l: Locale) => void; children: ReactNode }) {
   const { t } = useI18n();
   const signedIn = mode === "in";
+  const pulse = usePulse();
+  const ends = pulse ? seasonEndsSay(pulse.end, Date.now()) : null;
   return (
     <div className={`as ${mode}`}>
-      <header className="as-top">
-        <a className="as-brand" href="#/arena" aria-label="Arena">
-          <span className="as-logo" aria-hidden="true" />
-          <span className="as-word">
-            beebots<em>arena</em>
-          </span>
-          <span className="as-live" aria-hidden="true">
-            <i />
-            LIVE
-          </span>
-        </a>
-        <div className="as-top-end">
+      {/* The live site's header, piece for piece: the mark and its mode line, counters, the live dot and the UTC clock. */}
+      <header className="top as-head">
+        <div className="brand">
+          <div className="brand-row">
+            <a className="logo" href="#/arena" aria-label="beebots arena">
+              beebots<span> arena</span>
+            </a>
+          </div>
+          <div className="brand-sub">
+            <span className="mode mode-dry">{t("shell.paper").toUpperCase()}</span>
+            <span className="dim">{t("shell.sub", { season: pulse?.season ?? "–" })}</span>
+          </div>
+        </div>
+        <div className="counters as-counters">
+          <Counter label={t("shell.agents")} value={pulse ? String(pulse.agents) : "–"} sub={t("shell.agentsSub")} />
+          <Counter label={t("shell.ranked")} value={pulse ? String(pulse.ranked) : "–"} sub={pulse ? t("shell.rankedSub", { days: pulse.days, trades: pulse.trades }) : undefined} />
+          <Counter label={t("shell.season")} value={pulse?.season ?? "–"} sub={ends ? t(ends.key, "vars" in ends ? ends.vars : undefined) : undefined} />
+          <Counter label={t("shell.leagues")} value={pulse ? String(pulse.leagues) : "–"} sub={t("shell.leaguesSub")} />
+        </div>
+        <div className="top-right as-top-end">
+          <div className="conn">
+            <span className="conn-dot on" />
+            <span>{t("shell.live")}</span>
+            <Clock />
+          </div>
           {mode === "out" && (
             <a className="as-link" href="#/arena/ranking">
               {t("nav.board")}
@@ -74,17 +143,35 @@ export function ArenaShell({ tab, mode, onPickLocale, children }: { tab: Tab; mo
           )}
         </div>
       </header>
+      {pulse && (
+        <div className="sysbar num as-sys" role="status">
+          <span className="sys-group">
+            <span className="sys-key">{t("shell.sys.season")}</span>
+            <span className="sys-val">{pulse.season}</span>
+            {ends && <span className="sys-val">{t(ends.key, "vars" in ends ? ends.vars : undefined)}</span>}
+          </span>
+          <span className="sys-group">
+            <span className="sys-key">{t("shell.sys.rules")}</span>
+            <span className="sys-val">{t("shell.sys.rulesVal", { days: pulse.days, trades: pulse.trades })}</span>
+          </span>
+          <span className="sys-group">
+            <span className="sys-key">{t("shell.sys.market")}</span>
+            <span className="sys-val up">● {t("shell.sys.marketVal")}</span>
+          </span>
+        </div>
+      )}
+      {signedIn && (
+        // The live site's view tabs, in place of a side bar.
+        <nav className="viewtabs as-viewtabs" aria-label={t("nav.main")}>
+          {ITEMS.map((i) => (
+            <a key={i.tab} href={i.href} className={`viewtab ${tab === i.tab ? "on" : ""}`} aria-current={tab === i.tab ? "page" : undefined}>
+              <Icon name={i.tab} />
+              {t(i.key)}
+            </a>
+          ))}
+        </nav>
+      )}
       <div className="as-frame">
-        {signedIn && (
-          <nav className="as-side" aria-label={t("nav.main")}>
-            {ITEMS.map((i) => (
-              <a key={i.tab} href={i.href} className={`${tab === i.tab ? "on" : ""} ${i.tab === "new" ? "cta" : ""}`} aria-current={tab === i.tab ? "page" : undefined}>
-                <Icon name={i.tab} />
-                {t(i.key)}
-              </a>
-            ))}
-          </nav>
-        )}
         <main className="as-main">{children}</main>
       </div>
       <footer className="as-foot">

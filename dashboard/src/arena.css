@@ -1,8 +1,7 @@
 /* The Arena shell. Same tokens as the product (styles.css): violet-black ground, amber accent, Inter. */
 .as { min-height: 100vh; display: flex; flex-direction: column; background: var(--page); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
 html:has(.as), body:has(.as), #root:has(.as) { height: auto; overflow: auto; }
-/* The owner's dashboard scales its root font with the viewport; the Arena reads at a normal size. */
-html:has(.as) { font-size: 16px; }
+/* The Arena keeps the live site's root scale (styles.css :root, 15px under 1100px) so its header, counters and tabs match it. */
 .as-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .as-top { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 16px; background: color-mix(in srgb, var(--page) 90%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); min-height: 56px; }
 .as-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 18px; color: var(--text); text-decoration: none; min-height: 44px; }
@@ -189,13 +188,74 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
    and a live dot, ranking rows with medals and a score bar, and a parade of every agent racing now.
    Colour never carries meaning alone: ▲▼, signs and words stay beside it. Motion stops under prefers-reduced-motion.
    =================================================================================================================== */
+/* The live site's frame (.app in styles.css): its ground, its padding, its gap. */
 .as {
+  padding: 1rem 1.25rem 0;
+  gap: 1rem;
   background:
-    radial-gradient(60rem 28rem at 8% -8%, color-mix(in srgb, var(--bizzy) 16%, transparent), transparent 70%),
-    radial-gradient(50rem 26rem at 100% 0%, color-mix(in srgb, var(--breezy) 13%, transparent), transparent 70%),
-    radial-gradient(40rem 30rem at 60% 120%, color-mix(in srgb, var(--boozy) 9%, transparent), transparent 70%),
+    radial-gradient(60rem 30rem at 15% -10%, rgba(144, 133, 233, 0.08), transparent 70%),
+    radial-gradient(50rem 30rem at 85% 110%, rgba(213, 81, 129, 0.06), transparent 70%),
     var(--page);
   background-attachment: fixed;
+}
+.as-head .logo {
+  color: var(--text);
+  text-decoration: none;
+}
+.as-head .brand-sub .dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.as-top-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.as-top-end .as-lang select {
+  min-height: 2.2rem;
+}
+.as-top-end .as-signin {
+  min-height: 2.4rem;
+}
+.as-sys {
+  margin: 0;
+}
+.as-viewtabs {
+  margin-top: 0;
+}
+.as-viewtabs .viewtab {
+  text-decoration: none;
+}
+.as-viewtabs .as-ic {
+  width: 1rem;
+  height: 1rem;
+}
+.as .as-frame {
+  max-width: none;
+}
+.as .as-main {
+  padding: 0 0 2rem;
+}
+.as .as-foot {
+  margin: 0 -1.25rem;
+}
+@media (max-width: 1100px), (max-aspect-ratio: 4/5) {
+  .as {
+    padding: 0.75rem 0.75rem 0;
+  }
+  .as .as-foot {
+    margin: 0 -0.75rem;
+  }
+}
+@media (max-width: 899px) {
+  /* a phone keeps the bottom tab bar, which a thumb reaches */
+  .as-viewtabs {
+    display: none;
+  }
+  .as .as-main {
+    padding-bottom: 6rem;
+  }
 }
 .as .num,
 .as .ag-big,
@@ -537,4 +597,191 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 }
 .as .ab-chip.on {
   box-shadow: 0 0 16px color-mix(in srgb, var(--bizzy) 25%, transparent);
+}
+
+/* -------------------------------------------------------------------------------------------------------------------
+   One pattern with the live site (styles.css): the same cards, portraits, leaderboard rows and buttons, not look-alikes.
+   Later rules here win over the Arena's earlier ones on purpose.
+   ------------------------------------------------------------------------------------------------------------------- */
+/* cards are the live site's rail cards */
+.as .pcard,
+.as .pcard.arena-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+/* an agent card is a bunny column: its colour on top, a wash fading down, the glow when its money moves */
+.as .pcard.arena-card.ag-card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--av) 9%, var(--card)) 0%, var(--card) 40%);
+  border-top: 3px solid var(--av);
+  padding: 1rem 1.1rem;
+}
+.as a.ag-card:hover,
+.as a.ag-card:focus-visible {
+  transform: none;
+  border-color: var(--line);
+  border-top-color: var(--av);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--av) 55%, transparent), 0 0 2rem color-mix(in srgb, var(--av) 22%, transparent);
+}
+.as .ag-card.flash-up,
+.as .ag-card.flash-down {
+  border-top-color: var(--av);
+}
+.as .ag-card-name strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.as .ag-big {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+/* portraits: the bunnies' ring and glow */
+.as .ab-portrait {
+  background: color-mix(in srgb, var(--av) 18%, var(--card-2));
+  border: 0;
+  box-shadow: 0 0 0 3px var(--av), 0 0 1.6rem color-mix(in srgb, var(--av) 45%, transparent);
+}
+.as a.ag-card:hover .ab-portrait,
+.as .rk-row:hover .ab-portrait {
+  transform: none;
+  box-shadow: 0 0 0 3px var(--av), 0 0 2.2rem color-mix(in srgb, var(--av) 60%, transparent);
+}
+/* the leaderboard: plain ranks and the board's bar, as in the live site's rail */
+.as .rk-rank,
+.as .rk-rank.r1,
+.as .rk-rank.r2,
+.as .rk-rank.r3 {
+  width: 1.4rem;
+  height: auto;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  font-family: inherit;
+  font-weight: 800;
+  color: var(--muted);
+}
+.as .rk-rank.r1 {
+  color: var(--text);
+}
+.as .rk-row {
+  margin: 0 -0.5rem;
+  padding: 0.55rem 0.5rem;
+  border-radius: 0.5rem;
+}
+.as .rk-row:hover {
+  background: var(--card-2);
+}
+.as .rk-bar {
+  height: 0.5rem;
+  background: var(--grid);
+}
+.as .rk-bar i,
+.as .rk-bar i.up {
+  background: var(--av, var(--bizzy));
+  transition: width 0.6s;
+}
+.as .rk-bar i.down {
+  background: var(--critical);
+}
+/* buttons and headings: the live site's amber, no gradients */
+.as .as-cta .pbtn:not(.ghost) {
+  background: color-mix(in srgb, var(--bizzy) 16%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--bizzy) 60%, var(--line));
+  color: var(--text);
+  box-shadow: none;
+}
+.as .as-cta .pbtn:not(.ghost):hover {
+  transform: none;
+  background: color-mix(in srgb, var(--bizzy) 26%, var(--card));
+  box-shadow: none;
+}
+.as .as-hero h1 {
+  background: none;
+  color: var(--text);
+}
+.as .ag-tabs {
+  border-radius: 0.6rem;
+  padding: 0.2rem;
+}
+.as .ag-tabs button.on {
+  background: var(--card-2);
+  box-shadow: inset 0 -2px 0 var(--bizzy);
+}
+/* the live site's rail rows do not slide in; and the header's right side sits on one line */
+.as .rk-row {
+  animation: none;
+}
+.as .as-top-end {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+}
+.as .as-top-end .as-link {
+  min-height: 2.4rem;
+  padding: 0 0.3rem;
+}
+/* the landing's two columns share the width evenly: the sign-in card fills its column instead of the admin login's 460px */
+@media (min-width: 900px) {
+  .as .as-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.as .as-grid .pcard.login {
+  max-width: none;
+}
+.as .as-grid > *:first-child {
+  margin-top: 0;
+}
+/* a breathing avatar keeps its ring */
+@keyframes as-breathe {
+  0%, 100% { box-shadow: 0 0 0 3px var(--av), 0 0 1.2rem color-mix(in srgb, var(--av) 35%, transparent); }
+  50% { box-shadow: 0 0 0 3px var(--av), 0 0 2.2rem color-mix(in srgb, var(--av) 60%, transparent); }
+}
+/* a phone: the mark and the right side on one line, the counters as a 2 x 2 grid, the mode line wraps cleanly */
+@media (max-width: 640px) {
+  .as .as-head {
+    grid-template-columns: 1fr auto;
+    gap: 0.6rem 0.8rem;
+  }
+  .as .as-head .brand {
+    min-width: 0;
+  }
+  .as .as-head .logo {
+    font-size: 1.7rem;
+    white-space: nowrap;
+  }
+  .as .as-head .brand-sub {
+    flex-wrap: wrap;
+    gap: 0.3rem 0.6rem;
+  }
+  .as .as-head .brand-sub .dim {
+    flex-basis: 100%;
+    font-size: 0.78rem;
+  }
+  .as .as-head .top-right {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    gap: 0.5rem;
+  }
+  .as .as-head .conn {
+    display: none;
+  }
+  .as .as-counters {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .as .as-counters .counter {
+    min-width: 0;
+  }
+  .as .as-top-end .as-lang select {
+    max-width: 7.5rem;
+  }
 }
