@@ -53,6 +53,15 @@
 		reverse_proxy engine:8080
 	}
 
+	# The Arena (members' accounts and agents): a separate service, only up when the "arena" compose profile is on.
+	# It does its own sign-in, rate limits and checks; Caddy passes the client address in X-Forwarded-For.
+	handle /arena/* {
+		request_body {
+			max_size 256KB
+		}
+		reverse_proxy arena:8090
+	}
+
 	# Static dashboard, built into the image. Hashed assets are immutable; index.html revalidates.
 	handle {
 		root * /srv/dashboard
