@@ -41,7 +41,7 @@ const PULSE_MS = 4_000;
 /** How long a bee opens nothing after the exchange rejects one of its new orders. */
 /** Told to Jev when its menu carries multi-order options. */
 export const MULTI_ORDER_NOTE =
-  "LEG_* options open an extra position on another coin next to the one you hold (you earned more position slots by performing); every position shares one leverage cap and keeps its own code stop. CLOSE_LEG_<coin> closes an extra position. Only add a leg for a setup as good as a fresh entry.";
+  "LEG_* options open an extra position on another coin next to the one you hold; level 0 starts with up to 3 slots and each level adds 3. Every position shares one leverage cap and keeps its own code stop. CLOSE_LEG_<coin> closes an extra position. Only add a leg for a setup as good as a fresh entry.";
 
 export const ORDER_REJECT_PAUSE_MS = 10 * 60_000;
 const EQUITY_SNAPSHOT_MS = 10_000;
@@ -396,13 +396,13 @@ export class Engine {
   }
 
   /**
-   * Multi-orders: how many positions this bee may hold now. Its performance earns them (evolution.ts perks.positions:
-   * 2 from level 3, 3 from level 5); a bee in danger or worse is back to one.
+   * Multi-orders: how many positions this bee may hold now. Level zero starts at three and each level adds three;
+   * every position still shares one aggregate notional/leverage cap. A bee in danger or worse is back to one.
    */
   private slots(id: BeeId): number {
     if (this.spec[id]?.kind === "style" && this.spec[id]?.id === "scalp") return 1; // a scalper holds one position
     const ev = this.d.evolution;
-    if (!ev) return 1;
+    if (!ev) return Math.min(3, this.d.cfg.evolution.maxPositions);
     const tier = ev.bees[id]?.tier;
     if (tier === "danger" || tier === "critical" || tier === "dead") return 1;
     return Math.max(1, ev.perks(id).positions);

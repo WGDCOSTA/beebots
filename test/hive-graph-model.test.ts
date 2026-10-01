@@ -12,7 +12,8 @@ describe("hive graph model", () => {
     expect(kindOf(n("x", "lesson"))).toBe("note");
     expect(kindOf(n("x", "message"))).toBe("note");
     expect(kindOf(n("x", "style"))).toBe("style");
-    expect(kindOf(n("x", "run"))).toBeNull();
+    expect(kindOf(n("x", "run"))).toBe("experiment");
+    expect(kindOf(n("x", "experiment"))).toBe("experiment");
   });
   it("classifies confidence, preferring what the server sent", () => {
     expect(confidenceOf(l("a", "b", "traded"))).toBe("EXTRACTED");
@@ -25,7 +26,7 @@ describe("hive graph model", () => {
     expect(neighbourhood("a", links, 0).size).toBe(1);
   });
   it("filters by kind, confidence and ego, and never leaves dangling links", () => {
-    expect(visibleGraph(nodes, links, none).nodes.map((x) => x.id)).toEqual(["a", "b", "c", "d", "f"]);
+    expect(visibleGraph(nodes, links, none).nodes.map((x) => x.id)).toEqual(["a", "b", "c", "d", "e", "f"]);
     const noSkill = visibleGraph(nodes, links, { ...none, hiddenKinds: new Set(["skill" as const]) });
     expect(noSkill.links.every((k) => k.source !== "b" && k.target !== "b")).toBe(true);
     const facts = visibleGraph(nodes, links, { ...none, hiddenConf: new Set(["INFERRED" as const]) });

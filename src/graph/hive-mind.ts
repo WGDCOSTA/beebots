@@ -114,6 +114,15 @@ export function contextFor(g: KnowledgeGraph, slot: string) {
   const spec = g.out(bee, "specialises_in", 1)[0];
   const focus = [bee, ...g.out(bee, "traded", 5).map((e) => e.dst), ...g.out(bee, "watches", 5).map((e) => e.dst), ...(spec ? [spec.dst] : [])];
   const adopted = g.out(bee, "adopts", 8).map((e) => ({ skill: e.dst.slice(6), weight: round(e.weight) }));
+  const research = g
+    .out(bee, "tested", 8)
+    .map((e) => {
+      const n = g.node(e.dst);
+      return n
+        ? { experiment: n.label, skill: n.props.skill ?? null, accepted: n.props.accepted ?? false, score: n.props.score ?? null, stabilityPct: n.props.stabilityPct ?? null, result: n.props.result ?? null, at: n.updatedAt }
+        : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
   const record = g.out(bee, "traded", 12).map((e) => ({
     coin: e.dst.slice(5),
     netUsd: round(e.weight),
@@ -145,6 +154,7 @@ export function contextFor(g: KnowledgeGraph, slot: string) {
     memory: memories(g, bee, 4),
     labLessons: g.lessons(nodeId("run", "lab"), 3).map((l) => l.text),
     adopted,
+    research,
     tradeRecord: record,
     inbox: g.inbox(bee, 6).map((m) => ({ from: g.node(m.from)?.label ?? m.from, text: m.text })),
     peers,

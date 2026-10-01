@@ -271,6 +271,7 @@ async function main() {
       }
     },
     maxCallsPerDay: cfg.evolution.survivalMaxCallsDay,
+    researchMaxCallsPerDay: cfg.lab.selfResearchMaxCallsDay,
     watchlist: cfg.lab.watchlist,
     universe: () => coinInfos(feed.view(), 40, cmcState()),
     market: mood,
@@ -329,6 +330,23 @@ async function main() {
     specialization: cfg.lab.specialization,
   });
   coach.start();
+  // Agent-led R&D is deliberately slower than trading. Each agent's own brain proposes one hypothesis, the existing
+  // walk-forward lab tests it, and both accepted and rejected attempts become durable graph memory.
+  let researchTimer: NodeJS.Timeout | null = null;
+  let researchRunning = false;
+  const researchCycle = async () => {
+    if (researchRunning) return;
+    researchRunning = true;
+    try {
+      for (const bee of councilBees) await survival?.convene(bee, "research");
+    } catch (err) {
+      log.warn("self research cycle failed", { err: safeError(err) });
+    } finally {
+      researchRunning = false;
+      if (cfg.lab.selfResearchIntervalMin > 0) researchTimer = setTimeout(() => void researchCycle(), cfg.lab.selfResearchIntervalMin * 60_000);
+    }
+  };
+  if (cfg.lab.selfResearchIntervalMin > 0) researchTimer = setTimeout(() => void researchCycle(), Math.min(5, cfg.lab.selfResearchIntervalMin) * 60_000);
   const notes = new NoteBook(join(cfg.lab.dir, "notes.json"), graph);
   // Outside MCP servers the owner connected: read from the Setup file on every call, so changes apply at once.
   const mcp = new McpGateway({ servers: () => loadSettings(SETTINGS_PATH)?.mcpServers ?? [], path: join(cfg.lab.dir, "mcp.json") });
@@ -506,6 +524,7 @@ async function main() {
     log.info("shutting down", { sig });
     engine?.stop();
     for (const t of sessionTimers) clearInterval(t);
+    if (researchTimer) clearTimeout(researchTimer);
     saveSessions();
     coach.stop();
     cmc?.stop();

@@ -48,7 +48,7 @@ export interface Perks {
   limitBoost: number;
   /** Extra opens per UTC day. */
   extraTrades: number;
-  /** Positions it may hold at once (multi-orders): 2 from level 3, 3 from level 5, capped by MAX_POSITIONS_PER_BEE. */
+  /** Positions it may hold at once: 3 at level zero, plus 3 for every level, capped by MAX_POSITIONS_PER_BEE. */
   positions: number;
 }
 
@@ -84,14 +84,17 @@ export function levelFor(points: number): number {
 }
 
 export function perksFor(level: number, o: Pick<EvolutionOpts, "rewards" | "maxLimitBoost" | "boostLimits"> & { maxPositions?: number }): Perks {
-  if (!o.rewards) return { skillSlots: 4, canAuthorSkills: false, extraBrains: 0, limitBoost: 0, extraTrades: 0, positions: 1 };
+  const positions = Math.max(1, Math.min(o.maxPositions ?? 18, 3 * (Math.max(0, level) + 1)));
+  if (!o.rewards) return { skillSlots: 4, canAuthorSkills: true, extraBrains: 0, limitBoost: 0, extraTrades: 0, positions };
   return {
     skillSlots: Math.min(6, 3 + level),
-    canAuthorSkills: level >= 1,
+    // Research is a base capability. Adoption still requires a compiling skill and positive walk-forward evidence.
+    canAuthorSkills: true,
     extraBrains: level >= 5 ? 2 : level >= 3 ? 1 : 0,
     limitBoost: o.boostLimits ? Math.min(o.maxLimitBoost, Math.round(level * 10) / 100) : 0,
     extraTrades: o.boostLimits ? Math.min(3, Math.floor(level / 2)) : 0,
-    positions: o.boostLimits ? Math.max(1, Math.min(o.maxPositions ?? 3, level >= 5 ? 3 : level >= 3 ? 2 : 1)) : 1,
+    // Position count is independent of size rewards. Every slot shares the same aggregate leverage/notional cap.
+    positions,
   };
 }
 

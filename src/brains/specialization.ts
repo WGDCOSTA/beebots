@@ -32,7 +32,8 @@ export function methodOptions(o: { market: string; current: MethodOptions["curre
   const styles = [...(o.market === "crypto" ? ["bizzy", "breezy", "boozy"] : ["macro"]), ...(o.market === "crypto" ? (o.extraStyles ?? []) : [])];
   const skills = (o.ranking?.results ?? [])
     .filter((r) => r.family !== "benchmark" && r.score > 0 && r.stabilityPct >= 40)
-    .slice(0, o.limit ?? 10)
+    // Keep the list bounded for prompt size, but do not restrict agents to a tiny style-shaped shortlist.
+    .slice(0, o.limit ?? 50)
     .map((r) => ({
       id: r.skillId,
       family: r.family,

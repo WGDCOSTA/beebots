@@ -9,12 +9,12 @@ import { coin, NOW, position, testConfig, view } from "./fixtures.js";
 const OPTS: EvolutionOpts = { survival: true, rewards: true, dangerPct: 80, criticalPct: 60, deathPct: 40, maxLimitBoost: 0.5, boostLimits: true, startEquityUsd: 1000 };
 
 describe("multi-orders perk", () => {
-  it("top performers earn more position slots, capped, and never with limit boosts off", () => {
-    expect([0, 2, 3, 4, 5].map((l) => perksFor(l, OPTS).positions)).toEqual([1, 1, 2, 2, 3]);
+  it("starts with three position slots and adds three per level inside the configured cap", () => {
+    expect([0, 1, 2, 3, 4, 5].map((l) => perksFor(l, { ...OPTS, maxPositions: 18 }).positions)).toEqual([3, 6, 9, 12, 15, 18]);
     expect(perksFor(5, { ...OPTS, maxPositions: 2 }).positions).toBe(2);
     expect(perksFor(5, { ...OPTS, maxPositions: 1 }).positions).toBe(1);
-    expect(perksFor(5, { ...OPTS, boostLimits: false }).positions).toBe(1);
-    expect(perksFor(5, { ...OPTS, rewards: false }).positions).toBe(1);
+    expect(perksFor(2, { ...OPTS, maxPositions: 18, boostLimits: false }).positions).toBe(9);
+    expect(perksFor(0, { ...OPTS, maxPositions: 18, rewards: false }).positions).toBe(3);
   });
 });
 
@@ -106,7 +106,7 @@ describe("engine with multi-orders", () => {
     expect(engine.bees[boozyId].position).not.toBeNull();
     expect(engine.bees[boozyId].legs ?? []).toEqual([]);
 
-    evolution.bees[boozyId]!.level = 5; // performance earned 3 slots
+    evolution.bees[boozyId]!.level = 5; // the configured cap in this harness is 3 slots
     t += 3 * 60_000; // past boozy's cooldown
     reqs.length = 0;
     await engine.tick();
