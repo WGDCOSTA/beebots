@@ -21,6 +21,8 @@ import { createPublicApi } from "./okx/public.js";
 import { createOkxPublicRest } from "./okx/rest.js";
 import { safeError } from "./redact.js";
 import { startServer } from "./server.js";
+import { ownFromEngineDb, PublicChat } from "./publicChat.js";
+import { okxChatMarket } from "./arena/chat.js";
 import { loadOverrides, loadSettings, STYLE_INFO } from "./settings.js";
 import { imagePath, Setup } from "./setup.js";
 import { bunnyProfile } from "./bunnyProfile.js";
@@ -508,9 +510,27 @@ async function main() {
     skillAgent: new SkillAgent({ clients: () => clients, maxCallsPerDay: Math.max(cfg.lab.coachMaxCallsDay, 20) }),
   });
 
+  // Visitors may ask a bunny for its view (publicChat.ts): the bunny's own brain answers, read-only, within a daily ceiling.
+  const chat =
+    process.env.PUBLIC_CHAT === "0"
+      ? undefined
+      : new PublicChat({
+          market: okxChatMarket(feed, api),
+          agent: (id) => {
+            if (!(cfg.beeIds as readonly string[]).includes(id)) return null;
+            const s = cfg.slots[id as keyof typeof cfg.slots];
+            return { name: s.name, tagline: s.tagline, style: s.style, mode: "fixed", rules: s.rules, coins: s.coins, state: engine?.bees[id as keyof typeof engine.bees]?.position ? "in a position" : "running" };
+          },
+          llm: (id) => clients[cfg.brains.slots[id as keyof typeof cfg.brains.slots]] ?? Object.values(clients)[0] ?? null,
+          own: (id) => ownFromEngineDb(db.raw, id, Date.now()),
+          perHour: Number(process.env.PUBLIC_CHAT_PER_HOUR ?? 5),
+          dailyLimit: Number(process.env.PUBLIC_CHAT_DAILY_LIMIT ?? 300),
+        });
+
   const server = startServer(
     {
       engine: {
+        chat,
         bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
         lab: {
           ranking: labRanking,

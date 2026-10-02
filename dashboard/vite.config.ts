@@ -10,7 +10,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/arena": { target: arena, changeOrigin: false },
-      ...Object.fromEntries(["/events", "/snapshot", "/history", "/equity", "/visit", "/health", "/profile", "/bee-image", "/setup", "/hive", "/lab", "/hive-mind", "/admin"].map((p) => [p, { target: engine, changeOrigin: false }])),
+      ...Object.fromEntries(["/events", "/snapshot", "/history", "/equity", "/visit", "/health", "/profile", "/bee-image", "/setup", "/hive", "/lab", "/hive-mind", "/admin", "/chat"].map((p) => [p, { target: engine, changeOrigin: false }])),
     },
   },
   build: { outDir: "dist", sourcemap: false, target: "es2022" },

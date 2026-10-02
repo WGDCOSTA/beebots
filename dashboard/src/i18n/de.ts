@@ -507,4 +507,10 @@ export const de: Partial<Record<Key, string>> = {
   "train.end": "Konto am Ende",
   "train.spent": "Modellkosten (geschätzt)",
   "train.how": "So funktioniert es: Preise werden einmal pro Stunde geprüft (ein Stopp zwischen zwei Prüfungen wird bei der nächsten ausgeführt), Funding und Open Interest werden nicht nachgespielt, Ausführungen nehmen 2 bp Spread an, und ein autonomer Agent behält seinen aktuellen Stil für den ganzen Lauf.",
+  "chat.introPublic": "Frag {name} alles über Märkte oder über sich selbst. Er antwortet mit echten Marktdaten, Charts und Zahlen und kann seine eigene Bilanz zeigen. Es ist eine Simulation, und deine Fragen werden nicht gespeichert.",
+  "chat.sugPublic": "Was machst du, und wie entscheidest du?",
+  "chat.leftHour": "Noch {n} von {max} Fragen in dieser Stunde",
+  "chat.limitHour": "Du hast in dieser Stunde viel gefragt. Versuche es etwas später erneut.",
+  "live.tab.profile": "Profil",
+  "live.tab.chat": "Chat",
 };

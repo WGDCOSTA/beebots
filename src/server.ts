@@ -4,7 +4,8 @@
 // POST /admin/* is the admin panel (admin/admin.ts); every call there needs the owner password.
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
 // POST /hive/join and /hive/leave, which need the owner password (gate.ts, hive.ts). GET /hive/status is public and holds no key.
-// /visit is the page's hit counter: it bumps a total and returns it (see visitors.ts; no IP is stored or logged).
+// /chat?bee= and POST /chat/send: a visitor asks a bunny (publicChat.ts); it can only look at markets and talk, and the
+// question is not stored. /visit is the page's hit counter: it bumps a total and returns it (see visitors.ts; no IP is stored or logged).
 import { createReadStream } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { Db } from "./db.js";
@@ -14,6 +15,8 @@ import { log } from "./log.js";
 import { redact } from "./redact.js";
 import type { Setup } from "./setup.js";
 import { clientAddr, type Visitors } from "./visitors.js";
+import { readJson } from "./gate.js";
+import type { PublicChat } from "./publicChat.js";
 
 export interface ServerDeps {
   /** Absent in setup mode (nothing is trading yet). */
@@ -39,6 +42,8 @@ export interface ServerDeps {
     };
     /** One bunny's profile page data (bunnyProfile.ts), or null for an unknown slot. */
     bunny?: (slot: string, days: number) => unknown | null;
+    /** Visitors' chat with the bunnies (publicChat.ts): GET /chat?bee=, POST /chat/send. Read-only; questions are not stored. */
+    chat?: PublicChat;
   };
   /** Present only in setup mode. */
   setup?: Setup;
@@ -92,6 +97,21 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
           if (!handled) json(res, 404, { error: "not found" });
         })
         .catch(() => json(res, 500, { error: "admin request failed" }));
+      return;
+    }
+    if (url.pathname === "/chat/send") {
+      // A same-site POST only: the custom header makes a cross-site page need a preflight, which this server never answers.
+      const chat = deps.engine?.chat;
+      if (!chat) return json(res, 404, { error: "chat is off" });
+      if (req.method !== "POST" || req.headers["x-chat"] !== "1") return json(res, 405, { error: "POST with x-chat: 1" });
+      const addr = clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress);
+      void readJson(req, 8 * 1024)
+        .then(async (b) => {
+          const body = b && typeof b === "object" ? (b as Record<string, unknown>) : {};
+          const r = await chat.ask(addr, typeof body.bee === "string" ? body.bee : "", body);
+          json(res, r.status, r.body);
+        })
+        .catch(() => json(res, 400, { error: "bad request" }));
       return;
     }
     if (req.method !== "GET") return json(res, 405, { error: "read-only" });
@@ -203,6 +223,11 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
         res.end(e.lab.report());
         return;
+      case "/chat": {
+        if (!e.chat) return json(res, 404, { error: "chat is off" });
+        const r = e.chat.info(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress), url.searchParams.get("bee") ?? "");
+        return json(res, r.status, r.body);
+      }
       default:
         if (e.bunny && url.pathname.startsWith("/bunny/")) {
           const slot = url.pathname.slice("/bunny/".length);

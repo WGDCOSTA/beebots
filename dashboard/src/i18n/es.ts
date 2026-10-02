@@ -507,4 +507,10 @@ export const es: Partial<Record<Key, string>> = {
   "train.end": "Cuenta al final",
   "train.spent": "Coste del modelo (est.)",
   "train.how": "Cómo funciona: los precios se revisan una vez por hora (un stop entre dos revisiones se ejecuta en la siguiente), el funding y el open interest no se reproducen, las ejecuciones suponen un spread de 2 pb y un agent autónomo mantiene su estilo actual durante todo el entrenamiento.",
+  "chat.introPublic": "Pregunta a {name} lo que quieras sobre mercados o sobre sí mismo. Responde con datos reales de mercado, gráficos y cifras, y puede mostrar su propio historial. Es una simulación y tus preguntas no se guardan.",
+  "chat.sugPublic": "¿Qué haces y cómo decides?",
+  "chat.leftHour": "{n} de {max} preguntas restantes esta hora",
+  "chat.limitHour": "Has preguntado mucho esta hora. Inténtalo un poco más tarde.",
+  "live.tab.profile": "Perfil",
+  "live.tab.chat": "Chat",
 };

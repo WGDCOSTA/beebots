@@ -19,7 +19,8 @@ import { libraryOf, SkillBank, SkillError } from "./skills.js";
 import { PROVIDERS, DEFAULT_MODEL, MAX_KEYS, VaultError, type Vault } from "./vault.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
-import { AgentChat, ChatLog, type ChatMarket, type OwnContext } from "./chat.js";
+import { AgentChat, ChatLog, type ChatAgent, type ChatMarket, type OwnContext } from "./chat.js";
+import { PublicChat } from "../publicChat.js";
 import type { LlmClient } from "../brains/llm.js";
 import type { CandleStore } from "./history.js";
 import { BACKTESTS_PER_DAY, backtestSkill, TrainError, TRAININGS_PER_DAY, TRAIN_DAYS, usage, type Trainer } from "./training.js";
@@ -58,7 +59,7 @@ export interface ApiOpts {
   /** Plans and payment (null = payments are not open: everyone is on Free). */
   billing?: Billing | null;
   /** The agent chat: real market candles and the platform's model (null = chat is off). */
-  chat?: { market: ChatMarket; llm: LlmClient | null; dailyLimit?: number } | null;
+  chat?: { market: ChatMarket; llm: LlmClient | null; dailyLimit?: number; publicPerHour?: number; publicDailyLimit?: number } | null;
   /** Stored historical candles (null = none: backtests and training are off). */
   history?: CandleStore | null;
   /** Replays agents over history (null = training is off). */
@@ -95,6 +96,18 @@ function sessionOf(req: IncomingMessage): string | undefined {
   return undefined;
 }
 
+/** An agent's own record, as the chat sees it. */
+function ownContextOf(ins: Insights): OwnContext {
+  const last = ins.decisions[0];
+  return {
+    equity: ins.equity,
+    position: last?.did.kind && last.did.kind !== "none" ? `${last.did.kind} ${last.did.coin ?? ""}`.trim() : null,
+    pnlPct: ins.equity.length > 1 && ins.equity[0]![1] > 0 ? Number((((ins.equity[ins.equity.length - 1]![1] - ins.equity[0]![1]) / ins.equity[0]![1]) * 100).toFixed(2)) : null,
+    decisions: ins.decisions.map((d) => ({ ts: d.ts, did: d.did.kind, choice: d.choice, confidencePct: d.confidence === null ? null : Math.round(d.confidence * 100), rule: d.vetoedBy ?? d.forcedBy })),
+    trades: ins.trades.map((t) => ({ ts: t.ts, coin: t.coin, side: t.side, sizeUsd: t.sizeUsd, realisedUsd: t.realisedUsd })),
+  };
+}
+
 export class ArenaApi {
   private readonly now: () => number;
   /** The live board's answer, shared by every visitor for 5 s (it is public, so a crowd costs one read). */
@@ -104,8 +117,38 @@ export class ArenaApi {
   private houseIds(): string[] {
     return this.store.allUserIds().filter((id) => HOUSE_HANDLES.includes(this.store.userById(id)?.handle ?? ""));
   }
+  /** Visitors' chat with the house agents (publicChat.ts): the platform's model, read-only, nothing stored. */
+  private readonly houseChat: PublicChat | null;
+
   constructor(private readonly auth: ArenaAuth, private readonly store: ArenaStore, private readonly opts: ApiOpts) {
     this.now = opts.now ?? Date.now;
+    const c = opts.chat;
+    this.houseChat = c
+      ? new PublicChat({
+          market: c.market,
+          agent: (id) => this.houseBot(id)?.agent ?? null,
+          llm: (id) => (this.houseBot(id) ? c.llm : null),
+          own: (id) => {
+            const h = this.houseBot(id);
+            const ins = h ? (this.opts.runner?.insights?.(h.uid, h.bot, { decisions: 12, trades: 12, points: 120 }) ?? null) : null;
+            return ins ? ownContextOf(ins) : null;
+          },
+          perHour: c.publicPerHour ?? 5,
+          dailyLimit: c.publicDailyLimit ?? 300,
+          now: this.now,
+        })
+      : null;
+  }
+
+  /** A house agent that is shown on the live board, with its owner, or null. */
+  private houseBot(id: string): { uid: string; bot: BotView; agent: ChatAgent } | null {
+    for (const uid of this.houseIds()) {
+      const u = this.store.userById(uid);
+      if (!u) continue;
+      const bot = new Bots(this.store.tenant(uid), u.tier, this.now).list().find((b) => b.id === id && b.listed);
+      if (bot) return { uid, bot, agent: { name: bot.name, tagline: bot.tagline, style: bot.style, mode: bot.mode, rules: bot.rules, coins: bot.coins, state: bot.state } };
+    }
+    return null;
   }
 
   private cookie(value: string, maxAgeSec: number): string {
@@ -235,16 +278,7 @@ export class ArenaApi {
       log.spend(day);
       if (!own) this.store.aiToday("chat:" + day, 1);
       const ins = this.opts.runner?.insights?.(u.id, bot, { decisions: 12, trades: 12, points: 120 }) ?? null;
-      const last = ins?.decisions[0];
-      const ownCtx: OwnContext | null = ins
-        ? {
-            equity: ins.equity,
-            position: last?.did.kind && last.did.kind !== "none" ? `${last.did.kind} ${last.did.coin ?? ""}`.trim() : null,
-            pnlPct: ins.equity.length > 1 && ins.equity[0]![1] > 0 ? Number((((ins.equity[ins.equity.length - 1]![1] - ins.equity[0]![1]) / ins.equity[0]![1]) * 100).toFixed(2)) : null,
-            decisions: ins.decisions.map((d) => ({ ts: d.ts, did: d.did.kind, choice: d.choice, confidencePct: d.confidence === null ? null : Math.round(d.confidence * 100), rule: d.vetoedBy ?? d.forcedBy })),
-            trades: ins.trades.map((t) => ({ ts: t.ts, coin: t.coin, side: t.side, sizeUsd: t.sizeUsd, realisedUsd: t.realisedUsd })),
-          }
-        : null;
+      const ownCtx: OwnContext | null = ins ? ownContextOf(ins) : null;
       const history = log.list(bot.id).slice(-8).map((m) => ({ role: m.role, text: m.text || m.report?.headline || "" }));
       const asked = log.add(bot.id, "you", this.now(), text);
       let msg;
@@ -383,6 +417,19 @@ export class ArenaApi {
       }
       reply(res, 200, this.showcase.body);
       return true;
+    }
+    if (route === "/showcase/chat" || route === "/showcase/chat/send") {
+      // Anyone may ask a house agent; the page keeps the conversation, the server keeps nothing of it.
+      if (!this.houseChat) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
+      const addr = clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress);
+      if (req.method === "GET") {
+        const r = this.houseChat.info(addr, new URL(req.url ?? "/", "http://x").searchParams.get("id") ?? "");
+        return this.send(res, r.status, r.body);
+      }
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      const body = (await readJson(req, MAX_BODY * 2)) as Record<string, unknown>;
+      const r = await this.houseChat.ask(addr, typeof body.id === "string" ? body.id : "", body);
+      return this.send(res, r.status, r.body);
     }
     if (req.method === "GET" && route.startsWith("/showcase-image/")) {
       const id = route.slice("/showcase-image/".length);

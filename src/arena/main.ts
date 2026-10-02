@@ -8,7 +8,7 @@
 //   ARENA_STRIPE_KEY + ARENA_STRIPE_WEBHOOK_SECRET + ARENA_STRIPE_PRICE_PRO + ARENA_STRIPE_PRICE_PREMIUM   open payments on the operator's own Stripe account (ARENA_STRIPE_TAX=1 lets Stripe Tax work out VAT). Without them everyone is on Free and the plans page says payments are not open.
 //   ARENA_OPERATOR_NAME / _ADDRESS / _COMPANY_NO / _VAT / _EMAIL / _PRIVACY_EMAIL   who operates the Arena, shown on the legal pages. ARENA_LEGAL_REVIEWED_ON=YYYY-MM-DD   the day counsel signed the texts off; until it is set every legal page says it is a draft
 //   ARENA_HISTORY=0   do not fetch historical candles (default: with ARENA_RUN=1, the agents' coins are kept up to date every ARENA_HISTORY_SYNC_MS, 6 h); ARENA_TRAIN_USD   what one simulated training may spend on the platform's model (default 1); ARENA_TRAIN_PARALLEL   trainings at once (default 2)
-//   ARENA_CHAT_DAILY_LIMIT   chat messages the whole platform answers on its own model per day (default 2000; needs ARENA_RUN=1)
+//   ARENA_CHAT_DAILY_LIMIT   chat messages the whole platform answers on its own model per day (default 2000; needs ARENA_RUN=1); ARENA_PUBLIC_CHAT_PER_HOUR / _DAILY_LIMIT   visitors' questions to the house agents per address per hour (5) and in all per day (300)
 //   ARENA_SKILLS_DIR   folders (comma separated) of skill packs (JSON) added to the built-in library members can pick from (default ./skills)
 //   ARENA_VAULT_KEY    32 random bytes (hex or base64) that encrypt members' own model keys. Keep it outside the data folder and back it up: without it the stored keys cannot be read. Unset = members cannot add their own keys. (ARENA_OWN_KEY_DAILY_USD: the daily ceiling for an agent on a member's key when the member set none, default 1000)
 //   ARENA_OPENAI_KEY   the platform's own OpenAI key for the free AI design and portrait of a member's first bunny (ARENA_TEXT_MODEL, ARENA_IMAGE_MODEL, ARENA_AI_DAILY_LIMIT)
@@ -62,7 +62,7 @@ let runner: ArenaRunner | null = null;
 // Historical candles for backtests and simulated training (public OKX data, one shared file).
 const history = new CandleStore(`${env.ARENA_DIR ?? "./data/arena"}/history.sqlite`);
 let trainer: Trainer | null = null;
-let chat: { market: ReturnType<typeof okxChatMarket>; llm: OpenAiBrain | null; dailyLimit: number } | null = null;
+let chat: { market: ReturnType<typeof okxChatMarket>; llm: OpenAiBrain | null; dailyLimit: number; publicPerHour: number; publicDailyLimit: number } | null = null;
 if (env.ARENA_RUN === "1") {
   if (!env.ARENA_OPENAI_KEY) log.warn("arena: ARENA_RUN=1 needs ARENA_OPENAI_KEY (the platform's decision model). Bots are only stored.");
   else {
@@ -97,7 +97,7 @@ if (env.ARENA_RUN === "1") {
       void sync();
       setInterval(() => void sync(), Number(env.ARENA_HISTORY_SYNC_MS ?? 6 * 3_600_000)).unref();
     }
-    chat = { market: okxChatMarket(real, createPublicApi(cfg.okx.apiBase)), llm, dailyLimit: Number(env.ARENA_CHAT_DAILY_LIMIT ?? 2000) };
+    chat = { market: okxChatMarket(real, createPublicApi(cfg.okx.apiBase)), llm, dailyLimit: Number(env.ARENA_CHAT_DAILY_LIMIT ?? 2000), publicPerHour: Number(env.ARENA_PUBLIC_CHAT_PER_HOUR ?? 5), publicDailyLimit: Number(env.ARENA_PUBLIC_CHAT_DAILY_LIMIT ?? 300) };
     runner.begin();
     log.info("arena: race track open (paper trading only)", { maxRunners: Number(env.ARENA_MAX_RUNNERS ?? 25) });
   }

@@ -245,7 +245,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             )}
           </>
         )}
-        {tab === "chat" && agent.state !== "quarantined" && <ArenaChat id={agent.id} name={agent.name} />}
+        {tab === "chat" && agent.state !== "quarantined" && <ArenaChat source={{ kind: "own", id: agent.id }} name={agent.name} />}
         {tab === "training" && agent.state !== "quarantined" && <AgentTraining id={agent.id} name={agent.name} />}
         {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} brains={agent.brains.length} />}
         {tab === "versions" && (

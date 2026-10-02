@@ -525,6 +525,12 @@ export const en = {
   "train.end": "Account at the end",
   "train.spent": "Model cost (est.)",
   "train.how": "How it works: prices are checked once an hour (a stop between two checks fills at the next one), funding and open interest are not replayed, fills assume a 2 bp spread, and an autonomous agent keeps its current style for the whole run.",
+  "chat.introPublic": "Ask {name} anything about markets or about itself. It answers from real market data, with charts and figures, and it can show its own record. It is a simulation, and your questions are not stored.",
+  "chat.sugPublic": "What do you do, and how do you decide?",
+  "chat.leftHour": "{n} of {max} questions left this hour",
+  "chat.limitHour": "You have asked a lot this hour. Try again a little later.",
+  "live.tab.profile": "Profile",
+  "live.tab.chat": "Chat",
 } as const;
 
 export type Key = keyof typeof en;

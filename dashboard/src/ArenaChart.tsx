@@ -3,6 +3,7 @@
 // real bars' (the server corrected any other claim), and the legend under the chart says what each mark shows.
 import { axisPrice, axisTime, extent, indexAt, linePath, scale, ticks, type ChartData } from "./arenaChart";
 import { useI18n } from "./i18n/I18n";
+import "./chat.css";
 
 const W = 640;
 const L = 8;
