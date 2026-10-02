@@ -53,6 +53,19 @@ import { skillRegistry } from "./lab/skills/index.js";
 import type { Skill } from "./lab/skills/types.js";
 import { ExperimentControl } from "./experiment-control.js";
 
+// When a Jev call times out while its answer is still arriving, @typesafe-ai/sdk 0.6.0 can leave the aborted response's
+// body promise without a handler. The call itself has already failed and been handled (the bunny holds), so that late
+// rejection is harmless, but Node would stop the whole engine for it and every bunny would pause while Docker restarts
+// it (seen 2026-10-01 22:21 and 2026-10-02 00:00 UTC). Only an AbortError is let go, with a log line; any other
+// unhandled rejection still stops the process as before.
+process.on("unhandledRejection", (reason) => {
+  if (reason instanceof Error && reason.name === "AbortError") {
+    log.warn("ignored a late rejection from an aborted request", { err: safeError(reason) });
+    return;
+  }
+  throw reason;
+});
+
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
 // Reference portraits for generated bunnies: the dashboard's default art (copied into the image by the Dockerfile).
 const REF_DIR = process.env.REF_DIR?.trim() || "./dashboard/public/bees";
