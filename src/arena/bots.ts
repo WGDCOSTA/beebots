@@ -24,14 +24,16 @@ export interface PlanLimits {
   skillSlots: number;
   /** Stored historical candles and simulated training on them. Not built yet. */
   history: boolean;
+  /** Chat messages a member may send to their agents per day (proposed numbers, to confirm). */
+  chatPerDay: number;
 }
 
 /** Free: one agent, simple styles, three coins. Pro: up to nine, every style, more coins and every pack. Premium: up to 20 and autonomy. */
 export const LIMITS: Record<Tier, PlanLimits> = {
-  free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false, brains: 1, skillSlots: 5, history: false },
-  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: false, brains: 3, skillSlots: 30, history: true },
+  free: { bots: 1, maxCoins: 3, styles: ["breezy", "bizzy"], proThemes: false, autonomy: false, brains: 1, skillSlots: 5, history: false, chatPerDay: 10 },
+  pro: { bots: MAX_BEES, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: false, brains: 3, skillSlots: 30, history: true, chatPerDay: 50 },
   // Premium's skill slots were not given: it has at least Pro's, so it gets Pro's until the owner says otherwise.
-  premium: { bots: 20, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: true, brains: 6, skillSlots: 30, history: true },
+  premium: { bots: 20, maxCoins: 8, styles: STYLES, proThemes: true, autonomy: true, brains: 6, skillSlots: 30, history: true, chatPerDay: 200 },
 };
 
 export const COINS = ["BTC", "ETH", "SOL", "HYPE", "XRP", "DOGE", "BNB", "ADA"] as const;
