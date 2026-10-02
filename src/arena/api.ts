@@ -19,6 +19,8 @@ import { libraryOf, SkillBank, SkillError } from "./skills.js";
 import { PROVIDERS, DEFAULT_MODEL, MAX_KEYS, VaultError, type Vault } from "./vault.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
+import { AgentChat, ChatLog, type ChatMarket, type OwnContext } from "./chat.js";
+import type { LlmClient } from "../brains/llm.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
 export interface Operator {
@@ -53,6 +55,8 @@ export interface ApiOpts {
   vault?: Vault | null;
   /** Plans and payment (null = payments are not open: everyone is on Free). */
   billing?: Billing | null;
+  /** The agent chat: real market candles and the platform's model (null = chat is off). */
+  chat?: { market: ChatMarket; llm: LlmClient | null; dailyLimit?: number } | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
   runner?: {
     update(userId: string): Promise<void>;
@@ -130,6 +134,71 @@ export class ArenaApi {
     if (!this.store.consentNeeded(u.id)) return false;
     reply(res, 403, { error: "Accept the Terms and the Privacy notice to continue.", code: "consent_required" });
     return true;
+  }
+
+  /** Chat with one of the member's own agents. Read-only: it can look at markets and talk, never trade or change anything. */
+  private async chat(req: IncomingMessage, res: ServerResponse, route: string, u: ArenaUser): Promise<true> {
+    const cfg = this.opts.chat;
+    const day = new Date(this.now()).toISOString().slice(0, 10);
+    const log = new ChatLog(this.store.tenant(u.id));
+    const limit = LIMITS[u.tier].chatPerDay;
+    try {
+      if (req.method === "GET") {
+        const bot = new Bots(this.store.tenant(u.id), u.tier, this.now).find(new URL(req.url ?? "/", "http://x").searchParams.get("id"));
+        return this.send(res, 200, { open: !!cfg, limit, used: log.usedToday(day), messages: log.list(bot.id) });
+      }
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      const body = (await readJson(req, MAX_BODY)) as { id?: unknown; text?: unknown };
+      const bot = new Bots(this.store.tenant(u.id), u.tier, this.now).find(typeof body.id === "string" ? body.id : null);
+      if (route === "/bots/chat/clear") {
+        log.clear(bot.id);
+        return this.send(res, 200, { messages: [] });
+      }
+      if (!cfg) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
+      const text = typeof body.text === "string" ? body.text.trim().slice(0, 500) : "";
+      if (!text) return this.send(res, 400, { error: "Write a question first." });
+      if (log.usedToday(day) >= limit) return this.send(res, 429, { error: "You have used today's chat messages for your plan.", code: "chat_limit" });
+      // The model is the agent's first brain: the platform's, or the member's own key. An own key that is gone never falls back.
+      const first = bot.brains[0] ?? PLATFORM;
+      let llm: LlmClient | null = cfg.llm;
+      let own = false;
+      if (first !== PLATFORM) {
+        const k = this.keysOf(u)?.secret(first);
+        if (!k) return this.send(res, 409, { error: "This agent's own model key is not available.", code: "no_key" });
+        llm = this.opts.vault!.brain(k.provider, k.secret, k.model);
+        own = true;
+      }
+      if (!llm) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
+      const cap = cfg.dailyLimit ?? 2000;
+      if (!own && this.store.aiToday("chat:" + day) >= cap) return this.send(res, 429, { error: "Chat is busy today. Try again tomorrow.", code: "chat_busy" });
+      log.spend(day);
+      if (!own) this.store.aiToday("chat:" + day, 1);
+      const ins = this.opts.runner?.insights?.(u.id, bot, { decisions: 12, trades: 12, points: 120 }) ?? null;
+      const last = ins?.decisions[0];
+      const ownCtx: OwnContext | null = ins
+        ? {
+            equity: ins.equity,
+            position: last?.did.kind && last.did.kind !== "none" ? `${last.did.kind} ${last.did.coin ?? ""}`.trim() : null,
+            pnlPct: ins.equity.length > 1 && ins.equity[0]![1] > 0 ? Number((((ins.equity[ins.equity.length - 1]![1] - ins.equity[0]![1]) / ins.equity[0]![1]) * 100).toFixed(2)) : null,
+            decisions: ins.decisions.map((d) => ({ ts: d.ts, did: d.did.kind, choice: d.choice, confidencePct: d.confidence === null ? null : Math.round(d.confidence * 100), rule: d.vetoedBy ?? d.forcedBy })),
+            trades: ins.trades.map((t) => ({ ts: t.ts, coin: t.coin, side: t.side, sizeUsd: t.sizeUsd, realisedUsd: t.realisedUsd })),
+          }
+        : null;
+      const history = log.list(bot.id).slice(-8).map((m) => ({ role: m.role, text: m.text || m.report?.headline || "" }));
+      const asked = log.add(bot.id, "you", this.now(), text);
+      let msg;
+      try {
+        const r = await new AgentChat({ llm, market: cfg.market, now: this.now }).reply({ agent: { name: bot.name, tagline: bot.tagline, style: bot.style, mode: bot.mode, rules: bot.rules, coins: bot.coins, state: bot.state }, text, history, locale: u.locale, own: ownCtx });
+        msg = log.add(bot.id, "agent", this.now(), r.text, r.report, r.unavailable);
+      } catch {
+        log.remove(asked.id); // nothing came back: the question is not kept without an answer
+        return this.send(res, 502, { error: "The agent could not answer just now. Try again.", code: "chat_failed" });
+      }
+      return this.send(res, 200, { message: msg, used: log.usedToday(day), limit });
+    } catch (e) {
+      if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
+      throw e;
+    }
   }
 
   /** Returns false for a path that is not the Arena's. */
@@ -210,6 +279,12 @@ export class ArenaApi {
       // Starter agents: examples to edit, never advice. Public, like the catalogue.
       reply(res, 200, { templates: TEMPLATES });
       return true;
+    }
+    if (route === "/bots/chat" || route === "/bots/chat/send" || route === "/bots/chat/clear") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      return this.chat(req, res, route, u);
     }
     if (req.method === "GET" && route === "/bots/insights") {
       const u = this.auth.user(sessionOf(req));

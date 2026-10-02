@@ -1,5 +1,5 @@
-// One agent's page: its state and the buttons that change it (pause, resume, stop, start again), then four tabs:
-// Performance (curve, numbers, trades), Decisions (facts), Versions (what each run was), Settings.
+// One agent's page: its state and the buttons that change it (pause, resume, stop, start again), then five tabs:
+// Performance (curve, numbers, trades), Chat (ask it for a view; it answers with a report), Decisions (facts), Versions (what each run was), Settings.
 // Pause keeps the position under its stop and opens nothing new. Stop closes the position and ends this run.
 import { useCallback, useEffect, useState } from "react";
 import { arena, type Limits } from "./arenaApi";
@@ -8,6 +8,7 @@ import { ArenaDecisions, useAgo, type DecisionFact } from "./ArenaDecisions";
 import { ArenaSettings } from "./ArenaSettings";
 import { Portrait, StatePill, type ArenaData } from "./ArenaParts";
 import { register, useArenaLive } from "./ArenaOverview";
+import { ArenaChat } from "./ArenaChat";
 import { ArenaProfile } from "./ArenaProfile";
 import { useI18n } from "./i18n/I18n";
 
@@ -38,7 +39,7 @@ interface Standing {
   rows: Array<{ botId: string; rank: number | null; league: string; mine: boolean }>;
 }
 
-const TABS = ["performance", "decisions", "versions", "settings"] as const;
+const TABS = ["performance", "chat", "decisions", "versions", "settings"] as const;
 type Tab = (typeof TABS)[number];
 
 function Curve({ points, start }: { points: Array<[number, number]>; start: number }) {
@@ -243,6 +244,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             )}
           </>
         )}
+        {tab === "chat" && agent.state !== "quarantined" && <ArenaChat id={agent.id} name={agent.name} />}
         {tab === "decisions" && <ArenaDecisions decisions={ins?.decisions ?? []} styles={agent.mode === "autonomous" ? styles : null} brains={agent.brains.length} />}
         {tab === "versions" && (
           <>
