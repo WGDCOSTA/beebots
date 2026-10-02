@@ -852,3 +852,24 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* five tabs on a phone now that Live is one of them */
+.as-tabs {
+  grid-template-columns: repeat(5, 1fr);
+}
+.ar-profile .bp-hero {
+  margin-top: 0.5rem;
+}
+.ar-filters {
+  position: static;
+  background: none;
+  backdrop-filter: none;
+}
+.ar-benched {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 50%, var(--line));
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}

@@ -8,7 +8,7 @@ import { useI18n } from "./i18n/I18n";
 import { Ticker } from "./Ticker";
 import { BEE_META, type DecisionEvent, type PublicBee } from "./types";
 
-interface Live {
+export interface Live {
   bee: PublicBee;
   curve: Array<[number, number]>;
   decisions: DecisionEvent[];
@@ -41,7 +41,7 @@ function glyphImage(glyph: string, color: string): string {
 }
 
 /** Tells the shared components (beeMeta) who each agent is: its name, colour and portrait. */
-function register(agents: Agent[], cat: Catalogue, styleLabel: (s: string) => string) {
+export function register(agents: Agent[], cat: Catalogue, styleLabel: (s: string) => string, imageOf: (id: string) => string = (id) => `/arena/bot-image/${id}`) {
   for (const a of agents) {
     const av = cat.themes.find((t) => t.id === a.theme)?.avatars.find((x) => x.id === a.avatar);
     const color = av?.color ?? "#f0b43c";
@@ -52,7 +52,7 @@ function register(agents: Agent[], cat: Catalogue, styleLabel: (s: string) => st
       styleLabel: a.mode === "autonomous" ? "Autonomous" : styleLabel(a.style),
       rules: a.rules ?? "",
       coins: a.coins ?? [],
-      img: a.image ? `/arena/bot-image/${a.id}` : glyphImage(av?.glyph ?? "?", color),
+      img: a.image ? imageOf(a.id) : glyphImage(av?.glyph ?? "?", color),
       color,
       glow: `${color}73`,
       market: "crypto",
@@ -61,9 +61,25 @@ function register(agents: Agent[], cat: Catalogue, styleLabel: (s: string) => st
   }
 }
 
-export function ArenaOverview({ agents, cat, live, styleLabel, after }: { agents: Agent[]; cat: Catalogue; live: Record<string, Live>; styleLabel: (s: string) => string; after?: React.ReactNode }) {
+export function ArenaOverview({
+  agents,
+  cat,
+  live,
+  styleLabel,
+  after,
+  imageOf,
+  hrefOf = (id) => `#/arena/agent/${id}`,
+}: {
+  agents: Agent[];
+  cat: Catalogue;
+  live: Record<string, Live>;
+  styleLabel: (s: string) => string;
+  after?: React.ReactNode;
+  imageOf?: (id: string) => string;
+  hrefOf?: (id: string) => string;
+}) {
   const { t } = useI18n();
-  register(agents, cat, styleLabel);
+  register(agents, cat, styleLabel, imageOf);
   const [, tick] = useState(0);
   // Re-render every second so the "ago" times and flashes move, as on the live board.
   useEffect(() => {
@@ -96,7 +112,7 @@ export function ArenaOverview({ agents, cat, live, styleLabel, after }: { agents
               rank={board.indexOf(a) + 1}
               gap={Math.max(0, leaderEq - l.bee.equityUsd)}
               flash={undefined}
-              href={`#/arena/agent/${a.id}`}
+              href={hrefOf(a.id)}
             />
           );
         })}
@@ -114,7 +130,7 @@ export function ArenaOverview({ agents, cat, live, styleLabel, after }: { agents
               const m = BEE_META[a.id]!;
               const width = Math.max(4, (b.equityUsd / Math.max(leaderEq, 1)) * 100);
               return (
-                <a className="board-row" href={`#/arena/agent/${a.id}`} key={a.id} style={{ ["--bee" as string]: m.color }}>
+                <a className="board-row" href={hrefOf(a.id)} key={a.id} style={{ ["--bee" as string]: m.color }}>
                   <span className="board-rank num">{i + 1}</span>
                   <img src={m.img} alt="" />
                   <span className="board-name">{m.short}</span>

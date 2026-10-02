@@ -62,8 +62,13 @@ export interface ApiOpts {
     insights?(userId: string, bot: BotView, opts?: { decisions?: number; trades?: number; points?: number }): Insights | null;
     /** The member's running agents as the live board draws a bunny (runner.live). */
     live?(userId: string, botIds: string[]): Record<string, { bee: unknown; curve: Array<[number, number]>; decisions: unknown[] }>;
+    /** One running agent's full profile (runner.profile). */
+    profile?(userId: string, botId: string, days?: number): unknown | null;
   } | null;
 }
+
+/** The platform's own accounts whose agents are shown in full on the Arena's live board (ARENA_HOUSE_HANDLES). */
+const HOUSE_HANDLES = (process.env.ARENA_HOUSE_HANDLES ?? "glitchbunny,glitchbunny-labs").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
 
 const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, handle: u.handle, locale: u.locale, createdAt: u.createdAt });
 
@@ -82,6 +87,13 @@ function sessionOf(req: IncomingMessage): string | undefined {
 
 export class ArenaApi {
   private readonly now: () => number;
+  /** The live board's answer, shared by every visitor for 5 s (it is public, so a crowd costs one read). */
+  private showcase: { at: number; body: unknown } | null = null;
+
+  /** The house accounts' ids, by their public names. */
+  private houseIds(): string[] {
+    return this.store.allUserIds().filter((id) => HOUSE_HANDLES.includes(this.store.userById(id)?.handle ?? ""));
+  }
   constructor(private readonly auth: ArenaAuth, private readonly store: ArenaStore, private readonly opts: ApiOpts) {
     this.now = opts.now ?? Date.now;
   }
@@ -211,6 +223,54 @@ export class ArenaApi {
         if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
         throw e;
       }
+    }
+    // The platform's own example agents (the "house"), shown in full to everyone: the Arena's live board. Members' agents
+    // are never here; their results reach the public only through the leaderboard.
+    if (req.method === "GET" && route === "/showcase") {
+      const now = this.now();
+      if (!this.showcase || now - this.showcase.at > 5_000) {
+        const agents: unknown[] = [];
+        for (const uid of this.houseIds()) {
+          const u = this.store.userById(uid);
+          if (!u) continue;
+          const bots = new Bots(this.store.tenant(uid), u.tier, this.now).list().filter((b) => b.listed);
+          const live = this.opts.runner?.live?.(uid, bots.map((b) => b.id)) ?? {};
+          for (const b of bots) agents.push({ bot: { id: b.id, name: b.name, tagline: b.tagline, theme: b.theme, avatar: b.avatar, style: b.style, mode: b.mode, coins: b.coins, rules: b.rules, image: b.image, state: b.state, handle: u.handle }, live: live[b.id] ?? null });
+        }
+        this.showcase = { at: now, body: { agents } };
+      }
+      reply(res, 200, this.showcase.body);
+      return true;
+    }
+    if (req.method === "GET" && route.startsWith("/showcase-image/")) {
+      const id = route.slice("/showcase-image/".length);
+      for (const uid of this.houseIds()) {
+        let jpg: Buffer | null = null;
+        try {
+          jpg = this.store.readPortrait(uid, id);
+        } catch {
+          jpg = null;
+        }
+        if (jpg) {
+          res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "public, max-age=3600" });
+          res.end(jpg);
+          return true;
+        }
+      }
+      return this.send(res, 404, { error: "no portrait" });
+    }
+    if (req.method === "GET" && (route === "/bots/profile" || route === "/showcase/profile")) {
+      // An agent's full record: the member's own agents, or a house agent for anyone.
+      const q = new URL(req.url ?? "/", "http://x").searchParams;
+      const id = q.get("id") ?? "";
+      const days = Math.max(1, Math.min(60, Number(q.get("days") ?? 7) || 7));
+      const owners = route === "/showcase/profile" ? this.houseIds() : [this.auth.user(sessionOf(req))?.id].filter((x): x is string => !!x);
+      if (!owners.length) return this.send(res, 401, { error: "not signed in" });
+      for (const uid of owners) {
+        const p = this.opts.runner?.profile?.(uid, id, days);
+        if (p) return this.send(res, 200, p);
+      }
+      return this.send(res, 404, { error: "This agent is not running right now." });
     }
     if (req.method === "GET" && route === "/bots/live") {
       // The member's own agents as the live board draws a bunny: engine view, curve with times, latest decisions.

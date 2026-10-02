@@ -7,6 +7,8 @@ import { fmtPct, fmtUsd, pnlTone, quarantineDaysLeft, sparkPath, STYLE_KEYS, sty
 import { ArenaDecisions, useAgo, type DecisionFact } from "./ArenaDecisions";
 import { ArenaSettings } from "./ArenaSettings";
 import { Portrait, StatePill, type ArenaData } from "./ArenaParts";
+import { register, useArenaLive } from "./ArenaOverview";
+import { ArenaProfile } from "./ArenaProfile";
 import { useI18n } from "./i18n/I18n";
 
 interface Trade {
@@ -64,6 +66,7 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
   const [confirmStop, setConfirmStop] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const live = useArenaLive();
 
   const loadInsights = useCallback(async () => {
     try {
@@ -100,6 +103,8 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
         </a>
       </div>
     );
+  // Tell the shared profile components who this agent is (name, colour, portrait).
+  register([agent], data.cat, (st) => (STYLE_KEYS[st] ? t(STYLE_KEYS[st]!.title) : st));
 
   const skillName = data.skills.skills.find((s) => s.id === agent.skill)?.name ?? null;
   const run = data.runner.runs[id];
@@ -169,6 +174,10 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
             <button className="pbtn ghost" disabled={busy} title={t("act.stopHelp")} onClick={() => setConfirmStop(true)}>
               {t("act.stop")}
             </button>
+            {/* Rules, style, coins, brains and portrait live in Settings: a clear way in, next to Pause and Stop. */}
+            <button className="pbtn" onClick={() => setTab("settings")}>
+              ✎ {t("agent.tab.settings")}
+            </button>
           </div>
         )}
         {agent.state === "paused" && <p className="dim small">{t("act.pauseHelp")}</p>}
@@ -208,33 +217,8 @@ export function ArenaAgent({ data, limits, days, id, onGone }: { data: ArenaData
       <div className="pcard arena-card" role="tabpanel">
         {tab === "performance" && (
           <>
-            <Curve points={ins?.equity ?? []} start={run?.startEquityUsd ?? 1000} />
-            <div className="ag-stats">
-              <div>
-                <span className="dim small">{t("perf.return")}</span>
-                <strong className={`num ${tone}`}>{run?.pnlPct !== undefined ? fmtPct(run.pnlPct, locale) : "—"}</strong>
-              </div>
-              <div>
-                <span className="dim small">{t("perf.drawdown")}</span>
-                <strong className="num">{ins ? fmtPct(-ins.maxDrawdownPct, locale) : "—"}</strong>
-              </div>
-              <div>
-                <span className="dim small">{t("perf.trades")}</span>
-                <strong className="num">{ins ? ins.closedTrades : "—"}</strong>
-              </div>
-              <div>
-                <span className="dim small">{t("perf.win")}</span>
-                <strong className="num">{ins && ins.closedTrades > 0 ? `${Math.round((ins.winningTrades / ins.closedTrades) * 100)}%` : "—"}</strong>
-              </div>
-              <div>
-                <span className="dim small">{t("perf.decisions")}</span>
-                <strong className="num">{run?.decisions ?? "—"}</strong>
-              </div>
-              <div>
-                <span className="dim small">{t("perf.spent")}</span>
-                <strong className="num">{run?.spentUsd !== undefined ? fmtUsd(run.spentUsd, locale) : "—"}</strong>
-              </div>
-            </div>
+            {/* The agent's record as a bunny's profile draws it: big portrait, key numbers, curve with axes, P&L by day, coins, every fill. */}
+            <ArenaProfile id={agent.id} kind="own" bee={live[agent.id]?.bee} curve={live[agent.id]?.curve} />
             <p className="small">
               {!agent.listed ? t("perf.private") : rank ? t("perf.rank", { rank: rank.rank, league: rank.league }) : t("perf.unranked")}
             </p>

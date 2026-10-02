@@ -8,12 +8,13 @@ import { useI18n } from "./i18n/I18n";
 import { LOCALES, LOCALE_NAMES, type Locale } from "./i18n/locales";
 import "./arena.css";
 
-export type Tab = "home" | "board" | "new" | "me" | null;
+export type Tab = "home" | "live" | "board" | "new" | "me" | null;
 /** in: signed in. out: a visitor. gate: signed in but not yet past the terms, so no navigation and no sign-in button. */
 export type Mode = "in" | "out" | "gate";
 
 const PATHS = {
   home: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
+  live: "M3 17l5-6 4 3 5-7 4 4 M12 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2",
   board: "M8 4h8v5a4 4 0 0 1-8 0z M8 6H4v2a3 3 0 0 0 4 2.8 M16 6h4v2a3 3 0 0 1-4 2.8 M12 13v4 M8 21h8 M10 17h4",
   new: "M12 5v14 M5 12h14",
   me: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0",
@@ -24,8 +25,9 @@ const Icon = ({ name }: { name: keyof typeof PATHS }) => (
   </svg>
 );
 
-const ITEMS: Array<{ tab: Exclude<Tab, null>; href: string; key: "nav.home" | "nav.board" | "nav.new" | "nav.me" }> = [
+const ITEMS: Array<{ tab: Exclude<Tab, null>; href: string; key: "nav.home" | "nav.live" | "nav.board" | "nav.new" | "nav.me" }> = [
   { tab: "home", href: "#/arena", key: "nav.home" },
+  { tab: "live", href: "#/arena/live", key: "nav.live" },
   { tab: "board", href: "#/arena/ranking", key: "nav.board" },
   { tab: "new", href: "#/arena/new", key: "nav.new" },
   { tab: "me", href: "#/arena/me", key: "nav.me" },
@@ -154,9 +156,14 @@ export function ArenaShell({ tab, mode, onPickLocale, children }: { tab: Tab; mo
             <Clock />
           </div>
           {mode === "out" && (
-            <a className="as-link" href="#/arena/ranking">
-              {t("nav.board")}
-            </a>
+            <>
+              <a className="as-link" href="#/arena/live">
+                {t("nav.live")}
+              </a>
+              <a className="as-link" href="#/arena/ranking">
+                {t("nav.board")}
+              </a>
+            </>
           )}
           <LanguagePicker onPick={onPickLocale} />
           {mode === "out" && (

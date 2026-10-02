@@ -17,6 +17,8 @@ import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, PLATFORM, type BotView } from "./bots.js";
 import { readInsights, type Insights } from "./insights.js";
+import { bunnyProfile } from "../bunnyProfile.js";
+import { KnowledgeGraph } from "../graph/graph.js";
 import { SkillBank } from "./skills.js";
 import type { Skill } from "../lab/skills/index.js";
 import type { LlmClient } from "../brains/llm.js";
@@ -115,6 +117,8 @@ interface Run {
 
 export class ArenaRunner {
   private runs = new Map<string, Run>();
+  /** An agent keeps no knowledge graph of its own; the profile reads lessons and messages from this empty one. */
+  private noGraph: KnowledgeGraph | null = null;
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
   private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">;
@@ -447,6 +451,17 @@ export class ArenaRunner {
       out[id] = { bee, curve: r.db.equitySeries(since, 300)[SLOT] ?? [], decisions };
     }
     return out;
+  }
+
+  /**
+   * A running agent's full profile, in the shape a bunny's profile page reads (bunnyProfile.ts): equity with times,
+   * stats, per-coin record, daily P&L, fills, decisions. The caller decides who may see whose (api.ts).
+   */
+  profile(userId: string, botId: string, days = 7): unknown | null {
+    const r = this.runs.get(botId);
+    if (!r || r.userId !== userId) return null;
+    this.noGraph ??= new KnowledgeGraph(":memory:");
+    return bunnyProfile({ db: r.db, graph: this.noGraph, playbook: () => null, slots: () => [SLOT], now: this.o.now }, SLOT, days);
   }
 
   /** Where each of a member's bots stands. */

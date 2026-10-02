@@ -22,7 +22,7 @@ interface Msg {
   toMe: boolean;
 }
 
-interface BunnyProfile {
+export interface BunnyProfile {
   slot: string;
   generatedAt: number;
   equity: Array<[number, number]>;
@@ -67,7 +67,7 @@ const TABS = [
   { id: "skills", label: "Skills & score" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
-const RANGES = [
+export const RANGES = [
   { days: 1, label: "24h" },
   { days: 7, label: "7d" },
   { days: 30, label: "30d" },
@@ -227,7 +227,7 @@ function BunnySwitcher({ current }: { current: string }) {
   );
 }
 
-function Hero({ slot, bee, evo, rank, of, start }: { slot: string; bee: PublicBee | undefined; evo: EvolutionRow | null; rank: number; of: number; start: number }) {
+export function Hero({ slot, bee, evo, rank, of, start }: { slot: string; bee: PublicBee | undefined; evo: EvolutionRow | null; rank: number; of: number; start: number }) {
   const m = beeMeta(slot);
   const t = evo ? TIER_INFO[evo.tier] : null;
   const p = bee?.position ?? null;
@@ -318,7 +318,7 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: 
   );
 }
 
-function Kpis({ s }: { s: BunnyProfile["stats"] }) {
+export function Kpis({ s }: { s: BunnyProfile["stats"] }) {
   return (
     <div className="bp-kpis">
       <div className="bp-kpi ring-kpi">
@@ -351,7 +351,7 @@ function Card({ title, hint, children, wide }: { title: string; hint?: string; c
   );
 }
 
-function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null; curve: Array<[number, number]>; start: number; evo: EvolutionRow | null; slot: string }) {
+export function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null; curve: Array<[number, number]>; start: number; evo: EvolutionRow | null; slot: string }) {
   const m = beeMeta(slot);
   const dailyBars: Bar[] = (data?.daily ?? []).map((d) => ({ key: d.day, label: d.day.slice(5), value: d.realisedUsd, sub: [`${d.trades} closed trades`, `fees ${money(d.feesUsd)}`] }));
   const pointBars: Bar[] = (evo?.history ?? []).map((h) => ({ key: h.day, label: h.day.slice(5), value: h.points, sub: [`day P&L ${pct(h.pnlPct, 2)}`, ...(h.bonus ? [`bonus: ${h.bonus}`] : [])] }));
@@ -406,7 +406,7 @@ function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null
   );
 }
 
-function Trades({ data }: { data: BunnyProfile | null }) {
+export function Trades({ data }: { data: BunnyProfile | null }) {
   const [closesOnly, setClosesOnly] = useState(false);
   const rows = (data?.fills ?? []).filter((f) => !closesOnly || f.close);
   return (
@@ -482,7 +482,7 @@ function Trades({ data }: { data: BunnyProfile | null }) {
   );
 }
 
-function Decisions({ data, live }: { data: BunnyProfile | null; live: ReturnType<typeof useFeed>["decisions"] }) {
+export function Decisions({ data, live }: { data: BunnyProfile | null; live: ReturnType<typeof useFeed>["decisions"] }) {
   const dots: Dot[] = (data?.decisions ?? [])
     .filter((d) => d.confidence !== null)
     .map((d) => ({ ts: d.ts, value: d.confidence!, label: d.choice ?? d.status ?? "–", sub: d.vetoedBy ? `vetoed by ${d.vetoedBy}` : d.forcedBy ? `forced by ${d.forcedBy}` : undefined, hollow: !!d.vetoedBy }));
