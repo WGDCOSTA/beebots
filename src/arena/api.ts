@@ -21,6 +21,8 @@ import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
 import { AgentChat, ChatLog, type ChatMarket, type OwnContext } from "./chat.js";
 import type { LlmClient } from "../brains/llm.js";
+import type { CandleStore } from "./history.js";
+import { BACKTESTS_PER_DAY, backtestSkill, TrainError, TRAININGS_PER_DAY, TRAIN_DAYS, usage, type Trainer } from "./training.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
 export interface Operator {
@@ -57,6 +59,10 @@ export interface ApiOpts {
   billing?: Billing | null;
   /** The agent chat: real market candles and the platform's model (null = chat is off). */
   chat?: { market: ChatMarket; llm: LlmClient | null; dailyLimit?: number } | null;
+  /** Stored historical candles (null = none: backtests and training are off). */
+  history?: CandleStore | null;
+  /** Replays agents over history (null = training is off). */
+  trainer?: Trainer | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
   runner?: {
     update(userId: string): Promise<void>;
@@ -134,6 +140,61 @@ export class ArenaApi {
     if (!this.store.consentNeeded(u.id)) return false;
     reply(res, 403, { error: "Accept the Terms and the Privacy notice to continue.", code: "consent_required" });
     return true;
+  }
+
+  /** Historical data (Pro and Premium): what is stored, a skill's backtest, and an agent's simulated trainings. */
+  private async history(req: IncomingMessage, res: ServerResponse, route: string, u: ArenaUser): Promise<true> {
+    const h = this.opts.history ?? null;
+    const trainer = this.opts.trainer ?? null;
+    const day = new Date(this.now()).toISOString().slice(0, 10);
+    const db = this.store.tenant(u.id);
+    const allowed = LIMITS[u.tier].history;
+    const q = new URL(req.url ?? "/", "http://x").searchParams;
+    try {
+      if (req.method === "GET") {
+        if (route === "/history") {
+          const coins = new Map<string, { coin: string; from: number; to: number }>();
+          for (const c of h?.summary() ?? []) if (c.bar === "1H") coins.set(c.coin, { coin: c.coin, from: c.from, to: c.to });
+          return this.send(res, 200, { open: !!h, allowed, days: TRAIN_DAYS, coins: [...coins.values()], syncedAt: h?.lastSyncAt ?? 0, backtests: { perDay: BACKTESTS_PER_DAY[u.tier], used: usage(db, day, "backtest") } });
+        }
+        if (route === "/bots/train") {
+          const bot = new Bots(db, u.tier, this.now).find(q.get("id"));
+          return this.send(res, 200, { open: !!trainer, allowed, days: TRAIN_DAYS, perDay: TRAININGS_PER_DAY[u.tier], used: usage(db, day, "train"), trainings: trainer?.list(u.id, bot.id) ?? [] });
+        }
+        if (route === "/bots/train/detail") {
+          const t = trainer?.get(u.id, q.get("id") ?? "") ?? null;
+          if (!t) return this.send(res, 404, { error: "No such training." });
+          return this.send(res, 200, { training: t, insights: trainer!.insights(u.id, t) });
+        }
+        return this.send(res, 404, { error: "not found" });
+      }
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      const body = (await readJson(req, MAX_BODY)) as { id?: unknown; days?: unknown; skill?: unknown; coin?: unknown };
+      if (!allowed) return this.send(res, 403, { error: "Historical data is part of Pro and Premium.", code: "plan" });
+      if (route === "/skills/backtest") {
+        if (!h) return this.send(res, 503, { error: "Historical data is not available right now.", code: "closed" });
+        if (usage(db, day, "backtest") >= BACKTESTS_PER_DAY[u.tier]) return this.send(res, 429, { error: "You have used today's backtests for your plan.", code: "backtest_limit" });
+        const skill = new SkillBank(db, u.tier, this.opts.library ?? [], this.now).resolve(typeof body.skill === "string" ? body.skill : "");
+        if (!skill) return this.send(res, 404, { error: "That skill is not in your slots." });
+        const result = backtestSkill(h, skill, typeof body.coin === "string" ? body.coin.toUpperCase() : "", Number(body.days), this.now());
+        usage(db, day, "backtest", 1);
+        return this.send(res, 200, { result, used: usage(db, day, "backtest") });
+      }
+      if (!trainer) return this.send(res, 503, { error: "Training is not available right now.", code: "closed" });
+      if (route === "/bots/train/start") {
+        const bot = new Bots(db, u.tier, this.now).find(typeof body.id === "string" ? body.id : null);
+        return this.send(res, 200, { training: trainer.start(u.id, u.tier, bot, Number(body.days)), used: usage(db, day, "train") });
+      }
+      if (route === "/bots/train/cancel") {
+        trainer.cancel(u.id, typeof body.id === "string" ? body.id : "");
+        return this.send(res, 200, { ok: true });
+      }
+      return this.send(res, 404, { error: "not found" });
+    } catch (e) {
+      if (e instanceof TrainError) return this.send(res, e.status, { error: e.message, code: e.code });
+      if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
+      throw e;
+    }
   }
 
   /** Chat with one of the member's own agents. Read-only: it can look at markets and talk, never trade or change anything. */
@@ -279,6 +340,12 @@ export class ArenaApi {
       // Starter agents: examples to edit, never advice. Public, like the catalogue.
       reply(res, 200, { templates: TEMPLATES });
       return true;
+    }
+    if (route === "/history" || route.startsWith("/bots/train") || route === "/skills/backtest") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      return this.history(req, res, route, u);
     }
     if (route === "/bots/chat" || route === "/bots/chat/send" || route === "/bots/chat/clear") {
       const u = this.auth.user(sessionOf(req));
@@ -476,6 +543,7 @@ export class ArenaApi {
             bots.remove(gone.id);
             this.opts.leaderboard?.remove(gone.id);
             this.store.removePortrait(u.id, gone.id);
+            this.opts.trainer?.forgetBot(u.id, gone.id);
             reply(res, 200, { ok: true });
             void this.opts.runner?.update(u.id);
           }

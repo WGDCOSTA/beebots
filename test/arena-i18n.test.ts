@@ -68,7 +68,7 @@ describe("the dictionaries", () => {
 
 describe("the code only asks for keys that exist", () => {
   const dir = join(__dirname, "..", "dashboard", "src");
-  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Plans|Keys|Skills|Ranking|Home|Agent|New|Fields|Parts|Decisions|Settings|Live|Overview|Profile|Chat|Report|Chart)\./.test(f));
+  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx") && /^Arena(Shell|Landing|SignIn|Consent|Legal|Me|Page|Plans|Keys|Skills|Ranking|Home|Agent|New|Fields|Parts|Decisions|Settings|Live|Overview|Profile|Chat|Report|Chart|History)\./.test(f));
   const used = new Set<string>();
   for (const f of files) {
     const src = readFileSync(join(dir, f), "utf8");
@@ -86,8 +86,9 @@ describe("the code only asks for keys that exist", () => {
   for (const k of ["return", "range", "maxdd", "slope", "upbars", "best", "worst", "last", "high", "low", "atr", "rsi", "sma20", "sma50", "volchg", "support", "resistance"]) used.add(`met.${k}`);
   for (const k of ["commodity", "stock"]) used.add(`rep.note.${k}`);
   for (const k of ["support", "resistance"]) used.add(`rep.${k}`);
+  for (const k of ["queued", "running", "done", "failed", "cancelled", "budget"]) used.add(`train.st.${k}`);
   for (const s of ["start", "look", "style", "rules", "review"]) used.add(`new.step.${s}`);
-  for (const s of ["performance", "chat", "decisions", "versions", "settings"]) used.add(`agent.tab.${s}`);
+  for (const s of ["performance", "chat", "training", "decisions", "versions", "settings"]) used.add(`agent.tab.${s}`);
   for (const n of ["1", "2", "3"]) for (const p of ["t", "b"]) used.add(`landing.how${n}.${p}`);
   for (const i of ["terms", "sim", "age"]) used.add(`consent.${i}.t`);
   for (const i of ["terms", "sim"]) used.add(`consent.${i}.b`);

@@ -147,7 +147,8 @@ export class ArenaRunner {
     return this.queue;
   }
 
-  private config(bot: BotView, file: string, dailyUsd: number, usdPerMTok: number): Config {
+  /** The engine's settings for one agent (also used by simulated training). */
+  config(bot: BotView, file: string, dailyUsd: number, usdPerMTok: number): Config {
     const t = this.o.now();
     const settings = {
       version: 1,
@@ -175,9 +176,8 @@ export class ArenaRunner {
     return { ...cfg, beeIds: [SLOT] };
   }
 
-  private async start(userId: string, bot: BotView): Promise<void> {
-    mkdirSync(this.dir(userId), { recursive: true });
-    const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
+  /** The models an agent decides with, its daily ceiling and its cost estimate (also used by simulated training). */
+  brainsOf(userId: string, bot: BotView): { decider: SystemOne; dailyUsd: number; usdPerMTok: number; styleLlm: LlmClient | null; used: Array<{ label: string; model: string | null }> } {
     // Which models decide: the platform's, the member's own keys, or several together (a vote). Each own key brings the member's
     // ceiling (or the default), the platform's model brings its small one; the agent's ceiling is the sum, and the cost estimate
     // is the mean price per token. An agent that names a key that is gone never falls back to the platform's model: it does not start.
@@ -207,14 +207,24 @@ export class ArenaRunner {
     if (members.length === 0) throw new Error("it has no model to think with");
     const decider: SystemOne = members.length === 1 ? members[0]!.sys : new EnsembleSystemOne(members);
     const usdPerMTok = rates.reduce((s, x) => s + x, 0) / rates.length;
+    return { decider, dailyUsd, usdPerMTok, styleLlm, used };
+  }
+
+  /** A skill-mode agent's skill (also used by simulated training). */
+  skillOf(userId: string, bot: BotView): Skill {
     // Skill mode: the member's skill, compiled now. If it is gone or beyond the plan's slots the agent does not start, and it
     // never quietly trades as something else.
-    let skill: Skill | null = null;
-    if (bot.mode === "skill") {
-      const user = this.o.store.userById(userId);
-      skill = user && bot.skill ? new SkillBank(this.o.store.tenant(userId), user.tier, this.o.library ?? [], this.o.now).resolve(bot.skill) : null;
-      if (!skill) throw new Error("its skill is not available");
-    }
+    const user = this.o.store.userById(userId);
+    const skill = user && bot.skill ? new SkillBank(this.o.store.tenant(userId), user.tier, this.o.library ?? [], this.o.now).resolve(bot.skill) : null;
+    if (!skill) throw new Error("its skill is not available");
+    return skill;
+  }
+
+  private async start(userId: string, bot: BotView): Promise<void> {
+    mkdirSync(this.dir(userId), { recursive: true });
+    const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
+    const { decider, dailyUsd, usdPerMTok, styleLlm, used } = this.brainsOf(userId, bot);
+    const skill = bot.mode === "skill" ? this.skillOf(userId, bot) : null;
     const cfg = this.config(bot, file, dailyUsd, usdPerMTok);
     const db = new Db(file);
     const ctl = { paused: bot.state === "paused", closing: false };

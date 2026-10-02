@@ -22,7 +22,7 @@ export interface PlanLimits {
   brains: number;
   /** Skills a member may keep active. Not enforced yet: the skill bank does not exist. */
   skillSlots: number;
-  /** Stored historical candles and simulated training on them. Not built yet. */
+  /** Stored historical candles: skill backtests and simulated training (training.ts). */
   history: boolean;
   /** Chat messages a member may send to their agents per day (proposed numbers, to confirm). */
   chatPerDay: number;

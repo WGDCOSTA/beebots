@@ -312,7 +312,7 @@ export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
     { key: "plans.f.brains", vars: { n: l.brains } },
     { key: "plans.f.skills", vars: { n: l.skillSlots }, soon: true },
   ];
-  if (l.history) out.push({ key: "plans.f.history", soon: true });
+  if (l.history) out.push({ key: "plans.f.history" });
   if (l.autonomy) out.push({ key: "plans.f.auto" });
   return out;
 }
