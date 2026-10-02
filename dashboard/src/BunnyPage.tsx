@@ -367,9 +367,12 @@ export function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile
         <Card title="Realised P&L by day" hint="UTC days">
           <BarChart bars={dailyBars} format={(v) => signed(v)} tone={pnlTone} empty="No closed trades in this range yet." />
         </Card>
-        <Card title="Points by day" hint={evo ? `level ${evo.level}${evo.nextLevelAt ? ` · next at ${evo.nextLevelAt} pts` : ""}` : "survival & rewards"}>
-          <BarChart bars={pointBars} format={(v) => `${v >= 0 ? "+" : ""}${v} pts`} tone={(v) => (v >= 0 ? m.color : BAD)} empty="Points start after its first full day." />
-        </Card>
+        {/* Points exist only where survival and rewards run (the owner's bunnies); never promise them elsewhere. */}
+        {evo && (
+          <Card title="Points by day" hint={evo ? `level ${evo.level}${evo.nextLevelAt ? ` · next at ${evo.nextLevelAt} pts` : ""}` : "survival & rewards"}>
+            <BarChart bars={pointBars} format={(v) => `${v >= 0 ? "+" : ""}${v} pts`} tone={(v) => (v >= 0 ? m.color : BAD)} empty="Points start after its first full day." />
+          </Card>
+        )}
         <Card title="Coins it trades" hint="realised P&L per coin">
           {data?.coins.length ? (
             <HBars

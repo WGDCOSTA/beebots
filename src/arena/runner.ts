@@ -111,6 +111,8 @@ interface Run {
   startedAt: number;
   /** Read by the engine on every tick: what the member asked for. */
   ctl: { paused: boolean; closing: boolean };
+  /** The models that really decide for it (the platform's and/or the member's own keys), for the live board's brain chip. */
+  brainView: { id: string; label: string; model: string | null; online: boolean };
   /** Autonomous agents: the style its model chose last (the engine adopts it while the agent is flat), the model to ask, and when it last asked. */
   auto: { style: StyleId | null; llm: LlmClient | null; reviewedAt: number; busy: boolean };
 }
@@ -183,12 +185,14 @@ export class ArenaRunner {
     let dailyUsd = 0;
     const rates: number[] = [];
     let styleLlm: LlmClient | null = null;
+    const used: Array<{ label: string; model: string | null }> = [];
     for (const id of bot.brains) {
       if (id === PLATFORM) {
         members.push({ sys: this.o.decider, label: "platform" });
         dailyUsd += this.o.dailyUsd;
         rates.push(this.o.usdPerMTok);
         styleLlm ??= this.o.llm ?? null;
+        used.push({ label: "Platform", model: this.o.llm?.model ?? null });
         continue;
       }
       const k = this.o.vault?.for(this.o.store.tenant(userId), userId, this.o.now).secret(id);
@@ -198,6 +202,7 @@ export class ArenaRunner {
       dailyUsd += k.dailyUsd ?? this.o.ownKeyDailyUsd;
       rates.push(EST_USD_PER_MTOK[k.provider]);
       styleLlm ??= llm;
+      used.push({ label: k.provider === "openai" ? "Own OpenAI" : k.provider === "claude" ? "Own Claude" : k.provider === "zai" ? "Own GLM" : k.provider === "kimi" ? "Own Kimi" : `Own ${k.provider}`, model: k.model });
     }
     if (members.length === 0) throw new Error("it has no model to think with");
     const decider: SystemOne = members.length === 1 ? members[0]!.sys : new EnsembleSystemOne(members);
@@ -233,7 +238,13 @@ export class ArenaRunner {
         skillById: skill ? (sid: string) => (sid === bot.skill ? skill : undefined) : undefined,
       });
       await engine.start();
-      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, usdPerMTok, dailyUsd, file, startedAt: this.o.now(), ctl, auto });
+      const brainView = {
+        id: used.length > 1 ? "vote" : bot.brains[0] === PLATFORM ? "platform" : "own",
+        label: used.length > 1 ? `Vote of ${used.length}: ${used.map((u) => u.label).join(" + ")}` : (used[0]?.label ?? "Platform"),
+        model: used.length > 1 ? used.map((u) => u.model ?? "?").join(" + ") : (used[0]?.model ?? null),
+        online: true,
+      };
+      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, usdPerMTok, dailyUsd, file, startedAt: this.o.now(), ctl, auto, brainView });
       this.errors.delete(bot.id);
       if (bot.mode === "autonomous") void this.review(bot.id);
     } catch (e) {
@@ -436,8 +447,8 @@ export class ArenaRunner {
     for (const id of botIds) {
       const r = this.runs.get(id);
       if (!r || r.userId !== userId) continue;
-      const bee = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
-      if (!bee) continue;
+      const snap = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
+      if (!snap) continue;
       const decisions = r.db
         .recentEvents(60)
         .map((line) => {
@@ -448,7 +459,15 @@ export class ArenaRunner {
           }
         })
         .filter((e): e is { type: string } => e?.type === "decision");
-      out[id] = { bee, curve: r.db.equitySeries(since, 300)[SLOT] ?? [], decisions };
+      // The engine keeps its last call in memory only: after a restart, show the last one it recorded rather than "waiting".
+      const d0 = (decisions[0] ?? null) as { ts: number; choice: string | null; probabilities?: Array<{ label: string; p: number }>; confidence: number | null; latencyMs: number | null; status: string; required?: boolean } | null;
+      const last =
+        snap.last ??
+        (d0
+          ? { choice: d0.choice, top3: (d0.probabilities ?? []).slice(0, 3).map((x) => [x.label, x.p] as [string, number]), confidence: d0.confidence, latencyMs: d0.latencyMs, status: d0.status, ts: d0.ts, ...(d0.required ? { required: true } : {}) }
+          : null);
+      // The engine's own brain chip describes the owner's bunnies; an agent decides with the models it really uses.
+      out[id] = { bee: { ...snap, last, brain: r.brainView }, curve: r.db.equitySeries(since, 300)[SLOT] ?? [], decisions };
     }
     return out;
   }
