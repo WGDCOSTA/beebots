@@ -14,7 +14,7 @@ import type { Hive } from "./hive.js";
 import { log } from "./log.js";
 import { redact } from "./redact.js";
 import type { Setup } from "./setup.js";
-import { clientAddr, type Visitors } from "./visitors.js";
+import { cleanTz, clientAddr, type Visitors } from "./visitors.js";
 import { readJson } from "./gate.js";
 import type { PublicChat } from "./publicChat.js";
 
@@ -42,6 +42,9 @@ export interface ServerDeps {
     };
     /** One bunny's profile page data (bunnyProfile.ts), or null for an unknown slot. */
     bunny?: (slot: string, days: number) => unknown | null;
+    /** The Farmer's card (brains/farmer.ts) and his full log: GET /farmer?limit=&before=. */
+    farmer?: () => unknown;
+    farmerLog?: (limit: number, before: number) => unknown;
     /** Visitors' chat with the bunnies (publicChat.ts): GET /chat?bee=, POST /chat/send. Read-only; questions are not stored. */
     chat?: PublicChat;
   };
@@ -73,6 +76,8 @@ function json(res: ServerResponse, status: number, body: unknown) {
 
 export function startServer(deps: ServerDeps, port: number, bind: string): Server {
   const streams = new Map<string, number>();
+  /** Open live streams per time zone the page reported: the "watching now" dots on the visitors' map. */
+  const liveTz = new Map<string, number>();
   let streamsTotal = 0;
   const historyCache = new Map<number, { at: number; body: string }>();
   const server = createServer((req, res) => {
@@ -138,11 +143,20 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         return json(res, h.ok ? 200 : 503, h);
       }
       case "/snapshot":
-        return json(res, 200, { ...(e.snapshot() as object), visitors: { total: e.visitors.total, watching: e.bus.subscribers }, update: e.update?.() ?? null });
+        return json(res, 200, { ...(e.snapshot() as object), farmer: e.farmer?.() ?? null, visitors: { total: e.visitors.total, watching: e.bus.subscribers }, update: e.update?.() ?? null });
       case "/visit": {
-        const total = e.visitors.visit(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress));
+        const total = e.visitors.visit(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress), url.searchParams.get("tz"));
         return json(res, 200, { total, watching: e.bus.subscribers });
       }
+      case "/farmer": {
+        if (!e.farmer || !e.farmerLog) return json(res, 404, { error: "no farmer" });
+        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
+        const before = Number(url.searchParams.get("before") ?? 0) || Number.MAX_SAFE_INTEGER;
+        return json(res, 200, { farmer: e.farmer(), entries: e.farmerLog(limit, before) });
+      }
+      case "/visitors/map":
+        // Where visitors come from, by the time zone their page reported. No address, no city lookup.
+        return json(res, 200, { total: e.visitors.total, watching: e.bus.subscribers, since: e.visitors.mapSince, places: e.visitors.placeCounts().slice(0, 400), live: [...liveTz].sort((a, b) => b[1] - a[1]) });
       case "/equity": {
         const days = Math.max(0.01, Math.min(60, Number(url.searchParams.get("days") ?? 30) || 30));
         return json(res, 200, e.db.equitySeries(Date.now() - days * 86_400_000, 720));
@@ -166,11 +180,18 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         if (streamsTotal >= MAX_STREAMS || mine >= MAX_STREAMS_PER_ADDR) return json(res, 503, { error: "too many live connections" });
         streams.set(addr, mine + 1);
         streamsTotal++;
+        const tz = cleanTz(url.searchParams.get("tz"));
+        if (tz && (liveTz.has(tz) || liveTz.size < 700)) liveTz.set(tz, (liveTz.get(tz) ?? 0) + 1);
         let released = false;
         const release = () => {
           if (released) return;
           released = true;
           streamsTotal--;
+          if (tz && liveTz.has(tz)) {
+            const n = liveTz.get(tz)! - 1;
+            if (n > 0) liveTz.set(tz, n);
+            else liveTz.delete(tz);
+          }
           const left = (streams.get(addr) ?? 1) - 1;
           if (left > 0) streams.set(addr, left);
           else streams.delete(addr);

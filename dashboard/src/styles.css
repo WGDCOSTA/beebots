@@ -150,29 +150,25 @@ body,
   padding: 0.55rem 0.95rem 0.6rem;
   min-width: 8.6rem;
 }
-a.counter.host {
+a.counter.club {
   color: var(--text);
   text-decoration: none;
-  border-color: color-mix(in srgb, #673de6 55%, var(--line));
+  border-color: color-mix(in srgb, var(--bizzy) 60%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bizzy) 16%, var(--card)), var(--card));
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-a.counter.host:hover {
-  border-color: #8c6cf0;
-  box-shadow: 0 0 1.2rem rgba(103, 61, 230, 0.35);
+a.counter.club:hover {
+  border-color: var(--bizzy);
+  box-shadow: 0 0 1.2rem color-mix(in srgb, var(--bizzy) 40%, transparent);
 }
-.host-row {
+.club-row {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: 800;
   margin: 0.2rem 0 0.1rem;
   line-height: 1.6rem;
-}
-.host-mark {
-  width: 1.55rem;
-  height: 1.55rem;
-  flex: none;
 }
 .counter-value {
   font-size: 1.5rem;
@@ -1173,7 +1169,7 @@ a.counter.host:hover {
   .counter-value {
     font-size: 1.25rem;
   }
-  .host-row {
+  .club-row {
     font-size: 1.1rem;
   }
   .top-right {
@@ -1181,8 +1177,18 @@ a.counter.host:hover {
     grid-row: 1;
   }
   .recon {
-    max-width: 13rem;
+    max-width: 11rem;
     padding: 0.4rem 0.6rem;
+    gap: 0.5rem;
+  }
+  /* the reconciliation line wraps instead of being cut ("books match OKX to the…") */
+  .recon-text {
+    white-space: normal;
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+  .recon-more {
+    display: none;
   }
   .brand-row {
     gap: 0.35rem 0.6rem;
@@ -2454,4 +2460,245 @@ a.ch-row {
 a.board-row:hover,
 a.ch-row:hover {
   background: var(--card-2);
+}
+
+/* ---------- visitors' world map ---------- */
+.vmap {
+  width: min(52rem, 100%);
+}
+.vmap-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.4rem 0;
+}
+.vmap-land {
+  fill: color-mix(in srgb, var(--text-2) 22%, transparent);
+}
+.vmap-glow {
+  fill: color-mix(in srgb, var(--bizzy) 22%, transparent);
+}
+.vmap-dot {
+  fill: #f0b43c;
+}
+.vmap-live {
+  fill: none;
+  stroke: var(--good-text);
+  stroke-width: 2;
+  animation: vmap-pulse 1.8s ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes vmap-pulse {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.vmap-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--muted);
+}
+.vmap-key {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  vertical-align: -0.05rem;
+  margin-right: 0.3rem;
+}
+.vmap-key.dot { background: #f0b43c; }
+.vmap-key.live { border: 2px solid var(--good-text); }
+.vmap-top {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.2rem 1rem;
+}
+.vmap-top li {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 0.2rem 0;
+}
+button.counter {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.counter:hover {
+  border-color: color-mix(in srgb, var(--bizzy) 60%, var(--line));
+}
+
+/* ---------- The Farmer ---------- */
+.farmer {
+  margin: 0.9rem 0;
+  border: 1px solid color-mix(in srgb, #e07a3f 45%, var(--line));
+  border-radius: calc(var(--radius) * 1.4);
+  background: linear-gradient(160deg, color-mix(in srgb, #e07a3f 9%, var(--card)), var(--card) 60%);
+  padding: 1rem 1.1rem 0.8rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.farmer-head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+.farmer-face {
+  flex: none;
+  width: 3.6rem;
+  height: 3.6rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+  background: radial-gradient(circle at 35% 30%, #3a2a1c, #1a1410);
+  border: 2px solid #e07a3f;
+  box-shadow: 0 0 1rem color-mix(in srgb, #e07a3f 35%, transparent);
+}
+.farmer-face.sm {
+  width: 2.1rem;
+  height: 2.1rem;
+  font-size: 1.15rem;
+  border-width: 1px;
+  box-shadow: none;
+  filter: grayscale(0.4);
+}
+.farmer-who {
+  flex: 1;
+  min-width: 0;
+}
+.farmer-name {
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #e9925a;
+  font-size: 1.05rem;
+}
+.farmer-next {
+  display: grid;
+  text-align: right;
+  white-space: nowrap;
+}
+.farmer-quote {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+.farmer-quote .farmer-face {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.6rem;
+}
+.farmer-quote p {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+.farmer-quote-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.farmer-quiet {
+  margin: 0;
+}
+.farmer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+.farmer-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  color: var(--text-2);
+  font-size: 0.92rem;
+}
+.farmer-act {
+  color: #e9925a;
+}
+.farmer-more {
+  display: block;
+  text-align: center;
+  padding: 0.65rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, #e07a3f 55%, var(--line));
+  background: color-mix(in srgb, #e07a3f 12%, var(--card));
+  color: #f0a56f;
+  font-weight: 700;
+  text-decoration: none;
+}
+.farmer-more:hover {
+  background: color-mix(in srgb, #e07a3f 20%, var(--card));
+}
+.farmer-by {
+  text-align: center;
+}
+.farmer-page h1 {
+  margin: 0.6rem 0 0.2rem;
+}
+.farmer-log {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: grid;
+  gap: 0.7rem;
+}
+.farmer-log li {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+}
+.farmer-log li.k-rewrite {
+  border-color: color-mix(in srgb, #e07a3f 55%, var(--line));
+}
+.farmer-log p {
+  margin: 0.35rem 0 0;
+}
+.farmer-log-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.farmer-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+.farmer-diff > div {
+  background: var(--card-2);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+}
+@media (max-width: 640px) {
+  .farmer-diff {
+    grid-template-columns: 1fr;
+  }
+  .farmer-quote p {
+    font-size: 1.08rem;
+  }
+  .farmer-next strong {
+    font-size: 0.95rem;
+  }
 }

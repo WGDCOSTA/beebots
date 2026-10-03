@@ -1,4 +1,6 @@
-# beebots 🐝
+# Glitchbunny 🐰
+
+(The code and the repository keep the name beebots.)
 
 [![Watch the video: I built AI trading bunnies with Jev](docs/video.jpg)](https://www.youtube.com/watch?v=8ijN8LGljKg)
 
@@ -178,6 +180,19 @@ only in trading hours the engine verifies from the market ([docs/MACRO_SQUAD.md]
 On the dashboard, **Lab & warren memory** (`#/lab`) shows the ranking, each bunny's playbook and the graph, and **Admin**
 (`#/admin`, owner password) configures keys, bunnies, brains, risk limits and style knobs, runs the lab and restarts
 the engine. Trading mode and exchange keys stay in `.env`.
+
+**The Farmer.** Every two hours an overseer with a voice looks at all the bunnies, says one line on the main page and,
+when a bunny keeps losing under its rules, may rewrite those rules (never its coins, style or money), at most once per
+bunny per day. With real money he only suggests unless you set `FARMER_MODE=apply`. Every round, with each rewrite's
+old and new rules, is on `#/farmer`. `FARMER=0` turns him off; `FARMER_BRAIN` picks his brain (default Claude, then
+ChatGPT); `FARMER_INTERVAL_MIN` (120) sets how often he looks.
+
+**Ask a bunny.** Each bunny's page has an *Ask me* tab: visitors ask it for a view on a market or about itself and it
+answers with a report drawn from real candles (charts, figures, its own record). Read-only, questions are not stored,
+5 per visitor per hour and 300 a day (`PUBLIC_CHAT_PER_HOUR`, `PUBLIC_CHAT_DAILY_LIMIT`; `PUBLIC_CHAT=0` turns it off).
+
+**Visitors' map.** Click *Visitors* in the header: a world map of where visitors come from, placed by the time zone
+their own browser reports (no address is looked up or kept).
 
 Details, commands and settings: [docs/INTELLIGENCE.md](docs/INTELLIGENCE.md).
 

@@ -471,15 +471,18 @@ export function LabPage() {
   );
 }
 
-export function PageNav({ current }: { current: "lab" | "admin" | "bunny" | "arena" }) {
+export function PageNav({ current }: { current: "lab" | "admin" | "bunny" | "arena" | "farmer" }) {
   return (
     <nav className="pnav">
       <a className="logo" href="#/">
-        beebots
+        Glitch<span>bunny</span>
       </a>
       <a href="#/">Live</a>
       <a href="#/bunny/bee1" className={current === "bunny" ? "on" : ""}>
         Bunnies
+      </a>
+      <a href="#/farmer" className={current === "farmer" ? "on" : ""}>
+        Farmer
       </a>
       <a href="#/lab" className={current === "lab" ? "on" : ""}>
         Lab & warren memory

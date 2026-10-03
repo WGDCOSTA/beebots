@@ -1559,7 +1559,7 @@ function Connectors({ s, call }: { s: AdminState; call: (path: string, body: unk
       <p className="dim">
         Let the bunnies look things up on outside MCP servers while they research (news, data, documentation). Read-only by rule: a bunny can call only the tools you grant it by name; a tool that the server does not declare read-only, or whose name reads
         like an action, needs your explicit confirmation before it can be granted; every call is capped per day, times out, is logged below, and its answer reaches the brain as untrusted data. Nothing here can place an order or change a
-        setting. The token is stored like the other keys, never shown again and only sent to the server's address. Servers run elsewhere: beebots does not run plugins or local commands.
+        setting. The token is stored like the other keys, never shown again and only sent to the server's address. Servers run elsewhere: Glitchbunny does not run plugins or local commands.
       </p>
       {v.servers.length === 0 && <p className="dim small">No connectors yet.</p>}
       {v.servers.map((m) => (

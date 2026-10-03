@@ -34,6 +34,7 @@ import { Vault } from "./vault.js";
 import { okxChatMarket } from "./chat.js";
 import { CandleStore, syncHistory } from "./history.js";
 import { Trainer } from "./training.js";
+import { Social } from "./social.js";
 import { createOkxPublicRest } from "../okx/rest.js";
 import { COINS } from "./bots.js";
 import { skillRegistry } from "../lab/skills/index.js";
@@ -58,6 +59,8 @@ if (!env.ARENA_VAULT_KEY) log.warn("arena: ARENA_VAULT_KEY is not set, members c
 
 // The race track: runs every member's bunnies on paper (runner.ts). Needs the platform's model key and is off by default.
 const leaderboard = new Leaderboard(store.dir);
+// The Warren feed: listed agents' results, follows and cheers, next to the leaderboard in the directory database.
+const social = new Social(store.dir);
 let runner: ArenaRunner | null = null;
 // Historical candles for backtests and simulated training (public OKX data, one shared file).
 const history = new CandleStore(`${env.ARENA_DIR ?? "./data/arena"}/history.sqlite`);
@@ -85,6 +88,7 @@ if (env.ARENA_RUN === "1") {
       llm,
       ownKeyDailyUsd: Number(env.ARENA_OWN_KEY_DAILY_USD ?? 1000),
       sampleMs: Number(env.ARENA_SAMPLE_MS ?? 600_000),
+      social,
     });
     trainer = new Trainer({ store, root: env.ARENA_DIR ?? "./data/arena", history, runner, platformBudgetUsd: Number(env.ARENA_TRAIN_USD ?? 1), maxParallel: Number(env.ARENA_TRAIN_PARALLEL ?? 2) });
     if (env.ARENA_HISTORY !== "0") {
@@ -115,6 +119,7 @@ const billing = new Billing(
   billingCfg ? new HttpStripe(billingCfg.secretKey) : null,
   async (userId, r) => {
     for (const id of [...r.quarantined, ...r.purged]) leaderboard.remove(id);
+    for (const id of r.purged) social.forgetBot(id);
     await runner?.update(userId); // stops what is in quarantine, starts nothing the member did not ask for
   },
 );
@@ -126,7 +131,7 @@ const sweeper = setInterval(() => {
 }, 600_000);
 store.purgeExpired(Date.now());
 
-const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, chat, history, trainer, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner, leaderboard, billing, vault, library: library.skills, operator: { name: env.ARENA_OPERATOR_NAME, address: env.ARENA_OPERATOR_ADDRESS, companyNo: env.ARENA_OPERATOR_COMPANY_NO, vat: env.ARENA_OPERATOR_VAT, email: env.ARENA_OPERATOR_EMAIL, privacyEmail: env.ARENA_OPERATOR_PRIVACY_EMAIL, reviewedOn: env.ARENA_LEGAL_REVIEWED_ON } });
+const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, chat, history, trainer, social, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner, leaderboard, billing, vault, library: library.skills, operator: { name: env.ARENA_OPERATOR_NAME, address: env.ARENA_OPERATOR_ADDRESS, companyNo: env.ARENA_OPERATOR_COMPANY_NO, vat: env.ARENA_OPERATOR_VAT, email: env.ARENA_OPERATOR_EMAIL, privacyEmail: env.ARENA_OPERATOR_PRIVACY_EMAIL, reviewedOn: env.ARENA_LEGAL_REVIEWED_ON } });
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;

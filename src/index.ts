@@ -23,12 +23,13 @@ import { safeError } from "./redact.js";
 import { startServer } from "./server.js";
 import { ownFromEngineDb, PublicChat } from "./publicChat.js";
 import { okxChatMarket } from "./arena/chat.js";
-import { loadOverrides, loadSettings, STYLE_INFO } from "./settings.js";
+import { loadOverrides, loadSettings, saveSettings, STYLE_INFO } from "./settings.js";
 import { imagePath, Setup } from "./setup.js";
 import { bunnyProfile } from "./bunnyProfile.js";
 import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
+import { Farmer, farmerStats } from "./brains/farmer.js";
 import type { CouncilBee } from "./brains/council.js";
 import { ANTHROPIC_PROFILE, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
@@ -345,6 +346,34 @@ async function main() {
     specialization: cfg.lab.specialization,
   });
   coach.start();
+  // The Farmer (brains/farmer.ts): every FARMER_INTERVAL_MIN he looks at all the bunnies, says one line, and may rewrite a
+  // bunny's rules once a day. With real money he only suggests unless FARMER_MODE=apply. FARMER=0 turns him off.
+  const farmerBrain = process.env.FARMER_BRAIN?.trim();
+  const farmerLlm = process.env.FARMER === "0" ? null : ((farmerBrain ? clients[farmerBrain] : undefined) ?? clients.claude ?? clients.openai ?? Object.values(clients)[0] ?? null);
+  const farmer = new Farmer({
+    db: db.raw,
+    llm: farmerLlm,
+    mode: process.env.FARMER_MODE === "apply" || (process.env.FARMER_MODE !== "advise" && cfg.mode !== "live") ? "apply" : "advise",
+    intervalMin: Number(process.env.FARMER_INTERVAL_MIN ?? 120),
+    bees: () => cfg.beeIds.map((id) => ({ slot: id, name: cfg.slots[id].name, style: cfg.slots[id].style, coins: cfg.slots[id].coins, rules: cfg.slots[id].rules })),
+    stats: (id) => {
+      const b = engine.bees[id];
+      return farmerStats(db.raw, id, Date.now(), cfg.slots[id].startEquityUsd ?? 0, b?.position ? `${b.position.side} ${b.position.instId.split("-")[0]}` : null);
+    },
+    setRules: (id, rules) => {
+      engine.setRules(id, rules);
+      const cb = councilBees.find((x) => x.slot === id);
+      if (cb) cb.rules = rules;
+      // Saved where the owner's rules live, so a restart keeps them; the admin panel shows them like any edit.
+      const st = loadSettings(cfg.settingsPath);
+      const i = Number(id.slice(3)) - 1;
+      if (st?.bees[i]) {
+        st.bees[i] = { ...st.bees[i]!, rules };
+        saveSettings(cfg.settingsPath, st);
+      }
+    },
+  });
+  farmer.start();
   // Agent-led R&D is deliberately slower than trading. Each agent's own brain proposes one hypothesis, the existing
   // walk-forward lab tests it, and both accepted and rejected attempts become durable graph memory.
   let researchTimer: NodeJS.Timeout | null = null;
@@ -531,6 +560,8 @@ async function main() {
     {
       engine: {
         chat,
+        farmer: () => farmer.summary(),
+        farmerLog: (limit, before) => farmer.entries(limit, before),
         bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
         lab: {
           ranking: labRanking,
@@ -560,6 +591,7 @@ async function main() {
     if (researchTimer) clearTimeout(researchTimer);
     saveSessions();
     coach.stop();
+    farmer.stop();
     cmc?.stop();
     graph.close();
     hive.stop();

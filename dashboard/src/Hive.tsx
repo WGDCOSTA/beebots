@@ -148,7 +148,7 @@ export function HiveButton() {
   return (
     <>
       <button className={`hive-btn ${status.joined ? "in" : ""}`} onClick={() => setOpen(true)}>
-        {status.joined ? "In the Warren ✓" : "🐝 Join the Warren"}
+        {status.joined ? "In the Warren ✓" : "🐰 Join the Warren"}
       </button>
       {open && <HiveDialog status={status} onClose={() => setOpen(false)} onStatus={setStatus} />}
     </>

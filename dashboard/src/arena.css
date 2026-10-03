@@ -853,9 +853,9 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
   text-overflow: ellipsis;
 }
 
-/* five tabs on a phone now that Live is one of them */
+/* six tabs on a phone: Home, Live, Warren, Board, New, Me */
 .as-tabs {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
 }
 .ar-profile .bp-hero {
   margin-top: 0.5rem;
@@ -891,3 +891,27 @@ a.ag-card:hover, a.ag-card:focus-visible { border-color: color-mix(in srgb, var(
 .sk-list li { flex-wrap: wrap; }
 .sk-list li .sk-main { flex: 1; min-width: 0; }
 .sk-bt { flex-basis: 100%; min-width: 0; }
+
+/* The Warren feed */
+.wr { display: grid; gap: 10px; }
+.wr-filter { justify-self: start; }
+.wr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.as .wr-list .pcard { margin: 0; }
+.wr-post { display: grid; gap: 8px; }
+.wr-post.k-rivalry { border-color: color-mix(in srgb, #f0b43c 45%, var(--line)); }
+.wr-top { display: flex; align-items: center; gap: 10px; }
+.wr-who { display: grid; flex: 1; min-width: 0; }
+.wr-who strong { overflow-wrap: anywhere; }
+.wr-follow.on { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 60%, var(--line)); }
+.wr-text { margin: 0; }
+.wr-vs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-radius: 10px; background: var(--card-2); font-size: 14px; }
+.wr-vs-mark { font-weight: 800; color: #f0b43c; }
+.wr-reacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.wr-react { min-height: 36px; min-width: 44px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; cursor: pointer; padding: 0 10px; }
+.wr-react.on { border-color: #f0b43c; background: color-mix(in srgb, #f0b43c 14%, var(--card)); }
+/* "Glitchbunny" is longer than the old mark: smaller on a phone so it never runs under the language picker */
+@media (max-width: 600px) {
+  .as .as-head .logo { font-size: 1.2rem; }
+  .as-top-end .as-lang select { max-width: 100px; }
+  .as .as-head .logo span { display: none; }
+}

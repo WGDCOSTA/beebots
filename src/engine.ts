@@ -1596,6 +1596,18 @@ export class Engine {
     };
   }
 
+  /**
+   * New owner rules for a running bunny (The Farmer's rewrite): the next decision uses them. Its coins, style and money stay.
+   * The caller saves them to the settings file so a restart keeps them.
+   */
+  setRules(id: BeeId, rules: string): void {
+    const s = this.d.cfg.slots[id];
+    if (!s || !this.ids.includes(id)) throw new Error("no such bunny");
+    s.rules = rules;
+    delete this.brains[id];
+    delete this.watched[id];
+  }
+
   snapshot() {
     const bees = this.ids.map((id) => this.publicBee(id));
     const sum = (f: (b: (typeof bees)[number]) => number) => Number(bees.reduce((a, b) => a + f(b), 0).toFixed(4));

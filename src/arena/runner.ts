@@ -28,6 +28,7 @@ import { EnsembleSystemOne, LlmSystemOne } from "./decider.js";
 import { EST_USD_PER_MTOK, type Vault } from "./vault.js";
 import type { Leaderboard } from "./ranking.js";
 import type { ArenaStore } from "./store.js";
+import type { Social } from "./social.js";
 
 const SLOT: BeeId = "bee1";
 
@@ -61,6 +62,8 @@ export interface RunnerOpts {
   styleReviewHours?: number;
   /** The daily decision spend an agent on its member's own key may use when the member set no ceiling, in USD. */
   ownKeyDailyUsd?: number;
+  /** The Warren feed (social.ts): listed agents' closed trades and milestones become posts. */
+  social?: Social;
 }
 
 /** A stopped agent, or one in quarantine: no engine, no ranking, positions closed. */
@@ -123,11 +126,12 @@ export class ArenaRunner {
   private noGraph: KnowledgeGraph | null = null;
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
-  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">;
+  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library" | "social">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library" | "social">;
   private timer: NodeJS.Timeout | null = null;
   private sampler: NodeJS.Timeout | null = null;
   private settler: NodeJS.Timeout | null = null;
   private reviewer: NodeJS.Timeout | null = null;
+  private socializer: NodeJS.Timeout | null = null;
 
   constructor(opts: RunnerOpts) {
     this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, ownKeyDailyUsd: 1000, styleReviewHours: 6, now: Date.now, ...opts };
@@ -383,6 +387,25 @@ export class ArenaRunner {
     lb.prune(ts);
   }
 
+  /** Listed agents' new results become Warren feed posts (closed trades, milestones, a new version). Results only. */
+  socialize(): void {
+    const feed = this.o.social;
+    if (!feed) return;
+    for (const r of this.runs.values()) {
+      if (!r.bot.listed || r.ctl.closing) continue;
+      const user = this.o.store.userById(r.userId);
+      const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
+      if (!user || !b) continue;
+      try {
+        const fills = (r.db.raw.prepare("SELECT id, ts, inst_id AS i, side, notional_usd AS n, realised_usd AS p FROM fills WHERE bee = ? AND realised_usd != 0 AND id > ? ORDER BY id LIMIT 50").all(SLOT, Math.max(0, feed.cursor(r.botId, r.version).fillId)) as Array<{ id: number; ts: number; i: string; side: string; n: number; p: number }>).map((f) => ({ id: f.id, ts: f.ts, coin: f.i.split("-")[0] ?? f.i, side: f.side === "sell" ? ("sell" as const) : ("buy" as const), notionalUsd: f.n, realisedUsd: f.p }));
+        const start = b.startEquityUsd || this.o.startUsd;
+        feed.record({ botId: r.botId, userId: r.userId, name: r.bot.name, avatar: r.bot.avatar, theme: r.bot.theme, handle: user.handle, image: r.bot.image }, r.version, fills, start > 0 ? ((b.equityUsd - start) / start) * 100 : null);
+      } catch (e) {
+        log.warn("arena: feed post failed", { bot: r.botId, error: safeError(e).message });
+      }
+    }
+  }
+
   /** Every member with a bot: the periodic safety net, and the first pass at start-up. */
   syncAll(): Promise<void> {
     const ids = (this.o.store.dir.prepare("SELECT id FROM users ORDER BY created_at, id").all() as Array<{ id: string }>).map((r) => r.id);
@@ -395,6 +418,11 @@ export class ArenaRunner {
     this.settler = setInterval(() => void this.serial(() => this.settle()), 10_000);
     this.reviewer = setInterval(() => void Promise.all([...this.runs.keys()].map((id) => this.review(id))), 600_000);
     if (this.o.leaderboard) this.sampler = setInterval(() => this.sample(), this.o.sampleMs);
+    if (this.o.social)
+      this.socializer = setInterval(() => {
+        this.socialize();
+        this.o.social?.prune();
+      }, 60_000);
   }
 
   stopAll(): void {
@@ -402,6 +430,7 @@ export class ArenaRunner {
     if (this.sampler) clearInterval(this.sampler);
     if (this.settler) clearInterval(this.settler);
     if (this.reviewer) clearInterval(this.reviewer);
+    if (this.socializer) clearInterval(this.socializer);
     for (const r of [...this.runs.values()]) this.stopRun(r, false);
   }
 

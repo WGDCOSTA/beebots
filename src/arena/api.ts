@@ -21,6 +21,7 @@ import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
 import { AgentChat, ChatLog, type ChatAgent, type ChatMarket, type OwnContext } from "./chat.js";
 import { PublicChat } from "../publicChat.js";
+import type { Social } from "./social.js";
 import type { LlmClient } from "../brains/llm.js";
 import type { CandleStore } from "./history.js";
 import { BACKTESTS_PER_DAY, backtestSkill, TrainError, TRAININGS_PER_DAY, TRAIN_DAYS, usage, type Trainer } from "./training.js";
@@ -64,6 +65,8 @@ export interface ApiOpts {
   history?: CandleStore | null;
   /** Replays agents over history (null = training is off). */
   trainer?: Trainer | null;
+  /** The Warren feed (social.ts): members' listed agents' results, follows and cheers (null = off). */
+  social?: Social | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
   runner?: {
     update(userId: string): Promise<void>;
@@ -418,6 +421,32 @@ export class ArenaApi {
       reply(res, 200, this.showcase.body);
       return true;
     }
+    if (route === "/social" || route === "/social/react" || route === "/social/follow") {
+      const feed = this.opts.social;
+      if (!feed) return this.send(res, 503, { error: "The feed is not open right now." });
+      const u = this.auth.user(sessionOf(req));
+      if (req.method === "GET") {
+        // Public: anyone can read the feed; a signed-in member also sees what they follow and how they reacted.
+        const q = new URL(req.url ?? "/", "http://x").searchParams;
+        const before = Number(q.get("before") ?? 0) || undefined;
+        const bot = q.get("bot") ?? undefined;
+        return this.send(res, 200, { posts: feed.feed(u?.id ?? null, { following: q.get("filter") === "following", bot: bot && /^[\w-]{1,40}$/.test(bot) ? bot : undefined, before }), following: u ? feed.following(u.id) : [], followers: bot ? feed.followers(bot) : null });
+      }
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      if (this.store.tooMany(`social:${u.id}`, 300, this.now())) return this.send(res, 429, { error: "Too many tries. Wait a little and try again." });
+      const body = (await readJson(req, MAX_BODY)) as { post?: unknown; kind?: unknown; bot?: unknown; on?: unknown };
+      if (route === "/social/react") {
+        const counts = feed.react(u.id, Number(body.post), String(body.kind ?? ""));
+        return counts ? this.send(res, 200, { reactions: counts }) : this.send(res, 404, { error: "No such post." });
+      }
+      const bot = typeof body.bot === "string" ? body.bot : "";
+      // Only agents that are in the feed can be followed: a listed agent with at least one post.
+      if (!feed.feed(null, { bot, limit: 1 }).length) return this.send(res, 404, { error: "No such agent in the feed." });
+      feed.follow(u.id, bot, body.on !== false);
+      return this.send(res, 200, { following: feed.following(u.id), followers: feed.followers(bot) });
+    }
     if (route === "/showcase/chat" || route === "/showcase/chat/send") {
       // Anyone may ask a house agent; the page keeps the conversation, the server keeps nothing of it.
       if (!this.houseChat) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
@@ -567,7 +596,10 @@ export class ArenaApi {
           } else if (route === "/bots/update") {
             const bot = bots.update(body.id, body);
             // Taking a bot off the leaderboard is immediate, not at the next sample.
-            if (!bot.listed) this.opts.leaderboard?.remove(bot.id);
+            if (!bot.listed) {
+              this.opts.leaderboard?.remove(bot.id);
+              this.opts.social?.forgetBot(bot.id);
+            }
             reply(res, 200, { bot });
             void this.opts.runner?.update(u.id);
           }
@@ -589,6 +621,7 @@ export class ArenaApi {
             const gone = bots.find(body.id);
             bots.remove(gone.id);
             this.opts.leaderboard?.remove(gone.id);
+            this.opts.social?.forgetBot(gone.id);
             this.store.removePortrait(u.id, gone.id);
             this.opts.trainer?.forgetBot(u.id, gone.id);
             reply(res, 200, { ok: true });
@@ -709,6 +742,7 @@ export class ArenaApi {
           // A subscription must not outlive the account: if Stripe cannot be told, the account stays and the member can retry.
           if (!(await this.billing().cancelFor(u.id))) return this.send(res, 502, { error: "Could not cancel your subscription. Try again in a minute, or cancel it from Manage billing first." });
           await this.opts.runner?.forget(u.id); // close the paper files before they are deleted
+          this.opts.social?.forgetUser(u.id);
           this.store.deleteUser(u.id, this.now());
           reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
         }

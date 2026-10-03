@@ -5,7 +5,7 @@
 	# Read-only engine endpoints. Only GET is proxied; the engine refuses everything else too.
 	@api {
 		method GET
-		path /events /snapshot /history /equity /visit /health /profile /bee-image/* /setup/status /hive/status /lab/ranking /lab/playbook /hive-mind /hive-mind/* /bunny/* /chat
+		path /events /snapshot /history /equity /visit /health /profile /bee-image/* /setup/status /hive/status /lab/ranking /lab/playbook /hive-mind /hive-mind/* /bunny/* /chat /visitors/map /farmer
 	}
 	handle @api {
 		reverse_proxy engine:8080 {
