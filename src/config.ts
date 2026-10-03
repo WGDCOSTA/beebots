@@ -4,11 +4,12 @@ import { parseHug, parseLock, type HugRung, type LockRung } from "./bees/ratchet
 import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
 /**
- * The three main bunny slots (the live dashboard's columns, Setup, the Warren). Each one trades one of the three styles
- * (settings.ts); two bunnies may share a style. Extra bunnies added from the admin panel take slots bee4..bee9: the engine
+ * The four main bunny slots (the live dashboard's columns and the Warren). The first three are designed in Setup; Degen
+ * is the fixed autonomous scalper. Extra bunnies added from the admin panel take slots bee5..bee9: the engine
  * runs every slot in `cfg.beeIds`.
  */
-export const BEES = ["bee1", "bee2", "bee3"] as const;
+export const DESIGNABLE_BEES = ["bee1", "bee2", "bee3"] as const;
+export const BEES = [...DESIGNABLE_BEES, "bee4"] as const;
 export const ALL_SLOTS = ["bee1", "bee2", "bee3", "bee4", "bee5", "bee6", "bee7", "bee8", "bee9"] as const;
 export type BeeId = (typeof ALL_SLOTS)[number];
 /** Main slots plus extras. */
@@ -18,10 +19,10 @@ export const isBeeId = (s: string): s is BeeId => (ALL_SLOTS as readonly string[
 export { STYLES, type StyleId };
 
 /** Each main bunny thinks with its own LLM brain (strategy, lessons, messages; Jev still makes the per-tick call). */
-const DEFAULT_BRAINS: Record<(typeof BEES)[number], BrainId> = { bee1: "openai", bee2: "claude", bee3: "kimi" };
+const DEFAULT_BRAINS: Record<(typeof BEES)[number], BrainId> = { bee1: "openai", bee2: "claude", bee3: "kimi", bee4: "openai" };
 
-/** With no Setup file (settings only from .env), the bunnies are the original three. */
-const DEFAULT_SLOTS: Record<(typeof BEES)[number], StyleId> = { bee1: "bizzy", bee2: "breezy", bee3: "boozy" };
+/** With no Setup file, the four official agents still have stable identities. */
+const DEFAULT_SLOTS: Record<(typeof BEES)[number], StyleId> = { bee1: "bizzy", bee2: "breezy", bee3: "boozy", bee4: "degen" };
 /** Typed as the only acknowledgement that unlocks MODE=live. */
 export const LIVE_ACK_PHRASE = "I-ACCEPT-REAL-MONEY-RISK";
 
@@ -137,11 +138,13 @@ const EnvSchema = z.object({
   ...perStyle("BREEZY", { trades: 3, fee: 1.0, spread: 5, cooldown: 240, stopAtr: 2, maxFlat: 0 }),
   ...perStyle("BIZZY", { trades: 1, fee: 1.0, spread: 5, cooldown: 5, stopAtr: 1.5, maxFlat: 20 }),
   ...perStyle("BOOZY", { trades: 3, fee: 3.0, spread: 15, cooldown: 2, stopAtr: 2, maxFlat: 0 }),
+  ...perStyle("DEGEN", { trades: 60, fee: 3.0, spread: 1.5, cooldown: 0, stopAtr: 1.5, maxFlat: 1440 }),
   // The macro squad's style (bees/macro.ts): few trades, wider stops, a spread gate that suits stocks and gold.
   ...perStyle("MACRO", { trades: 4, fee: 2.0, spread: 15, cooldown: 30, stopAtr: 2.5, maxFlat: 0 }),
   ...perSlot("BEE1"),
   ...perSlot("BEE2"),
   ...perSlot("BEE3"),
+  ...perSlot("BEE4"),
   // Real money needs DRY_RUN=false, MODE=live AND this set to LIVE_ACK_PHRASE. Paper trading needs none of it.
   LIVE_ACK: opt,
 
@@ -196,6 +199,7 @@ const EnvSchema = z.object({
   BEE1_BRAIN: brainId(DEFAULT_BRAINS.bee1),
   BEE2_BRAIN: brainId(DEFAULT_BRAINS.bee2),
   BEE3_BRAIN: brainId(DEFAULT_BRAINS.bee3),
+  BEE4_BRAIN: brainId(DEFAULT_BRAINS.bee4),
   LAB_DIR: str("./data/lab"),
   GRAPH_PATH: str("./data/lab/hive-mind.sqlite"),
   // Extra folders of importable JSON skills (comma separated), on top of ./skills.
@@ -216,12 +220,14 @@ const EnvSchema = z.object({
   RATCHET_HUG: str("2.5:1.2,5:0.8,8:0.6"),
   RATCHET_STYLES: str("bizzy,boozy,macro,skill"),
   // ---- The scalper (bees/scalp.ts; phases 2 and 3) ----
-  // Off by default. Even on, a bunny only scalps when its brains chose the "scalp" method AND the strategy lab's latest
+  // Degen makes this on by default. A bunny only scalps when the strategy lab's latest
   // report on real 1-minute data (pnpm lab scalp) found an edge after costs (SCALP_REQUIRE_LAB). Entries are maker limits.
-  SCALP: bool(false),
+  SCALP: bool(true),
   SCALP_REQUIRE_LAB: bool(true),
   SCALP_LAB_MAX_AGE_DAYS: num(14),
-  SCALP_COINS: str("BTC,ETH"),
+  // "*" means the current liquid crypto universe. The autonomous lab tests a bounded top slice each cycle.
+  SCALP_COINS: str("*"),
+  SCALP_UNIVERSE_SIZE: num(20),
   SCALP_MAKER_FEE: num(0.0002),
   // Fast loop for scalping bunnies (code only, no Jev call), and how long a maker order may wait for its fill.
   SCALP_TICK_MS: num(2000),
@@ -307,7 +313,7 @@ export interface SlotProfile {
   tagline: string;
   /** A portrait generated on Setup lives in the data volume. */
   customImage: boolean;
-  /** The owner's rules (fed to Jev) and coin restriction, from Setup. Empty for the original three. */
+  /** The owner's rules (fed to Jev) and coin restriction, from Setup. Empty for built-in agents. */
   rules: string;
   coins: string[];
   /** Made on the Setup page (never shown with the original bunnies' art). */
@@ -321,7 +327,7 @@ export interface SlotProfile {
 
 export interface Config {
   mode: Mode;
-  /** Every bunny the engine runs: bee1..bee3, then any extra bunnies from the admin panel (with exchange keys, outside paper). */
+  /** Every bunny the engine runs: the four main agents, then extras from the admin panel. */
   beeIds: BeeId[];
   /** Extra bunnies left out because their exchange keys are missing in demo/live mode (named in the log). */
   skippedBees: BeeId[];
@@ -357,6 +363,8 @@ export interface Config {
     requireLab: boolean;
     labMaxAgeDays: number;
     coins: string[];
+    /** With SCALP_COINS=*, how many of the most liquid current coins each autonomous lab cycle evaluates. */
+    universeSize: number;
     makerFee: number;
     tickMs: number;
     makerWaitMs: number;
@@ -433,7 +441,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   }
 
   const knownBrains = new Set<string>([...BRAINS, ...(settings?.customBrains ?? []).map((b) => b.id)]);
-  for (const k of ["BEE1_BRAIN", "BEE2_BRAIN", "BEE3_BRAIN"] as const) {
+  for (const k of ["BEE1_BRAIN", "BEE2_BRAIN", "BEE3_BRAIN", "BEE4_BRAIN"] as const) {
     if (!knownBrains.has(e[k])) throw new ConfigError(`${k}: not a known brain (${[...knownBrains].join(", ")}). Add a custom brain in the admin panel first.`);
   }
   if (e.MAX_LEVERAGE > 2 || e.MAX_LEVERAGE <= 0) throw new ConfigError("MAX_LEVERAGE must be in (0, 2]. Hard rule 3.");
@@ -449,12 +457,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   allIds.forEach((id, i) => {
     const b = settings?.bees[i];
     const style = b?.style ?? DEFAULT_SLOTS[id as (typeof BEES)[number]] ?? "boozy";
-    // The main three are always crypto (Setup, the Warren and the live columns are about crypto).
+    // The main four are always crypto (the Warren and live columns are about crypto).
     const market: MarketId = i < BEES.length ? "crypto" : (b?.market ?? "crypto");
-    // Extra bunnies have their own wallet; the main three share BEE_START_EQUITY_USD (the Warren compares them).
+    // Extra bunnies have their own wallet; the main four share BEE_START_EQUITY_USD (the Warren compares them).
     const startEquityUsd = i >= BEES.length && b?.walletUsd ? b.walletUsd : e.BEE_START_EQUITY_USD;
     slots[id] = b
-      ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: true, market, squad: squadOf(market), startEquityUsd }
+      ? { style, name: b.name, tagline: b.tagline, customImage: b.image, rules: b.rules, coins: b.coins, fromSetup: !b.builtin, market, squad: squadOf(market), startEquityUsd }
       : { style, name: STYLE_INFO[style].name, tagline: STYLE_INFO[style].tagline, customImage: false, rules: "", coins: [], fromSetup: false, market, squad: squadOf(market), startEquityUsd };
   });
 
@@ -559,6 +567,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       requireLab: e.SCALP_REQUIRE_LAB || mode === "live",
       labMaxAgeDays: Math.max(1, e.SCALP_LAB_MAX_AGE_DAYS),
       coins: e.SCALP_COINS.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
+      universeSize: Math.max(1, Math.min(50, Math.round(e.SCALP_UNIVERSE_SIZE))),
       makerFee: Math.max(0, e.SCALP_MAKER_FEE),
       tickMs: Math.max(500, e.SCALP_TICK_MS),
       makerWaitMs: Math.max(1000, e.SCALP_MAKER_WAIT_S * 1000),
@@ -582,7 +591,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       flattenMin: Math.max(0, e.SESSION_FLATTEN_MIN),
       lateSessionSize: Math.max(0, Math.min(1, e.MACRO_LATE_SESSION_SIZE)),
     },
-    bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy") },
+    bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy"), degen: knobs("degen") },
     breezy: { minOpenProb: e.BREEZY_MIN_OPEN_PROB, minSizeUsd: e.BREEZY_MIN_SIZE_USD },
     bizzy: { sizeFraction: e.BIZZY_SIZE_FRACTION, universeSize: e.BIZZY_UNIVERSE_SIZE, timeStopMinutes: e.BIZZY_TIME_STOP_MINUTES },
     boozy: { candidates: e.BOOZY_CANDIDATES },
@@ -593,7 +602,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     alertWebhookUrl: e.ALERT_WEBHOOK_URL,
     brains: {
       creds: brainCreds(e, settings),
-      slots: brainSlots(allIds, { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN }, settings),
+      slots: brainSlots(allIds, { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN, bee4: e.BEE4_BRAIN }, settings),
     },
     lab: {
       dir: e.LAB_DIR,
@@ -626,7 +635,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
   };
 }
 
-/** Main bunnies: BEE1_BRAIN..BEE3_BRAIN. Extra bunnies: the brain picked when they were added, else they take turns. */
+/** Main bunnies: BEE1_BRAIN..BEE4_BRAIN. Extra bunnies: the brain picked when they were added, else they take turns. */
 function brainSlots(ids: BeeId[], main: Record<(typeof BEES)[number], BrainId>, settings: Settings | null): Record<BeeId, BrainId> {
   const out = {} as Record<BeeId, BrainId>;
   ids.forEach((id, i) => {
@@ -668,7 +677,7 @@ export function labEnv(env: NodeJS.ProcessEnv = process.env, settings: Settings 
   return {
     creds: brainCreds(e, settings),
     alpaca: alpacaCreds(e, settings),
-    slots: { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN } as Record<BeeId, BrainId>,
+    slots: { bee1: e.BEE1_BRAIN, bee2: e.BEE2_BRAIN, bee3: e.BEE3_BRAIN, bee4: e.BEE4_BRAIN } as Record<BeeId, BrainId>,
     dir: e.LAB_DIR,
     graphPath: e.GRAPH_PATH,
     playbookPath: `${e.LAB_DIR.replace(/\/+$/, "")}/playbook.json`,

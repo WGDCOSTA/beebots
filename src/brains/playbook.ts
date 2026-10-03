@@ -4,7 +4,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import { writePrivateJson } from "../settings.js";
 
-export const NATURAL_FAMILY: Record<string, string> = { bizzy: "breakout", breezy: "trend", boozy: "momentum" };
+export const NATURAL_FAMILY: Record<string, string> = { bizzy: "breakout", breezy: "trend", boozy: "momentum", degen: "scalp" };
 
 const PlaybookSkill = z.object({
   id: z.string(),

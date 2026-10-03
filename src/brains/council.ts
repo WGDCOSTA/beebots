@@ -90,7 +90,7 @@ export function rulesPick(cands: SkillResult[], style: string): AnswerT {
 export function systemPrompt(bee: CouncilBee): string {
   const b = brainInfo(bee.brain);
   return [
-    `You are ${b.label} (${b.vendor}), the strategic brain of ${bee.name}, one of three AI trading bees that race each other on OKX perpetual futures with PAPER money.`,
+    `You are ${b.label} (${b.vendor}), the strategic brain of ${bee.name}, one of the main AI trading agents that race each other on OKX perpetual futures with PAPER money.`,
     `${bee.name} trades the "${bee.style}" style${bee.coins.length ? ` on ${bee.coins.join(", ")}` : ""}.${bee.rules ? ` Owner's rules: ${bee.rules}` : ""}`,
     bee.market && bee.market !== "crypto"
       ? `${bee.name} belongs to the MACRO SQUAD: it trades ${bee.market === "macro" ? "stocks and commodities" : bee.market} X-Perps (gold, oil, stocks, ETFs), which follow their market's session hours and can gap when it is shut. Favour liquid names and skills that respect sessions.`

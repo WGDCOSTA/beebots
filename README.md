@@ -4,14 +4,15 @@
 
 [![Watch the video: I built AI trading bunnies with Jev](docs/video.jpg)](https://www.youtube.com/watch?v=8ijN8LGljKg)
 
-Three AI trading bunnies race each other on OKX perpetual futures. Every decision comes from **Jev** (TypeSafe AI's
-decision model), and every order goes through a risk layer written in plain code. A live dashboard shows each
+Four main AI trading agents race each other on OKX perpetual futures: three owner-designed bunnies and **Degen**, an
+evidence-gated autonomous scalper. Jev sets decisions or short-lived scalp mandates, and every order goes through a
+risk layer written in plain code. A live dashboard shows each
 decision, order, fee and funding payment as it happens.
 
 **It runs on paper by default.** The bunnies use real market prices and simulated money. Nothing touches an exchange
 account unless you change the settings yourself, on purpose.
 
-![The beebots dashboard: three named bunnies trading on paper](docs/screenshots/dashboard.jpg)
+![The beebots dashboard trading on paper](docs/screenshots/dashboard.jpg)
 
 > **Not financial advice.** beebots is an experiment and a piece of open-source software. It is not a trading product,
 > and nothing it does is a recommendation to buy or sell anything. Leveraged crypto trading can lose everything you
@@ -37,7 +38,8 @@ Use code **MAGIC10** at checkout for 10% off.
    - design your three bunnies. For each one, answer **How do you want this bunny to trade?** in a sentence ("a Trump bunny
      that only ever trades TRUMP", "a sleepy bunny that only buys bitcoin dips"), press **Create my bunny**, and OpenAI
      invents its name, tagline, trading rules and the coins it may trade. Rename it if you like, then press
-     **Generate your bunny's portrait**. You can carry on once all three bunnies have their portraits.
+     **Generate your bunny's portrait**. You can carry on once all three bunnies have their portraits. The fixed fourth
+     agent, Degen, joins automatically with its own portrait and scalping rules.
    - choose whether to join **the Warren** (see below). "Not now" is fine; you can join later.
 4. Press **Start paper trading**. The engine restarts, and the dashboard goes live.
 
@@ -119,7 +121,7 @@ Your sentence becomes two things the engine enforces, and one it passes on:
 
 - **Coins.** If your bunny names coins, it only ever trades those. They must be crypto perpetuals listed on OKX EEA right
   now (Setup checks the live list and asks you to rephrase if none match).
-- **The engine it runs on.** Every bunny runs on one of three built-in trading styles below. A bunny limited to BTC and/or
+- **The engine it runs on.** An owner-designed bunny runs on one of the first three built-in styles below. A bunny limited to BTC and/or
   ETH can run on Trend; one limited to BTC, ETH, SOL or HYPE can run on Breakout; everything else runs on Momentum,
   which works on any coin.
 - **Rules.** Its rules go to Jev with every decision, and Jev follows them when picking among the moves the style
@@ -128,21 +130,22 @@ Your sentence becomes two things the engine enforces, and one it passes on:
 A coin still has to pass the same gates as any other (at least $1M of 24h volume, a tight spread). If your bunny's coin
 doesn't, the bunny just waits until it does.
 
-## The three trading styles
+## The four trading styles
 
 | style | the original bunny | what it does |
 |---|---|---|
 | **Breakout** | Bizzy, the grinder | One volatility breakout a day on BTC, ETH, SOL or HYPE, ridden to the daily close. |
 | **Trend** | Breezy, the calculated one | Trend following on BTC and ETH only. Few trades, rides winners, sized by volatility. |
 | **Momentum** | Boozy, the degen | Chases the strongest 7-day mover across every liquid coin, and adds to winners. |
+| **Scalper** | Degen, the autonomous one | Longs or shorts one-minute setups across the liquid universe, but only after the real-data lab finds an edge after costs. |
 
-Bizzy, Breezy and Boozy are the official bunnies (they run on [beebots.tech](https://beebots.tech)), so their names and art
+Bizzy, Breezy, Boozy and Degen are the official agents (they run on [beebots.tech](https://beebots.tech)), so their names and art
 are theirs; your bunnies get their own. Two of your bunnies can share a style. The full rules are in [`strategies/`](strategies/), and the rules every bunny
 shares (caps, stops, "never flat for long") are in [`strategies/DRAMA_RULES.md`](strategies/DRAMA_RULES.md).
 
 ## How a decision is made
 
-Every tick, for every bunny:
+Every normal decision tick, for every bunny:
 
 1. **Look.** Live OKX market data: tickers, candles, RSI, MACD, ATR, Bollinger, Donchian, funding, open interest.
 2. **Summarise.** A small numeric snapshot of the market and the bunny's own position.
@@ -153,6 +156,8 @@ Every tick, for every bunny:
 6. **Broadcast.** The dashboard streams it live.
 
 Jev is stateless and never sees an order endpoint. If Jev is down or slow, the bunnies hold and open nothing.
+Degen uses Jev only to approve a bounded coin/direction mandate; deterministic one-minute rules may execute several
+maker trades inside it without another model call. No mandate, current real-data lab evidence, or cost coverage means no entry.
 
 ## Brains, the strategy lab and the warren memory
 
@@ -235,7 +240,7 @@ keeps 7 days. That copy lives on the same server, so take an off-server copy you
 beebots can trade OKX demo accounts or real money, but only if you set it up by hand. It is **not** part of Setup, and
 there is no button for it.
 
-- Real money needs **all** of: `DRY_RUN=false`, `MODE=live`, three OKX **EEA** sub-account API keys
+- Real money needs **all** of: `DRY_RUN=false`, `MODE=live`, four OKX **EEA** sub-account API keys
   (`BEE1_OKX_API_KEY` etc., Read + Trade only, **never Withdraw or Transfer**, IP-bound to your server), and
   `LIVE_ACK=I-ACCEPT-REAL-MONEY-RISK`. With any one of them missing, the engine refuses to start.
 - The first hours of live trading run at reduced size (`LIVE_SIZE_MULTIPLIER`, `LIVE_RAMP_HOURS`).

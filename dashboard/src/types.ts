@@ -2,12 +2,12 @@
 import { BEE_MARK_URL } from "./BeeMark";
 
 /**
- * Bunny slots: the three main bunnies (the live columns), then any extra bunnies added from the admin panel (bee4..bee9).
+ * Bunny slots: the four main bunnies (the live columns), then any extra bunnies added from the admin panel (bee5..bee9).
  * Names, taglines and portraits come from the engine's /profile.
  */
 export type BeeName = string;
-export const BEE_NAMES: BeeName[] = ["bee1", "bee2", "bee3"];
-/** Every bunny the engine runs, main three first. Filled in from /profile. */
+export const BEE_NAMES: BeeName[] = ["bee1", "bee2", "bee3", "bee4"];
+/** Every bunny the engine runs, main four first. Filled in from /profile. */
 export const ALL_BEES: BeeName[] = [...BEE_NAMES];
 
 export type Cap = "trade_cap" | "fee_budget" | "loss_stop" | "retired" | null;
@@ -255,12 +255,12 @@ export type AnyEvent =
   | { type: "order" | "heartbeat" | "status" | "evolution"; ts: number; [k: string]: unknown };
 
 export interface BeeMeta {
-  /** Card title: "Boozy Bunny" for the official three, the owner's own name for a Setup-made bunny. */
+  /** Card title for an official agent, or the owner's own name for a Setup-made bunny. */
   title: string;
   short: string;
   tagline: string;
   styleLabel: string;
-  /** The owner's rules for this bunny (Setup), "" for the original three. */
+  /** The owner's rules for this bunny (Setup), or the built-in rules for Degen. */
   rules: string;
   coins: string[];
   img: string;
@@ -276,6 +276,7 @@ export const BEE_META: Record<string, BeeMeta> = {
   bee1: { title: "Bizzy Bunny", short: "Bizzy", tagline: "the grinder", styleLabel: "Breakout", rules: "", coins: [], img: "/bees/bizzy.jpg", color: "var(--bizzy)", glow: "var(--bizzy-glow)" },
   bee2: { title: "Breezy Bunny", short: "Breezy", tagline: "the calculated one", styleLabel: "Trend", rules: "", coins: [], img: "/bees/breezy.jpg", color: "var(--breezy)", glow: "var(--breezy-glow)" },
   bee3: { title: "Boozy Bunny", short: "Boozy", tagline: "the degen", styleLabel: "Momentum", rules: "", coins: [], img: "/bees/boozy.jpg", color: "var(--boozy)", glow: "var(--boozy-glow)" },
+  bee4: { title: "Degen Bunny", short: "Degen", tagline: "the autonomous scalper", styleLabel: "Scalper", rules: "", coins: [], img: "/bees/degen.png", color: "var(--degen)", glow: "var(--degen-glow)" },
 };
 
 export interface Profile {
@@ -288,11 +289,10 @@ export interface Profile {
 
 export const PROFILE: { links: Profile["links"] } = { links: null };
 
-const OFFICIAL_NAMES = ["Bizzy", "Breezy", "Boozy"];
+const OFFICIAL_NAMES = ["Bizzy", "Breezy", "Boozy", "Degen"];
 
 /**
- * Extra bunnies take the remaining categorical slots of the validated dark palette in fixed order (the main three hold
- * yellow, violet and magenta): blue, orange, aqua, green, red, then again with a lighter glow.
+ * Extra bunnies take the remaining categorical slots of the validated dark palette in fixed order after the main four.
  */
 const EXTRA_COLORS = ["#3987e5", "#d95926", "#199e70", "#008300", "#e66767", "#6da7ec"];
 
@@ -307,7 +307,7 @@ export function applyProfile(p: Profile): void {
   for (const b of p.bees) {
     ALL_BEES.push(b.id);
     if (!BEE_META[b.id]) {
-      const c = EXTRA_COLORS[(ALL_BEES.length - 4 + EXTRA_COLORS.length) % EXTRA_COLORS.length]!;
+      const c = EXTRA_COLORS[(ALL_BEES.length - 5 + EXTRA_COLORS.length) % EXTRA_COLORS.length]!;
       BEE_META[b.id] = { title: b.name, short: b.name, tagline: "", styleLabel: "", rules: "", coins: [], img: BEE_MARK_URL, color: c, glow: `${c}73` };
     }
     const m = BEE_META[b.id]!;

@@ -14,13 +14,15 @@
   --axis: #45434f;
   --muted-bar: #3a3946;
 
-  /* Bee identity (validated dark categorical steps: yellow, violet, magenta; all-pairs CVD ΔE >= 13) */
+  /* Agent identity */
   --bizzy: #c98500;
   --breezy: #9085e9;
   --boozy: #d55181;
+  --degen: #19c7c9;
   --bizzy-glow: rgba(201, 133, 0, 0.45);
   --breezy-glow: rgba(144, 133, 233, 0.45);
   --boozy-glow: rgba(213, 81, 129, 0.45);
+  --degen-glow: rgba(25, 199, 201, 0.45);
 
   /* Status (reserved; always paired with a glyph) */
   --good: #0ca30c;
@@ -415,7 +417,7 @@ a.counter.club:hover {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr) 1.08fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 1.08fr;
   gap: 1rem;
 }
 
@@ -1197,7 +1199,7 @@ a.counter.club:hover {
     font-size: 15px;
   }
 
-  /* one column: leaderboard, the three bees, then the stream */
+  /* one column: leaderboard, the main agents, then the stream */
   .grid {
     display: flex;
     flex-direction: column;
@@ -1242,7 +1244,7 @@ a.counter.club:hover {
   }
 }
 
-/* tablets: bees two across, the leaderboard spans the top, the stream fills the gap beside the third bee */
+/* tablets: agents two across, with the leaderboard spanning the top */
 @media (min-width: 700px) and (max-width: 1100px), (min-width: 700px) and (max-aspect-ratio: 4/5) {
   :root {
     font-size: 16px;

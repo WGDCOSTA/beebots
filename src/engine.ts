@@ -178,7 +178,7 @@ export class Engine {
   private shadow: ShadowRunner | null;
   private experimentEvaluator: ExperimentEvaluator;
 
-  /** Every bee this engine runs (main three plus extras), in slot order. */
+  /** Every bee this engine runs (the four main agents plus extras), in slot order. */
   private get ids(): BeeId[] {
     return this.d.cfg.beeIds;
   }
@@ -1339,6 +1339,9 @@ export class Engine {
       if (s.market === "crypto" && (STYLES as readonly string[]).includes(a.id)) return BRAINS[a.id as keyof typeof BRAINS];
       if (s.market !== "crypto" && a.id === "macro") return macro;
     }
+    // Degen's native method is the fast one-minute scalp engine. It remains flat while the evidence gate is closed;
+    // turning SCALP off explicitly falls back to its slower short-horizon style instead of disabling the agent.
+    if (s.market === "crypto" && s.style === "degen" && this.d.cfg.scalp.enabled) return scalpBrain(this.scalpDeps());
     return s.market === "crypto" ? BRAINS[s.style] : macro;
   }
 
@@ -1355,9 +1358,15 @@ export class Engine {
   private scalpRules(): GateRule[] {
     const sc = this.d.cfg.scalp;
     if (!sc.enabled) return [];
-    if (!sc.requireLab) return sc.coins.map((coin) => ({ coin, ruleId: "micro_breakout", params: {}, netBps: 0, trades: 0 }));
+    const allowed = (coin: string) => sc.coins.includes("*") || sc.coins.includes(coin);
+    if (!sc.requireLab) {
+      const coins = sc.coins.includes("*")
+        ? this.d.feed.view().gated.slice(0, sc.universeSize).map((id) => id.split("-")[0]!)
+        : sc.coins;
+      return coins.map((coin) => ({ coin, ruleId: "micro_breakout", params: {}, netBps: 0, trades: 0 }));
+    }
     const g = this.d.scalpGate?.();
-    return g?.open ? g.rules.filter((r) => sc.coins.includes(r.coin)) : [];
+    return g?.open ? g.rules.filter((r) => allowed(r.coin)) : [];
   }
   private scalpAvailable = () => this.scalpRules().length > 0;
   private scalpCosts(): CostModel {
@@ -1622,7 +1631,7 @@ export class Engine {
       /** Engine telemetry for the dashboard's system bar: which intelligence features are on. No secrets. */
       system: {
         jevModel: this.d.cfg.jev.model,
-        // The original three always; GLM and the owner's custom brains only once they are set up.
+        // The four main agents always; GLM and the owner's custom brains only once they are set up.
         brains: (() => {
           const cr = this.d.cfg.brains.creds;
           const list = [

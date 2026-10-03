@@ -176,7 +176,7 @@ export class ArenaRunner {
       },
       settings,
     );
-    // This engine runs one slot: this bot's. (The config builds the three main slots; the others simply never run.)
+    // This engine runs one slot: this bot's. (The config builds the four main slots; the others simply never run.)
     return { ...cfg, beeIds: [SLOT] };
   }
 

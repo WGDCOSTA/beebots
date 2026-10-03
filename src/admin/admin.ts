@@ -1,7 +1,7 @@
 // The admin panel's API. Every call is a POST carrying the owner password (x-owner-password, the same gate and lockout
 // as joining the Warren). What it can change:
 // - settings on the ADMIN_FIELDS list, stored as overrides in admin.json (the environment still wins, as for Setup);
-// - the Jev / OpenAI / Anthropic / Kimi keys, the three bunnies and the owner password, in the Setup file;
+// - the Jev / OpenAI / Anthropic / Kimi keys, the main bunnies and the owner password, in the Setup file;
 // - lab jobs (fetch, run, council, cycle), a coach review now, and an engine restart to apply saved changes.
 // - each bunny's wallet (the money it starts with) and its OKX sub-account keys, checked for permissions and balance
 //   before the bunny is created (a bunny is never created on keys that fail, or on an account holding less than its wallet).
@@ -606,7 +606,7 @@ export class Admin {
         const p = BeesBody.safeParse(body);
         if (!p.success) return send(res, 400, { error: p.error.issues.map((i) => `bunny ${Number(i.path[1] ?? 0) + 1} ${String(i.path[2] ?? "")}: ${i.message}`).join("; ") });
         const s = loadSettings(this.o.settingsPath);
-        if (!s) return send(res, 409, { error: "The original three bunnies run without a Setup file; design your own on Setup first." });
+        if (!s) return send(res, 409, { error: "The official bunnies run without a Setup file; design your own on Setup first." });
         const names = p.data.bees.map((b) => b.name.toLowerCase());
         if (new Set(names).size !== names.length) return send(res, 400, { error: "Each bunny needs its own name." });
         // Only the last bunnies can go (slots are positions: removing one in the middle would hand its books to another),
@@ -614,7 +614,7 @@ export class Admin {
         const removed = s.bees.slice(p.data.bees.length).map((_, i) => slotId(p.data.bees.length + i));
         const holding = removed.filter((id) => this.o.isFlat && !this.o.isFlat(id));
         if (holding.length) return send(res, 409, { error: `${holding.join(", ")} still holds a position; it must be flat before it is removed.` });
-        // Each bunny's coins must be live X-Perps of its own market (the main three trade crypto only).
+        // Each bunny's coins must be live X-Perps of its own market (the main four trade crypto only).
         const crypto = this.o.coins?.() ?? [];
         const macro = this.o.macroCoins?.() ?? { commodities: [], stocks: [] };
         const listFor = (m: MarketId) => (m === "crypto" ? crypto : m === "commodities" ? macro.commodities : m === "stocks" ? macro.stocks : [...macro.commodities, ...macro.stocks]);
@@ -625,7 +625,7 @@ export class Admin {
           const bad = [...new Set(b.coins)].filter((c) => !known.includes(c));
           if (bad.length) return send(res, 400, { error: `${b.name}: not a live ${MARKET_INFO[m].label} X-Perp on OKX right now: ${bad.join(", ")}.` });
         }
-        const reserved = p.data.bees.find((b) => isReservedName(b.name));
+        const reserved = p.data.bees.find((b, i) => isReservedName(b.name) && !(s.bees[i]?.builtin && b.name === s.bees[i]?.name));
         if (reserved) return send(res, 400, { error: `"${reserved.name}" belongs to an official bunny.` });
         // Wallet and exchange: a new bunny is created only with its wallet set and, outside paper trading, with keys
         // for this mode that pass the account check (Trade, no Withdraw, a sub-account holding at least the wallet).
@@ -637,7 +637,7 @@ export class Admin {
           const extra = i >= BEES.length;
           const fresh = !old || !running.includes(slot);
           if (!extra && b.walletUsd !== undefined && b.walletUsd !== this.defaultWallet())
-            return send(res, 400, { error: `${b.name}: the main three share the start equity (Settings → Risk), so the Warren can compare them.` });
+            return send(res, 400, { error: `${b.name}: the main four share the start equity (Settings → Risk), so the Warren can compare them.` });
           const wallet = extra ? (b.walletUsd ?? old?.walletUsd) : this.defaultWallet();
           if (extra && !old && !b.walletUsd) return send(res, 400, { error: `${b.name}: set its wallet (the money it starts with) before creating it.` });
           if (extra && old && b.walletUsd !== undefined && b.walletUsd !== (old.walletUsd ?? this.defaultWallet()) && !fresh)

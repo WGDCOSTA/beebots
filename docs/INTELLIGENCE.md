@@ -78,13 +78,14 @@ engine continues attributing and executing the champion, while the challenger re
 isolated shadow runner. An experiment is re-evaluated after outcomes settle and on engine startup. The event, evidence
 snapshot, actor and reason are appended to the ledger.
 
-## The three brains
+## The four main brain slots
 
 | Bunny | Brain | Key | Default model |
 |---|---|---|---|
 | bee1 | ChatGPT (OpenAI) | `OPENAI_API_KEY` (the Setup key) | `OPENAI_BRAIN_MODEL=gpt-5.4` |
 | bee2 | Claude (Anthropic) | `ANTHROPIC_API_KEY`, or an Anthropic Console sign-in (below) | `CLAUDE_MODEL=claude-opus-5` |
 | bee3 | Kimi (Moonshot AI) | `KIMI_API_KEY` or `MOONSHOT_API_KEY` | `KIMI_MODEL=kimi-k2.5` |
+| bee4 (Degen) | ChatGPT (OpenAI) | `OPENAI_API_KEY` (the Setup key) | `OPENAI_BRAIN_MODEL=gpt-5.4` |
 
 Admin → Settings → Brains and models can load the models visible to each configured account and use that live catalog
 as a picker. OpenAI uses its official `GET /models` catalog and the brain uses the Responses API; Anthropic uses its
@@ -97,9 +98,9 @@ A fourth built-in brain, **GLM (Z.ai)**, uses `ZAI_API_KEY`, `ZAI_MODEL` (defaul
 your Z.ai console) and `ZAI_BASE_URL` (international `https://api.z.ai/api/paas/v4`, China
 `https://open.bigmodel.cn/api/paas/v4`).
 
-Change who thinks with what via `BEE1_BRAIN` / `BEE2_BRAIN` / `BEE3_BRAIN` (`openai`, `claude`, `kimi`, `zai`, or the id
+Change who thinks with what via `BEE1_BRAIN` / `BEE2_BRAIN` / `BEE3_BRAIN` / `BEE4_BRAIN` (`openai`, `claude`, `kimi`, `zai`, or the id
 of a custom brain). Keys can also be entered on the Setup page (Claude and Kimi are optional there and checked with a
-free call). `pnpm lab keys` checks all three.
+free call). `pnpm lab keys` checks the configured providers.
 
 ### Custom brains: any number of them
 
@@ -112,7 +113,7 @@ purpose, if its server is down right now). Rules: the address must be `https://`
 `host.docker.internal`, for a local model), the key is stored in the Setup file like the others, never shown again and
 only ever sent to that address, the id may not be a built-in's (`openai`, `claude`, `kimi`, `zai`, `rules`, `ensemble`,
 `jev`, `hive`), and a brain a bunny uses cannot be removed. Once registered a brain can be a bunny's brain (extra bunnies pick
-it when created; the main three via Settings → Brains), sit in councils, do research and draft skills. A new or changed
+it when created; the four main agents via Settings → Brains), sit in councils, do research and draft skills. A new or changed
 brain comes online after **Restart engine**. Built on `CompatBrain` in `src/brains/llm.ts`, which Kimi and GLM use too.
 
 ### Signing Claude in instead of pasting a key
@@ -293,17 +294,17 @@ too (without the live market: its candidates come from the owner, the style, the
 
 ## More bunnies
 
-The three main bunnies are the live dashboard's columns, Setup's bunnies and the Warren's slots. From **Admin → Bunnies** the
-owner can add up to six more (slots `bee4`..`bee9`, nine in all), each with its own name, style, assets, rules and
+The four main agents are the live dashboard's columns and the Warren's slots; Setup designs the first three and adds
+Degen as the fixed fourth. From **Admin → Bunnies** the owner can add up to five more (slots `bee5`..`bee9`, nine in all), each with its own name, style, assets, rules and
 brain (ChatGPT, Claude or Kimi), and edit the assets every bunny may trade (chips from OKX's live coin list). New bunnies
 start after a restart; only the last bunnies can be removed, and only while flat. Extra bunnies race in the leaderboard, the
-"Challengers" card, the lab and the councils; the Warren shows the main three.
+"Challengers" card, the lab and the councils; the Warren shows the main four.
 
 Creating a bunny has two steps: **1. Bunny & brain** (name, style, market, assets, rules, brain), then **2. Wallet &
 exchange**:
 
 - **Wallet**: the money the bunny starts with (and is revived with), instead of the shared `BEE_START_EQUITY_USD`. Its
-  P&L, health, survival tiers and death line are all measured from it. It is fixed once the bunny trades. The main three
+  P&L, health, survival tiers and death line are all measured from it. It is fixed once the bunny trades. The main four
   keep sharing `BEE_START_EQUITY_USD` (Settings → Risk) so the Warren can compare them.
 - **OKX sub-account**: key, secret and passphrase for demo or live. **Test connection & balance** runs a read-only
   check (`src/okx/account.ts`, no orders, no transfers): the keys answer, they have Trade and no Withdraw permission,
@@ -372,10 +373,13 @@ three calls, under the free Basic plan's 10,000 monthly credits, with `CMC_MAX_C
 It is read-only and optional: without a key, or if CMC is down (the last good values are kept up to 2 hours), the
 bunnies trade on the exchange feed alone. The key only travels in CMC's request header; it is never logged or shown.
 
-## The scalper (optional, off)
+## Degen and the scalper
 
 A scalp aims at a few basis points and a round trip costs about as much: the taker fee alone is 10 bp in and out. So the
-scalper is built around costs, in three stages, and it stays off unless every one of them says yes.
+scalper is built around costs, in three stages, and it stays flat unless every one of them says yes. Degen uses this
+method by default, scans an open (`SCALP_COINS=*`) liquid-crypto universe, and the autonomous lab tests a bounded set of
+the most liquid candidates each cycle (`SCALP_UNIVERSE_SIZE`). Access to a coin never bypasses evidence: only a passing,
+current real-data rule can become a mandate.
 
 1. **The lab decides whether it may exist** (`src/lab/scalp.ts`, `pnpm lab fetch --bar 1m --days 14`, `pnpm lab scalp`).
    A cost-first simulator: maker entries fill only when price trades *through* the limit, targets rest as maker limits,
@@ -405,6 +409,11 @@ Safety: a circuit breaker pauses the bunny after `SCALP_MAX_LOSS_STREAK` losses 
 `SCALP_PAUSE_MIN` minutes; per-day trade and fee caps apply; with real money the lab gate cannot be switched off
 (`SCALP_REQUIRE_LAB` is forced on). Scalping loses to fees in dead or wild markets, and it may well be that no rule ever
 passes the lab: that is a valid answer, and the bunny then never scalps.
+
+Degen participates in the same councils, experiment ledger, self-research and durable knowledge graph as every other
+agent. It may propose its own skill, backtest it and remember both accepted and rejected attempts; only tested skills
+can become active. This is autonomous learning with attribution, not permission to execute arbitrary generated code.
+Its points, levels, daily loss stop, survival tiers, death line and revival rules are the same as the rest of the Warren.
 
 ## Gold breakout research (a lab tool, not a live style)
 

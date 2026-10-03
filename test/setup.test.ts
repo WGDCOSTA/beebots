@@ -133,7 +133,8 @@ describe("setup", () => {
     expect(t.saved()).toBe(1);
     expect((await t.post("/setup/save", SAVE)).status).toBe(409);
     const s = loadSettings(t.settingsPath)!;
-    expect(s.bees.map((b) => b.image)).toEqual([true, true, true]);
+    expect(s.bees.map((b) => b.image)).toEqual([true, true, true, false]);
+    expect(s.bees[3]).toMatchObject({ name: "Degen", style: "degen", builtin: true });
     expect(s.bees[1]).toMatchObject({ name: "Donny", rules: BEES[1]!.rules, coins: ["TRUMP"], style: "boozy" });
     const cfg = loadConfig({}, s);
     expect(cfg.mode).toBe("dry");

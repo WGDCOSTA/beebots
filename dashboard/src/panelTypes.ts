@@ -384,7 +384,7 @@ export interface AdminState {
     extra: boolean;
     running: boolean;
     flat: boolean;
-    /** The money it starts with (extra bunnies: set at creation; main three: the shared start equity). */
+    /** The money it starts with (extra bunnies: set at creation; four main agents: the shared start equity). */
     walletUsd: number;
     exchange: Record<ExchangeKind, ExchangeStatus>;
   }> | null;

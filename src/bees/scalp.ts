@@ -98,7 +98,7 @@ export function scalpBrain(d: ScalpDeps): ScalpBrain {
   const lastSignalTs = new Map<string, number>();
   const sigCache = new Map<string, Int8Array>();
 
-  const gate = () => d.rules().filter((r) => d.cfg.coins.includes(r.coin));
+  const gate = () => d.rules().filter((r) => d.cfg.coins.includes("*") || d.cfg.coins.includes(r.coin));
   const ruleFor = (coin: string) => gate().find((r) => r.coin === coin);
   const live = (now: number) => (mandate && now < mandate.expiresAt && mandate.used < mandate.maxTrades ? mandate : null);
   const instIdOf = (ctx: BeeContext, coin: string): string | null => {

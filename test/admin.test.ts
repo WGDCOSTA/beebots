@@ -17,6 +17,7 @@ import { POLICY_DESCRIPTOR_VERSION, type PolicyDescriptor } from "../src/experim
 
 const PW = "correct horse battery";
 const HASH = hashPassword(PW);
+const DEGEN_EDIT = { name: "Degen", tagline: "the autonomous scalper", rules: "Trade short evidence-backed scalps and protect capital.", coins: [] as string[], style: "degen" };
 
 function settingsFile(): string {
   const dir = mkdtempSync(join(tmpdir(), "admin-"));
@@ -66,7 +67,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; m
     restart: () => restarted++,
     coins: () => ["BTC", "ETH", "SOL", "DOGE"],
     macroCoins: () => ({ commodities: ["XAU", "XAG", "CL"], stocks: ["NVDA", "SPY"] }),
-    runningBees: () => opts.running ?? ["bee1", "bee2", "bee3"],
+    runningBees: () => opts.running ?? ["bee1", "bee2", "bee3", "bee4"],
     isFlat: (id) => !(opts.holding ?? []).includes(id),
     forgetBee: (id) => forgotten.push(id),
     revive: (id) => {
@@ -240,15 +241,16 @@ describe("admin API", () => {
       { name: "Zippy", tagline: "the fast", rules: "Only BTC breakouts.", coins: ["BTC"], style: "bizzy" },
       { name: "Calm", tagline: "the calm", rules: "Ride ETH trends.", coins: ["DOGE"], style: "breezy" },
       { name: "Wild", tagline: "the wild", rules: "Chase movers.", coins: [], style: "boozy" },
+      DEGEN_EDIT,
     ];
     const r = await h.call("/admin/bees", { bees });
     expect(r.status).toBe(200);
     const s = loadSettings(h.settingsPath)!;
     expect(s.bees[1]).toMatchObject({ name: "Calm", coins: ["DOGE"], style: "boozy", image: true });
     // Coins must be tradable right now.
-    const badCoin = await h.call("/admin/bees", { bees: [bees[0], { ...bees[1], coins: ["NOPE"] }, bees[2]] });
+    const badCoin = await h.call("/admin/bees", { bees: [bees[0], { ...bees[1], coins: ["NOPE"] }, bees[2], bees[3]] });
     expect(badCoin.body.error).toMatch(/not a live Crypto X-Perp.*NOPE/);
-    expect((await h.call("/admin/bees", { bees: [{ ...bees[0], name: "Bizzy" }, bees[1], bees[2]] })).body.error).toMatch(/official bunn/);
+    expect((await h.call("/admin/bees", { bees: [{ ...bees[0], name: "Bizzy" }, bees[1], bees[2], bees[3]] })).body.error).toMatch(/official bunn/);
   });
 
   it("changes the owner password and the old one stops working", async () => {
@@ -286,31 +288,32 @@ describe("adding and removing bees", () => {
     { name: "Zippy", tagline: "", rules: "", coins: ["BTC"], style: "bizzy" },
     { name: "Calm", tagline: "", rules: "", coins: ["BTC", "ETH"], style: "breezy" },
     { name: "Wild", tagline: "", rules: "", coins: [], style: "boozy" },
+    DEGEN_EDIT,
   ];
 
   it("adds extra bees with fresh books and their own brain, up to nine", async () => {
     const h = harness();
     const r = await h.call("/admin/bees", { bees: [...base, { name: "Scout", tagline: "the new one", rules: "Trade SOL.", coins: ["SOL"], style: "boozy", brain: "claude", walletUsd: 500 }] });
     expect(r.status).toBe(200);
-    expect(loadSettings(h.settingsPath)!.bees[3]).toMatchObject({ name: "Scout", coins: ["SOL"], brain: "claude", image: false });
-    expect(h.forgotten).toEqual(["bee4"]);
-    const listed = (r.body.bees as Array<{ slot: string; extra: boolean; running: boolean }>)[3]!;
-    expect(listed).toMatchObject({ slot: "bee4", extra: true, running: false });
+    expect(loadSettings(h.settingsPath)!.bees[4]).toMatchObject({ name: "Scout", coins: ["SOL"], brain: "claude", image: false });
+    expect(h.forgotten).toEqual(["bee5"]);
+    const listed = (r.body.bees as Array<{ slot: string; extra: boolean; running: boolean }>)[4]!;
+    expect(listed).toMatchObject({ slot: "bee5", extra: true, running: false });
     const ten = Array.from({ length: 10 }, (_, i) => ({ ...base[2], name: `B${i}`, walletUsd: 100 }));
     expect((await h.call("/admin/bees", { bees: ten })).status).toBe(400);
     expect((await h.call("/admin/bees", { bees: base.slice(0, 2) })).status).toBe(400);
   });
 
   it("removes only the last bees, and only while they are flat", async () => {
-    const h = harness({ holding: ["bee4"] });
+    const h = harness({ holding: ["bee5"] });
     await h.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout", walletUsd: 200 }] });
     const r = await h.call("/admin/bees", { bees: base });
     expect(r.status).toBe(409);
-    expect(r.body.error).toMatch(/bee4 still holds a position/);
+    expect(r.body.error).toMatch(/bee5 still holds a position/);
     const h2 = harness();
     await h2.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout", walletUsd: 200 }] });
     expect((await h2.call("/admin/bees", { bees: base })).status).toBe(200);
-    expect(loadSettings(h2.settingsPath)!.bees).toHaveLength(3);
+    expect(loadSettings(h2.settingsPath)!.bees).toHaveLength(4);
   });
 
   it("revives a dead bee, and explains when it cannot", async () => {
@@ -570,6 +573,7 @@ describe("the macro squad in the admin panel", () => {
     { name: "Zippy", tagline: "", rules: "", coins: ["BTC"], style: "bizzy" },
     { name: "Calm", tagline: "", rules: "", coins: ["BTC", "ETH"], style: "breezy" },
     { name: "Wild", tagline: "", rules: "", coins: [], style: "boozy" },
+    DEGEN_EDIT,
   ];
   it("adds gold, energy and stock bees whose coins are checked against their own market", async () => {
     const h = harness();
@@ -581,25 +585,25 @@ describe("the macro squad in the admin panel", () => {
     const r = await h.call("/admin/bees", { bees: [...base, ...squad] });
     expect(r.status).toBe(200);
     const s = loadSettings(h.settingsPath)!;
-    expect(s.bees.slice(3).map((b) => [b.name, b.market, b.style])).toEqual([
+    expect(s.bees.slice(4).map((b) => [b.name, b.market, b.style])).toEqual([
       ["Goldie", "commodities", "boozy"],
       ["Oily", "commodities", "boozy"],
       ["Stonks", "stocks", "boozy"],
     ]);
     const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20) }, s);
-    expect(cfg.slots.bee4).toMatchObject({ market: "commodities", squad: "macro" });
+    expect(cfg.slots.bee5).toMatchObject({ market: "commodities", squad: "macro" });
     expect(cfg.slots.bee1).toMatchObject({ market: "crypto", squad: "crypto" });
-    expect((r.body.bees as Array<{ market: string }>).map((b) => b.market)).toEqual(["crypto", "crypto", "crypto", "commodities", "commodities", "stocks"]);
+    expect((r.body.bees as Array<{ market: string }>).map((b) => b.market)).toEqual(["crypto", "crypto", "crypto", "crypto", "commodities", "commodities", "stocks"]);
     expect(r.body.macroCoins).toEqual({ commodities: ["XAU", "XAG", "CL"], stocks: ["NVDA", "SPY"] });
 
     // A stock on a commodities bee, gold on a crypto bee, or a stock on a main bee: refused.
     const wrong = await h.call("/admin/bees", { bees: [...base, { ...squad[0]!, coins: ["NVDA"] }] });
     expect(wrong.body.error).toMatch(/Goldie: not a live Commodities X-Perp.*NVDA/);
     expect((await h.call("/admin/bees", { bees: [...base, { ...squad[0]!, market: "crypto" }] })).body.error).toMatch(/not a live Crypto/);
-    expect((await h.call("/admin/bees", { bees: [{ ...base[0]!, coins: ["XAU"], market: "commodities" }, base[1], base[2]] })).body.error).toMatch(/Zippy: not a live Crypto/);
+    expect((await h.call("/admin/bees", { bees: [{ ...base[0]!, coins: ["XAU"], market: "commodities" }, base[1], base[2], base[3]] })).body.error).toMatch(/Zippy: not a live Crypto/);
     // Back to crypto: the market field goes away.
     await h.call("/admin/bees", { bees: [...base, { ...squad[2]!, market: "crypto" }] });
-    expect(loadSettings(h.settingsPath)!.bees[3]!.market).toBeUndefined();
+    expect(loadSettings(h.settingsPath)!.bees[4]!.market).toBeUndefined();
   });
 });
 
@@ -609,6 +613,7 @@ describe("a new bee's wallet and exchange account", () => {
     { name: "Zippy", tagline: "", rules: "", coins: ["BTC"], style: "bizzy" },
     { name: "Calm", tagline: "", rules: "", coins: ["BTC", "ETH"], style: "breezy" },
     { name: "Wild", tagline: "", rules: "", coins: [], style: "boozy" },
+    DEGEN_EDIT,
   ];
   const keys = { kind: "demo" as const, apiKey: "demo-key-123456", secretKey: "demo-secret-123456", passphrase: "pass" };
   const facts = (usdc: number, wallet: number, uid = "u-a") => ({
@@ -632,12 +637,12 @@ describe("a new bee's wallet and exchange account", () => {
     expect(no.body.error).toMatch(/set its wallet/);
     const r = await h.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout", walletUsd: 750 }] });
     expect(r.status).toBe(200);
-    expect((r.body.bees as Array<{ walletUsd: number }>).map((b) => b.walletUsd)).toEqual([333, 333, 333, 750]);
+    expect((r.body.bees as Array<{ walletUsd: number }>).map((b) => b.walletUsd)).toEqual([333, 333, 333, 333, 750]);
     const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20) }, loadSettings(h.settingsPath));
-    expect(cfg.slots.bee4.startEquityUsd).toBe(750);
+    expect(cfg.slots.bee5.startEquityUsd).toBe(750);
     expect(cfg.slots.bee1.startEquityUsd).toBe(333);
-    // The main three share the start equity (the Hive compares them).
-    expect((await h.call("/admin/bees", { bees: [{ ...base[0], walletUsd: 900 }, base[1], base[2]] })).body.error).toMatch(/share the start equity/);
+    // The main four share the start equity (the Warren compares them).
+    expect((await h.call("/admin/bees", { bees: [{ ...base[0], walletUsd: 900 }, base[1], base[2], base[3]] })).body.error).toMatch(/share the start equity/);
   });
 
   it("the wallet is fixed once the bee trades", async () => {
@@ -646,7 +651,7 @@ describe("a new bee's wallet and exchange account", () => {
     saveSettings(h.settingsPath, { ...settings, bees: [...settings.bees, { ...settings.bees[2]!, name: "Old", walletUsd: 400 }] });
     // Created but not started yet: still editable.
     expect((await h.call("/admin/bees", { bees: [...base, { ...base[2], name: "Old", walletUsd: 450 }] })).status).toBe(200);
-    const live = harness({ running: ["bee1", "bee2", "bee3", "bee4"] });
+    const live = harness({ running: ["bee1", "bee2", "bee3", "bee4", "bee5"] });
     const s2 = loadSettings(live.settingsPath)!;
     saveSettings(live.settingsPath, { ...s2, bees: [...s2.bees, { ...s2.bees[2]!, name: "Old", walletUsd: 400 }] });
     const r = await live.call("/admin/bees", { bees: [...base, { ...base[2], name: "Old", walletUsd: 450 }] });
@@ -663,27 +668,27 @@ describe("a new bee's wallet and exchange account", () => {
     const poor = await h.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout", walletUsd: 1000, exchange: keys }] });
     expect(poor.status).toBe(400);
     expect(poor.body.error).toMatch(/holds \$200\.00 USDC, less than the bee's \$1000\.00 wallet/);
-    expect(loadSettings(h.settingsPath)!.bees).toHaveLength(3);
+    expect(loadSettings(h.settingsPath)!.bees).toHaveLength(4);
     const ok = await h.call("/admin/bees", { bees: [...base, { ...base[2], name: "Scout", walletUsd: 1000, exchange: keys }] });
     expect(ok.status).toBe(200);
-    const saved = loadSettings(h.settingsPath)!.bees[3]!;
+    const saved = loadSettings(h.settingsPath)!.bees[4]!;
     expect(saved.walletUsd).toBe(1000);
     expect(saved.okx?.demo).toMatchObject({ apiKey: keys.apiKey, balanceUsd: 1200, uidHash: "h-u-a" });
     expect(JSON.stringify(ok.body)).not.toContain(keys.apiKey);
     expect(JSON.stringify(ok.body)).not.toContain(keys.secretKey);
-    expect((ok.body.bees as Array<{ exchange: { demo: unknown } }>)[3]!.exchange.demo).toMatchObject({ set: true, source: "settings", balanceUsd: 1200 });
-    // The engine trades bee4 with the saved keys.
+    expect((ok.body.bees as Array<{ exchange: { demo: unknown } }>)[4]!.exchange.demo).toMatchObject({ set: true, source: "settings", balanceUsd: 1200 });
+    // The engine trades bee5 with the saved keys.
     const cfg = loadConfig(
       {
         TYPESAFE_API_KEY: "k".repeat(20),
         DRY_RUN: "false",
         MODE: "demo",
-        ...Object.fromEntries(["BEE1", "BEE2", "BEE3"].flatMap((b) => [[`${b}_OKX_DEMO_API_KEY`, "x"], [`${b}_OKX_DEMO_API_SECRET`, "x"], [`${b}_OKX_DEMO_API_PASSPHRASE`, "x"]])),
+        ...Object.fromEntries(["BEE1", "BEE2", "BEE3", "BEE4"].flatMap((b) => [[`${b}_OKX_DEMO_API_KEY`, "x"], [`${b}_OKX_DEMO_API_SECRET`, "x"], [`${b}_OKX_DEMO_API_PASSPHRASE`, "x"]])),
       },
       loadSettings(h.settingsPath),
     );
-    expect(cfg.beeIds).toContain("bee4");
-    expect(cfg.creds.bee4).toEqual({ apiKey: keys.apiKey, secretKey: keys.secretKey, passphrase: keys.passphrase });
+    expect(cfg.beeIds).toContain("bee5");
+    expect(cfg.creds.bee5).toEqual({ apiKey: keys.apiKey, secretKey: keys.secretKey, passphrase: keys.passphrase });
   });
 
   it("refuses a second bee on the same OKX account, and keys the environment already sets", async () => {
@@ -694,7 +699,7 @@ describe("a new bee's wallet and exchange account", () => {
     });
     expect(two.status).toBe(400);
     expect(two.body.error).toMatch(/same OKX account as One/);
-    const env = harness({ mode: "demo", env: { BEE4_OKX_DEMO_API_KEY: "from-env" }, okxCheck: async (_c, _k, wallet) => facts(5000, wallet) });
+    const env = harness({ mode: "demo", env: { BEE5_OKX_DEMO_API_KEY: "from-env" }, okxCheck: async (_c, _k, wallet) => facts(5000, wallet) });
     const r = await env.call("/admin/bees", { bees: [...base, { ...base[2], name: "Env", walletUsd: 500, exchange: keys }] });
     expect(r.status).toBe(409);
     expect(r.body.error).toMatch(/set in the environment/);

@@ -1,4 +1,4 @@
-# beebots: three AI trading bunnies on one small VPS. Paper trading unless you deliberately change it.
+# beebots: four main AI trading agents on one small VPS. Paper trading unless you deliberately change it.
 #
 #   docker compose up -d        then open http://<your-server-ip>/ and follow Setup
 #   docker compose logs engine  shows what the engine is doing (Setup is open for 2 hours after it starts)
@@ -44,7 +44,7 @@ services:
       UPDATE_CHECK: ${UPDATE_CHECK:-true}
       # The Warren, the public paper-trading leaderboard. Only used if you join (Setup or the dashboard).
       HIVE_URL: ${HIVE_URL:-https://beebots.tech}
-      # Per-bee OKX keys, for demo or live only (letters: BEE1, BEE2, BEE3).
+      # Per-agent OKX keys, for demo or live only (BEE1..BEE4 are the four main agents).
       BEE1_OKX_DEMO_API_KEY: ${BEE1_OKX_DEMO_API_KEY:-}
       BEE1_OKX_DEMO_API_SECRET: ${BEE1_OKX_DEMO_API_SECRET:-}
       BEE1_OKX_DEMO_API_PASSPHRASE: ${BEE1_OKX_DEMO_API_PASSPHRASE:-}
@@ -54,6 +54,9 @@ services:
       BEE3_OKX_DEMO_API_KEY: ${BEE3_OKX_DEMO_API_KEY:-}
       BEE3_OKX_DEMO_API_SECRET: ${BEE3_OKX_DEMO_API_SECRET:-}
       BEE3_OKX_DEMO_API_PASSPHRASE: ${BEE3_OKX_DEMO_API_PASSPHRASE:-}
+      BEE4_OKX_DEMO_API_KEY: ${BEE4_OKX_DEMO_API_KEY:-}
+      BEE4_OKX_DEMO_API_SECRET: ${BEE4_OKX_DEMO_API_SECRET:-}
+      BEE4_OKX_DEMO_API_PASSPHRASE: ${BEE4_OKX_DEMO_API_PASSPHRASE:-}
       BEE1_OKX_API_KEY: ${BEE1_OKX_API_KEY:-}
       BEE1_OKX_API_SECRET: ${BEE1_OKX_API_SECRET:-}
       BEE1_OKX_API_PASSPHRASE: ${BEE1_OKX_API_PASSPHRASE:-}
@@ -63,6 +66,9 @@ services:
       BEE3_OKX_API_KEY: ${BEE3_OKX_API_KEY:-}
       BEE3_OKX_API_SECRET: ${BEE3_OKX_API_SECRET:-}
       BEE3_OKX_API_PASSPHRASE: ${BEE3_OKX_API_PASSPHRASE:-}
+      BEE4_OKX_API_KEY: ${BEE4_OKX_API_KEY:-}
+      BEE4_OKX_API_SECRET: ${BEE4_OKX_API_SECRET:-}
+      BEE4_OKX_API_PASSPHRASE: ${BEE4_OKX_API_PASSPHRASE:-}
       # Inside the compose network only; the port is never published. Caddy is the only way in.
       ENGINE_BIND: 0.0.0.0
       ENGINE_PORT: "8080"
@@ -86,6 +92,7 @@ services:
       BEE1_BRAIN: ${BEE1_BRAIN:-}
       BEE2_BRAIN: ${BEE2_BRAIN:-}
       BEE3_BRAIN: ${BEE3_BRAIN:-}
+      BEE4_BRAIN: ${BEE4_BRAIN:-}
       LAB_SIGNALS: ${LAB_SIGNALS:-}
       BRAIN_WATCHLIST: ${BRAIN_WATCHLIST:-}
       SPECIALIZATION: ${SPECIALIZATION:-}
@@ -131,6 +138,7 @@ services:
       SCALP_REQUIRE_LAB: ${SCALP_REQUIRE_LAB:-}
       SCALP_LAB_MAX_AGE_DAYS: ${SCALP_LAB_MAX_AGE_DAYS:-}
       SCALP_COINS: ${SCALP_COINS:-}
+      SCALP_UNIVERSE_SIZE: ${SCALP_UNIVERSE_SIZE:-}
       SCALP_MAKER_FEE: ${SCALP_MAKER_FEE:-}
       SCALP_TICK_MS: ${SCALP_TICK_MS:-}
       SCALP_MAKER_WAIT_S: ${SCALP_MAKER_WAIT_S:-}

@@ -207,7 +207,7 @@ describe("brain keys", () => {
 
   it("loadConfig maps each bee to its brain", () => {
     const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), BEE2_BRAIN: "kimi", MOONSHOT_API_KEY: "sk-moon-1234567890" });
-    expect(cfg.brains.slots).toEqual({ bee1: "openai", bee2: "kimi", bee3: "kimi" });
+    expect(cfg.brains.slots).toEqual({ bee1: "openai", bee2: "kimi", bee3: "kimi", bee4: "openai" });
     expect(cfg.brains.creds.kimi?.apiKey).toBe("sk-moon-1234567890");
     expect(cfg.lab.signals).toBe(true);
   });
@@ -265,7 +265,7 @@ describe("engine: LAB_SIGNALS", () => {
 describe("brain settings from docker compose", () => {
   it("blank variables mean the defaults", () => {
     const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), BEE1_BRAIN: "", BEE2_BRAIN: " ", CLAUDE_EFFORT: "", CLAUDE_MODEL: "" });
-    expect(cfg.brains.slots).toEqual({ bee1: "openai", bee2: "claude", bee3: "kimi" });
+    expect(cfg.brains.slots).toEqual({ bee1: "openai", bee2: "claude", bee3: "kimi", bee4: "openai" });
     expect(() => loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), BEE1_BRAIN: "gemini" })).toThrow(/BEE1_BRAIN/);
   });
 });

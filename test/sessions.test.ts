@@ -10,6 +10,7 @@ import {
   sessionLabel,
   type TickSample,
 } from "../src/market/sessions.js";
+import { DEGEN_SETTINGS } from "../src/settings.js";
 
 // Monday 2026-09-28 00:00 UTC.
 const MON = Date.UTC(2026, 8, 28);
@@ -95,6 +96,7 @@ describe("engine with a macro bee", () => {
       createdAt: 1,
       bees: [
         ...["A", "B", "C"].map((n) => ({ name: `Bee ${n}`, style: "boozy" as const, tagline: "", rules: "", coins: [], image: false })),
+        DEGEN_SETTINGS,
         { name: "Goldie", style: "boozy" as const, tagline: "", rules: "", coins: [], image: false, market: "commodities" as const },
       ],
     };
@@ -160,6 +162,7 @@ describe("engine: the macro style end to end", () => {
       createdAt: 1,
       bees: [
         ...["A", "B", "C"].map((n) => ({ name: `Bee ${n}`, style: "boozy" as const, tagline: "", rules: "", coins: [], image: false })),
+        DEGEN_SETTINGS,
         { name: "Goldie", style: "breezy" as const, tagline: "", rules: "", coins: ["XAU"], image: false, market: "commodities" as const },
       ],
     };
@@ -190,7 +193,7 @@ describe("engine: the macro style end to end", () => {
     await engine.start();
     engine.stop();
     await engine.tick();
-    const p = engine.bees.bee4.position!;
+    const p = engine.bees.bee5.position!;
     expect(p?.coin).toBe("XAU");
     const notional = p.contracts * v.instruments.get(xau)!.ctVal * 4000;
     // 1x equity x 0.97 margin headroom x full conviction x 0.5 late-session factor (60 min to the break).
@@ -202,8 +205,8 @@ describe("engine: the macro style end to end", () => {
     answer = "HOLD";
     t = NOW + 55 * 60_000;
     await engine.tick();
-    expect(engine.bees.bee4.position).toBeNull();
-    const last = db.raw.prepare("SELECT forced_by FROM decisions WHERE bee = 'bee4' ORDER BY ts DESC LIMIT 1").get() as { forced_by: string | null };
+    expect(engine.bees.bee5.position).toBeNull();
+    const last = db.raw.prepare("SELECT forced_by FROM decisions WHERE bee = 'bee5' ORDER BY ts DESC LIMIT 1").get() as { forced_by: string | null };
     expect(last.forced_by).toBe("session_close");
   });
 });

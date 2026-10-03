@@ -2,7 +2,7 @@
 
 OKX lists X-Perps on commodities (XAU gold, XAG silver, CL WTI oil, BZ Brent) and on about 60 stocks and ETFs (NVDA,
 TSLA, MSTR, SPY, QQQ, SOXL, …). The **macro squad** is a group of extra bunnies that trade those instead of crypto. The
-three main bunnies (and every bunny by default) stay crypto-only.
+four main agents (and every bunny by default) stay crypto-only.
 
 ## Forming it
 

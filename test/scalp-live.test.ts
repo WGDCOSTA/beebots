@@ -37,6 +37,14 @@ const mk = (b: ReturnType<typeof brainOf>, c: Candle[], now = NOW, spreadBp = 1,
 };
 
 describe("the scalp brain: the mandate", () => {
+  it("treats SCALP_COINS=* as an open universe, but still offers only coins approved by the lab", () => {
+    const solRule = { ...RULE, coin: "SOL" };
+    const b = brainOf([solRule], { SCALP_COINS: "*" });
+    const v = view([coin("BTC"), coin("SOL", { spreadBp: 0.8 })]);
+    const c = { ...ctx("degen", bee("degen"), v, b.cfg, NOW), candles1m: () => quiet() };
+    expect(Object.keys(b.brain.menu(c)).sort()).toEqual(["SCALP_ON_SOL_BOTH", "SCALP_ON_SOL_LONG", "SCALP_ON_SOL_SHORT", "WAIT"]);
+  });
+
   it("offers a mandate on each coin the lab passed, and only WAIT when the gate is closed, a mandate runs, or Jev was just asked", () => {
     const b = brainOf();
     const labels = Object.keys(b.brain.menu(mk(b, quiet())));
@@ -207,7 +215,7 @@ function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: 
 async function started(r: ReturnType<typeof rig>) {
   await r.engine.start();
   r.engine.stop();
-  for (const id of ["bee2", "bee3"] as const) r.engine.bees[id].cap = "trade_cap"; // only bee1 acts
+  for (const id of ["bee2", "bee3", "bee4"] as const) r.engine.bees[id].cap = "trade_cap"; // only bee1 acts
 }
 
 const fills = (db: Db) => db.raw.prepare("SELECT o.purpose AS purpose, o.side AS side, f.px AS px, f.fee_usd AS fee, f.realised_usd AS realised FROM fills f JOIN orders o ON o.id = f.order_id ORDER BY f.id").all() as Array<{ purpose: string; side: string; px: number; fee: number; realised: number }>;
@@ -293,9 +301,9 @@ describe("the engine: Jev sets a mandate, code scalps inside it", () => {
     expect(r.engine.snapshot().system!.scalp.reason).toMatch(/no edge/);
   });
 
-  it("SCALP is off by default: no scalp loop, no method, nothing changes for anyone", async () => {
+  it("Degen enables SCALP by default, but the master switch can still disable it", async () => {
     const cfg = testConfig({ DRY_RUN: "true" });
-    expect(cfg.scalp.enabled).toBe(false);
+    expect(cfg.scalp.enabled).toBe(true);
     const r = rig({ SCALP: "false" });
     await started(r);
     await r.engine.tick();
@@ -306,7 +314,7 @@ describe("the engine: Jev sets a mandate, code scalps inside it", () => {
   });
 
   it("with real money the lab gate cannot be switched off", () => {
-    const live = testConfig({ DRY_RUN: "false", MODE: "live", LIVE_ACK: "I-ACCEPT-REAL-MONEY-RISK", SCALP: "true", SCALP_REQUIRE_LAB: "false", BEE1_OKX_API_KEY: "a", BEE1_OKX_API_SECRET: "b", BEE1_OKX_API_PASSPHRASE: "c", BEE2_OKX_API_KEY: "a", BEE2_OKX_API_SECRET: "b", BEE2_OKX_API_PASSPHRASE: "c", BEE3_OKX_API_KEY: "a", BEE3_OKX_API_SECRET: "b", BEE3_OKX_API_PASSPHRASE: "c" });
+    const live = testConfig({ DRY_RUN: "false", MODE: "live", LIVE_ACK: "I-ACCEPT-REAL-MONEY-RISK", SCALP: "true", SCALP_REQUIRE_LAB: "false", BEE1_OKX_API_KEY: "a", BEE1_OKX_API_SECRET: "b", BEE1_OKX_API_PASSPHRASE: "c", BEE2_OKX_API_KEY: "a", BEE2_OKX_API_SECRET: "b", BEE2_OKX_API_PASSPHRASE: "c", BEE3_OKX_API_KEY: "a", BEE3_OKX_API_SECRET: "b", BEE3_OKX_API_PASSPHRASE: "c", BEE4_OKX_API_KEY: "a", BEE4_OKX_API_SECRET: "b", BEE4_OKX_API_PASSPHRASE: "c" });
     expect(live.mode).toBe("live");
     expect(live.scalp.requireLab).toBe(true);
     expect(scalpCfg({ SCALP_REQUIRE_LAB: "false" }).scalp.requireLab).toBe(false); // paper: the owner's call

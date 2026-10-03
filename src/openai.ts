@@ -1,9 +1,9 @@
 // OpenAI helpers for the Setup page: design a bee from the owner's sentence (one small, cheap text call), and paint its
-// portrait in the same art style as the original three (one image edit with the three portraits as references; they
+// portrait in the same art style as the original three owner-designed characters (one image edit with those portraits as references; they
 // are references only and are never shown for an owner's bee). Nothing here runs outside Setup.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { STYLE_INFO, STYLES, type StyleId } from "./settings.js";
+import { DESIGN_STYLES, STYLE_INFO, type StyleId } from "./settings.js";
 
 const API = "https://api.openai.com/v1";
 
@@ -46,8 +46,8 @@ export interface BeeDesign {
  * list; the model may only restrict the bee to coins on it.
  */
 export async function designBee(apiKey: string, model: string, description: string, coins: string[], timeoutMs = 30_000): Promise<BeeDesign> {
-  const styles = STYLES.map((s) => `- ${s} (${STYLE_INFO[s].label}): ${STYLE_INFO[s].blurb}`).join("\n");
-  const reserved = STYLES.map((s) => STYLE_INFO[s].name).join(", ");
+  const styles = DESIGN_STYLES.map((s) => `- ${s} (${STYLE_INFO[s].label}): ${STYLE_INFO[s].blurb}`).join("\n");
+  const reserved = DESIGN_STYLES.map((s) => STYLE_INFO[s].name).join(", ");
   const res = await fetch(`${API}/chat/completions`, {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
@@ -89,7 +89,7 @@ export async function designBee(apiKey: string, model: string, description: stri
               tagline: { type: "string" },
               rules: { type: "string" },
               coins: { type: "array", items: { type: "string" } },
-              baseStyle: { type: "string", enum: [...STYLES] },
+              baseStyle: { type: "string", enum: [...DESIGN_STYLES] },
               look: { type: "string" },
             },
           },
@@ -102,7 +102,7 @@ export async function designBee(apiKey: string, model: string, description: stri
   const raw = j.choices?.[0]?.message?.content;
   if (!raw) throw new OpenAiError(502, "empty answer");
   const out = JSON.parse(raw) as BeeDesign;
-  if (!STYLES.includes(out.baseStyle)) throw new OpenAiError(502, "unknown style in answer");
+  if (!(DESIGN_STYLES as readonly string[]).includes(out.baseStyle)) throw new OpenAiError(502, "unknown style in answer");
   return out;
 }
 

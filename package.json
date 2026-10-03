@@ -2,7 +2,7 @@
   "name": "beebots",
   "version": "2026.9.27",
   "private": true,
-  "description": "Three AI trading bees on OKX EEA X-Perps, every decision made by Jev",
+  "description": "Four autonomous AI trading agents on OKX EEA X-Perps, governed by Jev and hard risk controls",
   "type": "module",
   "engines": {
     "node": ">=22.13"

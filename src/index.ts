@@ -94,8 +94,8 @@ function profile(cfg: Config | null) {
             market: s.market,
             squad: s.squad,
             // A Setup-made bunny only ever shows its own portrait (null = the dashboard's placeholder mark), never the
-            // original bunnies' art, which belongs to the three official bunnies.
-            img: portraitUrl(cfg.settingsPath, id, s) ?? (s.fromSetup ? null : `/bees/${s.style}.jpg`),
+            // original bunnies' art, which belongs to the official main agents.
+            img: portraitUrl(cfg.settingsPath, id, s) ?? (s.fromSetup ? null : s.style === "degen" ? "/bees/degen.png" : `/bees/${s.style}.jpg`),
           };
         })
       : [],
@@ -193,7 +193,7 @@ async function main() {
     unlinkSync(resumeFlag);
     return true;
   };
-  // The warren memory (knowledge graph) and the three LLM brains. Brains never trade: they curate skills and lessons.
+  // The warren memory (knowledge graph) and the configured LLM brains. Brains never place orders: they curate skills and lessons.
   const graph = new KnowledgeGraph(cfg.lab.graphPath);
   const clients = makeClients(cfg.brains.creds);
   const councilBees: CouncilBee[] = cfg.beeIds.map((id) => {
@@ -350,10 +350,13 @@ async function main() {
   // Keep the evidence underneath every learned skill fresh without ever blocking a trading tick. History downloads,
   // walk-forward tournaments and scalp validation run in a child process; their schedule survives engine restarts.
   const swapInstrument = (coin: string) => coin.includes("-") ? coin.toUpperCase() : `${coin.toUpperCase()}-USDT-SWAP`;
+  const scalpUniverse = cfg.scalp.coins.includes("*")
+    ? feed.view().gated.slice(0, cfg.scalp.universeSize)
+    : cfg.scalp.coins.map(swapInstrument);
   const autoLabInstruments = [...new Set([
     "BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP", "HYPE-USDT-SWAP",
     ...cfg.beeIds.filter((id) => cfg.slots[id].market === "crypto").flatMap((id) => cfg.slots[id].coins.map(swapInstrument)),
-    ...cfg.scalp.coins.map(swapInstrument),
+    ...scalpUniverse,
   ])];
   const autoLab = new AutoLab({
     db,
@@ -361,7 +364,7 @@ async function main() {
     scalpIntervalHours: cfg.lab.autoScalpLabIntervalHours,
     startDelayMin: cfg.lab.autoLabStartDelayMin,
     instruments: autoLabInstruments,
-    scalpCoins: [...new Set(cfg.scalp.coins.map(swapInstrument))],
+    scalpCoins: [...new Set(scalpUniverse)],
     scalpEnabled: cfg.scalp.enabled,
     run: labProcessRunner(cfg.settingsPath),
   });
@@ -499,7 +502,7 @@ async function main() {
       return {
         startedAt: snap.startedAt,
         startEquityUsd: snap.startEquityUsd,
-        // The Warren leaderboard knows the three main slots only; extra bunnies race locally.
+        // The Warren leaderboard knows the four main slots only; extra bunnies race locally.
         bees: snap.bees.filter((b) => (BEES as readonly string[]).includes(b.bee)).map((b) => {
           const s = cfg.slots[b.bee];
           return { slot: b.bee, name: s.name, style: s.style, tagline: s.tagline, rules: s.rules, coins: s.coins, equityUsd: b.equityUsd, fundingUsd: b.totals.fundingUsd, cap: b.cap, tradesToday: b.tradesToday };

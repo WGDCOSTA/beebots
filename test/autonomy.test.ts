@@ -65,7 +65,7 @@ describe("choosing a specialisation", () => {
 
   it("offers the market's styles and the lab's positive, stable skills; anything else is kept", () => {
     const opts = methodOptions({ market: "crypto", current: { kind: "own", id: "boozy" }, ranking: rank() });
-    expect(opts.styles).toEqual(["bizzy", "breezy", "boozy"]);
+    expect(opts.styles).toEqual(["bizzy", "breezy", "boozy", "degen"]);
     expect(opts.skills.every((s) => s.score > 0 && s.stabilityPct >= 40)).toBe(true);
     expect(methodOptions({ market: "stocks", current: { kind: "own", id: "macro" }, ranking: null }).styles).toEqual(["macro"]);
     expect(resolvePick({ kind: "style", id: "breezy", reason: "trend season" }, opts, 1)).toMatchObject({ kind: "style", id: "breezy" });

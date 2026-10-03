@@ -12,7 +12,7 @@ import { Evolution, levelFor, perksFor, tierFor, type EvolutionEvent, type Evolu
 import { KnowledgeGraph, nodeId } from "../src/graph/graph.js";
 import { freshBee } from "../src/ledger.js";
 import { syntheticCandles } from "../src/lab/history.js";
-import type { Settings } from "../src/settings.js";
+import { DEGEN_SETTINGS, type Settings } from "../src/settings.js";
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 8, 1, 12);
@@ -216,13 +216,16 @@ describe("extra bees", () => {
     jevKey: "jev-key-12345678",
     acceptedRiskAt: 1,
     createdAt: 1,
-    bees: Array.from({ length: n }, (_, i) => ({ name: `Bee ${i}`, style: "boozy" as const, tagline: "", rules: "", coins: [], image: false, ...(i >= 3 && brain ? { brain } : {}) })),
+    bees: Array.from({ length: n }, (_, i) =>
+      i === 3 ? { ...DEGEN_SETTINGS } : { name: `Bee ${i}`, style: "boozy" as const, tagline: "", rules: "", coins: [], image: false, ...(i >= 4 && brain ? { brain } : {}) },
+    ),
   });
 
   it("the engine runs every bee in the Setup file, extras with the brain picked for them", () => {
     const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20) }, settings(5, "claude"));
     expect(cfg.beeIds).toEqual(["bee1", "bee2", "bee3", "bee4", "bee5"]);
-    expect(cfg.brains.slots.bee4).toBe("claude");
+    expect(cfg.brains.slots.bee4).toBe("openai");
+    expect(cfg.brains.slots.bee5).toBe("claude");
     expect(cfg.slots.bee5.name).toBe("Bee 4");
   });
 
@@ -237,7 +240,7 @@ describe("extra bees", () => {
   it("survival lines always sit above the death line, in order; limit boosts are off with real money", () => {
     expect(loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), SURVIVAL_CRITICAL_PCT: "30" }).evolution).toMatchObject({ criticalPct: 41, dangerPct: 80 });
     expect(loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), BEE_RETIRE_AT_PCT: "85" }).evolution).toMatchObject({ criticalPct: 86, dangerPct: 87 });
-    expect(loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), DRY_RUN: "false", MODE: "live", LIVE_ACK: "I-ACCEPT-REAL-MONEY-RISK", ...Object.fromEntries(["BEE1", "BEE2", "BEE3"].flatMap((b) => ["KEY", "SECRET", "PASSPHRASE"].map((k) => [`${b}_OKX_API_${k}`, "x".repeat(12)]))) }).evolution.boostLimits).toBe(false);
+    expect(loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), DRY_RUN: "false", MODE: "live", LIVE_ACK: "I-ACCEPT-REAL-MONEY-RISK", ...Object.fromEntries(["BEE1", "BEE2", "BEE3", "BEE4"].flatMap((b) => ["KEY", "SECRET", "PASSPHRASE"].map((k) => [`${b}_OKX_API_${k}`, "x".repeat(12)]))) }).evolution.boostLimits).toBe(false);
   });
 });
 

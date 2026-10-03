@@ -76,13 +76,13 @@ const insts = (f: Record<string, string>) => (f.inst ? f.inst.split(",").map((s)
 
 function councilBees(): CouncilBee[] {
   const clients = makeClients(env.creds);
-  // The main three, then any extra bees added from the admin panel.
+  // The main four, then any extra bees added from the admin panel.
   const n = Math.max(BEES.length, Math.min(MAX_BEES, settings?.bees.length ?? 0));
   return Array.from({ length: n }, (_, i) => {
     const slot = slotId(i);
     const b = settings?.bees[i];
-    const style = b?.style ?? (["bizzy", "breezy", "boozy"] as const)[i] ?? "boozy";
-    const brain = env.slots[slot] ?? b?.brain ?? (["openai", "claude", "kimi"] as const)[i % 3]!;
+    const style = b?.style ?? (["bizzy", "breezy", "boozy", "degen"] as const)[i] ?? "boozy";
+    const brain = env.slots[slot] ?? b?.brain ?? (["openai", "claude", "kimi", "openai"] as const)[i % 4]!;
     return {
       slot,
       name: b?.name ?? STYLE_INFO[style].name,

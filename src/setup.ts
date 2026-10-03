@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { BEES, isBeeId } from "./config.js";
+import { DESIGNABLE_BEES, isBeeId } from "./config.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send } from "./gate.js";
 import { checkJevKey } from "./jev.js";
 import { log } from "./log.js";
@@ -23,7 +23,7 @@ import { ANTHROPIC_PROFILE, anthropicLoginCommand, checkClaudeKey, checkKimiKey,
 import { checkOpenAiKey, designBee, OpenAiError, paintBee, type BeeDesign } from "./openai.js";
 import { safeError } from "./redact.js";
 import { clientAddr } from "./visitors.js";
-import { BeeSchema, isReservedName, saveSettings, STYLE_INFO, STYLES, type Settings } from "./settings.js";
+import { BeeSchema, DESIGN_STYLES, isReservedName, saveSettings, STYLE_INFO, STYLES, type Settings } from "./settings.js";
 
 const MAX_PAINTS = 24;
 const MAX_DESIGNS = 60;
@@ -190,7 +190,7 @@ export class Setup {
       serverHasOpenAiKey: !!this.o.openai.apiKey,
       // Claude without a key: an Anthropic Console sign-in made with the Anthropic CLI (brains/llm.ts).
       anthropicLogin: { command: anthropicLoginCommand(), active: hasAnthropicLogin() },
-      styles: STYLES.map((id) => ({ id, ...STYLE_INFO[id] })),
+      styles: DESIGN_STYLES.map((id) => ({ id, ...STYLE_INFO[id] })),
     };
   }
 
@@ -315,8 +315,8 @@ export class Setup {
         const jpg = await this.paint(key, this.o.openai.imageModel, this.o.refDir, name || "a new bunny", look);
         const dir = imageDir(this.o.settingsPath);
         mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, `${BEES[slot]}.jpg`), jpg);
-        return send(res, 200, { ok: true, url: `/bee-image/${BEES[slot]}?v=${Date.now()}` });
+        writeFileSync(join(dir, `${DESIGNABLE_BEES[slot]}.jpg`), jpg);
+        return send(res, 200, { ok: true, url: `/bee-image/${DESIGNABLE_BEES[slot]}?v=${Date.now()}` });
       }
 
       case "/setup/save": {
@@ -327,7 +327,7 @@ export class Setup {
         }
         const b = parsed.data;
         if (!b.openaiKey && !this.o.openai.apiKey) return send(res, 400, { error: "Your bunnies need an OpenAI key (it designs and paints them)." });
-        const missing = BEES.filter((slot) => imagePath(this.o.settingsPath, slot) === null);
+        const missing = DESIGNABLE_BEES.filter((slot) => imagePath(this.o.settingsPath, slot) === null);
         if (missing.length) return send(res, 400, { error: "Every bunny needs its portrait before you start." });
         const jevErr = await this.checkJev(b.jevKey, this.o.jevModel);
         if (jevErr) return send(res, 400, { error: jevErr });

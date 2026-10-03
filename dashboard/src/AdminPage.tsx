@@ -76,7 +76,7 @@ function Login({ onIn }: { onIn: (pw: string, s: AdminState) => void }) {
 
 function Overview({ s, setTab }: { s: AdminState; setTab: (t: Tab) => void }) {
   const keysSet = (Object.keys(s.keys) as KeyName[]).filter((k) => s.keys[k].set);
-  const brains = ["BEE1_BRAIN", "BEE2_BRAIN", "BEE3_BRAIN"].map((k) => s.fields.find((f) => f.key === k)?.value);
+  const brains = ["BEE1_BRAIN", "BEE2_BRAIN", "BEE3_BRAIN", "BEE4_BRAIN"].map((k) => s.fields.find((f) => f.key === k)?.value);
   const job = s.lab.job;
   return (
     <>
@@ -479,7 +479,7 @@ function ExchangeStep({ b, s, password, onChange }: { b: BeeDraft; s: AdminState
             ? walletEditable
               ? "Its paper book, health and death line are measured from this. On OKX the sub-account must hold at least this much USDC."
               : "Set when the bunny was created. Revive keeps it."
-            : "The main three share the start equity (Settings → Risk) so the Warren can compare them."}
+            : "The main four share the start equity (Settings → Risk) so the Warren can compare them."}
         </span>
       </label>
       <div className="xstatus">
@@ -705,7 +705,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         checkedFor: null,
       })) ?? null,
   );
-  if (!bees) return <div className="pcard">The original three bunnies run without a Setup file, so there is nothing to edit here. Design your own bunnies on Setup to customise them.</div>;
+  if (!bees) return <div className="pcard">The official agents run without a Setup file, so there is nothing to edit here. Design your own bunnies on Setup to customise them.</div>;
   const evo = new Map((s.evolution?.board ?? []).map((r) => [r.bee, r]));
   const set = (i: number, patch: Partial<BeeDraft>) => setBees(bees.map((b, j) => (j === i ? { ...b, ...patch } : b)));
   const add = () =>
@@ -924,7 +924,7 @@ function BeesTab({ s, call, password }: { s: AdminState; call: (path: string, bo
         <span className="dim small">
           {firstBlock >= 0
             ? `${bees[firstBlock]!.name || bees[firstBlock]!.slot}: ${blockers[firstBlock]}.`
-            : "Extra bunnies race here and in the lab; the Warren leaderboard shows the main three. A new bunny is created only after its wallet is set and, outside paper trading, its OKX sub-account passes the check."}
+            : "Extra bunnies race here and in the lab; the Warren leaderboard shows the main four. A new bunny is created only after its wallet is set and, outside paper trading, its OKX sub-account passes the check."}
         </span>
       </div>
       {s.sessions && <SessionsCard sessions={s.sessions} />}

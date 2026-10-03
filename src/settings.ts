@@ -1,17 +1,19 @@
 // What the first-run Setup page saves: the Jev key, an optional OpenAI key, the risk acknowledgement, the three
-// bunnies (name, trading style, tagline, optional generated portrait), and whether to join the Warren. Stored as one JSON file in the data volume,
+// owner-designed bunnies (name, style, tagline, portrait), and whether to join the Warren. Degen is the fixed fourth agent. Stored as one JSON file in the data volume,
 // readable by the engine's user only. Secrets in here are never sent to the dashboard or written to a log.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { BRAIN_ID_RE, checkBaseUrl, RESERVED_BRAIN_IDS } from "./brains/llm.js";
 
-export const STYLES = ["bizzy", "breezy", "boozy"] as const;
-/** A trading style is one of the three built-in strategies, named after the bunny that first traded it. */
+/** The three styles an owner-designed Setup bunny may start with. Degen is the fixed fourth main agent. */
+export const DESIGN_STYLES = ["bizzy", "breezy", "boozy"] as const;
+export const STYLES = [...DESIGN_STYLES, "degen"] as const;
+/** A trading style is one of the built-in strategies, named after the bunny that first traded it. */
 export type StyleId = (typeof STYLES)[number];
 
 /**
- * What a bunny trades. The main three and every bunny by default: crypto. Extra bunnies may join the macro squad instead:
+ * What a bunny trades. The four main agents and every bunny by default: crypto. Extra bunnies may join the macro squad instead:
  * commodities (gold, silver, oil), stocks (stocks and ETFs) or macro (both). Non-crypto trading also needs
  * ALLOW_NON_CRYPTO=true and a verified open session (market/sessions.ts).
  */
@@ -45,9 +47,15 @@ export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: s
     name: "Boozy",
     tagline: "the degen",
   },
+  degen: {
+    label: "Scalper",
+    blurb: "Fast long and short trades across the liquid crypto universe. Trades only evidence-backed one-minute setups after costs.",
+    name: "Degen",
+    tagline: "the autonomous scalper",
+  },
 };
 
-/** The original three are the official bunnies: owners' bunnies may not use their names ("Bizzy", "bizzy-bee", "Bizzie Bunny"). */
+/** The four main agents are official: owners' bunnies may not reuse their names ("Bizzy", "Degen", etc.). */
 const squash = (s: string) =>
   s
     .toLowerCase()
@@ -98,15 +106,17 @@ const BeeSchema = z.object({
     .default([]),
   /** What the bunny looks like (used for its portrait). */
   look: z.string().trim().max(400).optional(),
-  /** What it trades (extra bunnies only; absent = crypto, and the main three are always crypto). */
+  /** What it trades (extra bunnies only; absent = crypto, and the four main agents are always crypto). */
   market: z.enum(MARKETS).optional(),
   /** Extra bunnies: the LLM brain chosen when the bunny was added (main bunnies use BEE1_BRAIN..BEE3_BRAIN). */
   brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/).optional(),
   /** true once a portrait has been generated for this bunny (served from the data volume). */
   image: z.boolean().default(false),
+  /** Fixed official agent added by a settings migration, rather than designed by the owner in Setup. */
+  builtin: z.boolean().optional(),
   /**
    * The bunny's own wallet: the money it starts with (and is revived with), in USD. Absent = BEE_START_EQUITY_USD.
-   * Set when the bunny is created from the admin panel; the main three share BEE_START_EQUITY_USD (the Warren compares them).
+   * Set when the bunny is created from the admin panel; the four main agents share BEE_START_EQUITY_USD (the Warren compares them).
    */
   walletUsd: z.number().min(10).max(1_000_000).optional(),
   /**
@@ -186,7 +196,7 @@ export const SettingsSchema = z.object({
   ownerPasswordHash: z.string().startsWith("scrypt$").optional(),
   /** When the operator ticked the risk statements on the Setup page. */
   acceptedRiskAt: z.number(),
-  /** The three main bunnies, then up to six extra bunnies added from the admin panel. */
+  /** The four main agents, then up to five extra bunnies added from the admin panel. */
   bees: z.array(BeeSchema).min(3).max(9),
   /** The "Join the Warren?" answer on the Setup page (absent in files saved before the Warren existed). */
   hive: z.boolean().optional(),
@@ -197,11 +207,25 @@ export type Settings = z.infer<typeof SettingsSchema>;
 export type BeeSettings = z.infer<typeof BeeSchema>;
 export { BeeSchema };
 
+/** Backwards-compatible fourth main agent for installs whose Setup file contains the original three. */
+export const DEGEN_SETTINGS: BeeSettings = {
+  name: "Degen",
+  style: "degen",
+  tagline: "the autonomous scalper",
+  rules:
+    "Seek short, fast, evidence-backed trades in either direction. Prefer tight spreads and enough movement to clear every fee. Bank small gains, cut failed setups quickly, and never trade merely to stay busy.",
+  coins: [],
+  image: false,
+  builtin: true,
+};
+
 export function loadSettings(path: string): Settings | null {
   if (!existsSync(path)) return null;
   const parsed = SettingsSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
   if (!parsed.success) throw new Error(`${path} is not valid (${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}). Delete it and run Setup again.`);
-  return parsed.data;
+  // Existing installs have three Setup-designed agents. Give them the new fixed fourth main agent in memory; the next
+  // Admin save persists it. We only auto-insert when there are exactly three, so an old bee4's books are never shifted.
+  return parsed.data.bees.length === 3 ? { ...parsed.data, bees: [...parsed.data.bees, { ...DEGEN_SETTINGS }] } : parsed.data;
 }
 
 /** Atomic write, owner-only permissions. */

@@ -3,6 +3,7 @@
 // bee's entries and exits live (bees/skill.ts); the engine switches only while the bee is flat (engine.ts).
 import { z } from "zod";
 import type { Ranking } from "../lab/tournament.js";
+import { STYLES } from "../settings.js";
 
 /** Answer fragment every council carries: keep the current method, or pick a style or a skill. */
 export const SPECIALIZATION_SCHEMA = {
@@ -29,7 +30,7 @@ export interface MethodOptions {
 
 /** What a bee may specialise in: its market's styles, and the lab's positive, reasonably stable skills. */
 export function methodOptions(o: { market: string; current: MethodOptions["current"]; ranking: Ranking | null; extraSkills?: string[]; limit?: number; /** Styles offered on top (the scalper, only while the lab gate is open). */ extraStyles?: string[] }): MethodOptions {
-  const styles = [...(o.market === "crypto" ? ["bizzy", "breezy", "boozy"] : ["macro"]), ...(o.market === "crypto" ? (o.extraStyles ?? []) : [])];
+  const styles = [...(o.market === "crypto" ? [...STYLES] : ["macro"]), ...(o.market === "crypto" ? (o.extraStyles ?? []) : [])];
   const skills = (o.ranking?.results ?? [])
     .filter((r) => r.family !== "benchmark" && r.score > 0 && r.stabilityPct >= 40)
     // Keep the list bounded for prompt size, but do not restrict agents to a tiny style-shaped shortlist.
