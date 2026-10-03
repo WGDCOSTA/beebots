@@ -2722,3 +2722,90 @@ body:has(.app),
   flex: none;
   min-height: max(44rem, calc(100vh - 12rem));
 }
+
+/* ---------- the crew (Crew.tsx): the Owl, the Rat and the Pig, three cards in a row under the Farmer ---------- */
+.crew-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: -0.3rem 0 0.9rem;
+}
+.crew-row .farmer {
+  margin: 0;
+  align-content: start;
+}
+/* each member has its own colour, on the card and its portrait ring */
+.crew-owl { --crew: #9085e9; }
+.crew-rat { --crew: #3fb9c9; }
+.crew-pig { --crew: #e77fa4; }
+.crew-card {
+  border-color: color-mix(in srgb, var(--crew) 45%, var(--line));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--crew) 9%, var(--card)), var(--card) 60%);
+}
+.crew-card .crew-face {
+  border-color: var(--crew);
+  box-shadow: 0 0 1rem color-mix(in srgb, var(--crew) 35%, transparent);
+}
+.crew-emoji {
+  display: inline-grid;
+  place-items: center;
+  font-size: 1.9rem;
+  line-height: 1;
+}
+.crew-emoji.sm {
+  font-size: 1.1rem;
+}
+.crew-job {
+  margin: -0.35rem 0 0;
+}
+.crew-card .farmer-quote p {
+  font-size: 0.95rem;
+}
+.crew-notes li {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+}
+.crew-level {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.crew-level.l-watch {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+}
+.crew-level.l-act {
+  color: var(--critical-text);
+  border-color: color-mix(in srgb, var(--critical) 60%, var(--line));
+}
+.crew-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.crew-tabs a {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text-2);
+  text-decoration: none;
+  font-weight: 600;
+}
+.crew-tabs a.on {
+  color: var(--text);
+  border-color: var(--bizzy);
+}
+@media (max-width: 1100px), (max-aspect-ratio: 4/5) {
+  .crew-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

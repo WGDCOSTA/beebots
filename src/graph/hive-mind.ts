@@ -153,6 +153,8 @@ export function contextFor(g: KnowledgeGraph, slot: string) {
     myLessons: recent,
     memory: memories(g, bee, 4),
     labLessons: g.lessons(nodeId("run", "lab"), 3).map((l) => l.text),
+    // The Rat's latest market brief (brains/crew.ts): context, never orders. The Owl's and the Pig's notes arrive in the inbox.
+    marketBrief: g.lessons(nodeId("run", "rat"), 1).map((l) => l.text)[0] ?? null,
     adopted,
     research,
     tradeRecord: record,

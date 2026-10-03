@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { AdminPage } from "./AdminPage";
 import { ArenaPage } from "./ArenaPage";
 import { BunnyPage } from "./BunnyPage";
+import { CrewPage } from "./Crew";
 import { FarmerPage } from "./Farmer";
 import { LabPage } from "./LabPage";
 import { createRoot } from "react-dom/client";
@@ -25,6 +26,7 @@ function Routes() {
   if (route === "arena") return <ArenaPage />;
   if (route === "bunny") return <BunnyPage />;
   if (route === "farmer") return <FarmerPage />;
+  if (route === "crew") return <CrewPage />;
   return <App />;
 }
 

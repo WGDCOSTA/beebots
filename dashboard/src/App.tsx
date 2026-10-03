@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BeeColumn, money } from "./BeeColumn";
+import { CrewRow } from "./Crew";
 import { FarmerCard } from "./Farmer";
 import { Header, SystemBar } from "./Header";
 import { MarketView, PositionsView, VIEWS, ViewTabs, WatchlistsView, type ViewId } from "./HomeViews";
@@ -76,6 +77,7 @@ export function App() {
       <Header snap={feed.snap} connected={feed.connected} stalled={stalled} soundOn={soundOn} onSound={toggleSound} />
       <SystemBar snap={feed.snap} />
       <FarmerCard farmer={feed.snap?.farmer} />
+      <CrewRow crew={feed.snap?.crew} />
       <ViewTabs view={view} onView={openView} snap={feed.snap} bees={feed.bees} />
       {view === "market" && <MarketView snap={feed.snap} bees={feed.bees} />}
       {view === "watchlists" && <WatchlistsView snap={feed.snap} bees={feed.bees} />}

@@ -170,6 +170,8 @@ export interface FarmerSummary {
 export interface Snapshot {
   ts: number;
   farmer?: FarmerSummary | null;
+  /** The crew beside the Farmer (engine brains/crew.ts): the Owl, the Rat, the Pig. */
+  crew?: CrewSummary[] | null;
   mode: "dry" | "demo" | "live";
   closed?: { at: number; flat: boolean } | null;
   startedAt: number;
@@ -340,4 +342,33 @@ export interface HiveStatus {
   locked: boolean;
   /** false: no owner password on this server (join/leave impossible until one is set). */
   passwordSet: boolean;
+}
+
+/** One crew member's log line (engine brains/crew.ts). */
+export interface CrewEntry {
+  id: number;
+  ts: number;
+  crew: string;
+  kind: "say" | "note";
+  bee: string | null;
+  title: string | null;
+  text: string;
+  level: "info" | "watch" | "act" | null;
+}
+
+/** A crew member's card: who, its job, when it looks next, what it said last, its latest notes. */
+export interface CrewSummary {
+  id: string;
+  name: string;
+  role: string;
+  job: string;
+  animal: string;
+  enabled: boolean;
+  everyMin: number;
+  nextAt: number | null;
+  model: string | null;
+  error: string | null;
+  said: CrewEntry | null;
+  notes: CrewEntry[];
+  image: string | null;
 }

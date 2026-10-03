@@ -153,10 +153,20 @@ const FARMER_BRIEF =
   "lighting and background, not their species. No text, no letters, no logos.";
 
 /** Paints the Farmer's portrait (brains/farmer.ts) with the original characters as style references. Returns JPEG bytes. */
-export async function paintFarmer(apiKey: string, model: string, refDir: string, timeoutMs = 180_000): Promise<Buffer> {
+/** A crew member's portrait brief (brains/crew.ts): the same art style as the bunnies, its own animal and look. */
+export function crewBrief(name: string, look: string): string {
+  return (
+    "Create a character portrait in exactly the same art style as the reference images (glossy 3D animated cartoon, big " +
+    "expressive eyes, dramatic rim lighting, a dark background with glowing warm particles and light streaks, square " +
+    `head-and-shoulders framing). The character is ${name.toUpperCase()}, who works for a warren of AI trading bunnies: ${look}. ` +
+    "Take the references' rendering, lighting and background, not their species. No text, no letters, no logos."
+  );
+}
+
+export async function paintFarmer(apiKey: string, model: string, refDir: string, timeoutMs = 180_000, prompt = FARMER_BRIEF): Promise<Buffer> {
   const form = new FormData();
   form.append("model", model);
-  form.append("prompt", FARMER_BRIEF);
+  form.append("prompt", prompt);
   form.append("size", "1024x1024");
   form.append("quality", "medium");
   form.append("output_format", "jpeg");

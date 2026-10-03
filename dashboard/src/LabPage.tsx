@@ -471,7 +471,7 @@ export function LabPage() {
   );
 }
 
-export function PageNav({ current }: { current: "lab" | "admin" | "bunny" | "arena" | "farmer" }) {
+export function PageNav({ current }: { current: "lab" | "admin" | "bunny" | "arena" | "farmer" | "crew" }) {
   return (
     <nav className="pnav">
       <a className="logo" href="#/">
@@ -483,6 +483,9 @@ export function PageNav({ current }: { current: "lab" | "admin" | "bunny" | "are
       </a>
       <a href="#/farmer" className={current === "farmer" ? "on" : ""}>
         Farmer
+      </a>
+      <a href="#/crew/owl" className={current === "crew" ? "on" : ""}>
+        Crew
       </a>
       <a href="#/lab" className={current === "lab" ? "on" : ""}>
         Lab & warren memory
