@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { checkCmcKey, CmcSource, marketMood, saveMood } from "./market/cmc.js";
 import { dirname, join } from "node:path";
 import { Alerts } from "./alerts.js";
@@ -24,7 +24,7 @@ import { startServer } from "./server.js";
 import { ownFromEngineDb, PublicChat } from "./publicChat.js";
 import { okxChatMarket } from "./arena/chat.js";
 import { loadOverrides, loadSettings, saveSettings, STYLE_INFO } from "./settings.js";
-import { imagePath, Setup } from "./setup.js";
+import { imageDir, imagePath, Setup } from "./setup.js";
 import { bunnyProfile } from "./bunnyProfile.js";
 import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
@@ -40,7 +40,7 @@ import { NoteBook } from "./brains/notes.js";
 import { Researcher } from "./brains/research.js";
 import { McpGateway } from "./mcp/gateway.js";
 import { checkAlpacaKey } from "./lab/alpaca.js";
-import { checkOpenAiKey, designBee, paintBee } from "./openai.js";
+import { checkOpenAiKey, designBee, paintBee, paintFarmer } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
 import { SurvivalCouncil } from "./brains/survival.js";
@@ -374,6 +374,18 @@ async function main() {
     },
   });
   farmer.start();
+  // His portrait: painted once with the OpenAI image key, in the bunnies' style, and kept in the data volume. Until then
+  // (or without a key) the page shows the drawn one (dashboard/public/farmer.svg). FARMER_PAINT=0 never paints.
+  const farmerImage = join(imageDir(cfg.settingsPath), "farmer.jpg");
+  if (farmer.enabled && process.env.FARMER_PAINT !== "0" && cfg.openai.apiKey && !existsSync(farmerImage)) {
+    void paintFarmer(cfg.openai.apiKey, cfg.openai.imageModel, REF_DIR)
+      .then((jpg) => {
+        mkdirSync(dirname(farmerImage), { recursive: true });
+        writeFileSync(farmerImage, jpg);
+        log.info("farmer: portrait painted");
+      })
+      .catch((e) => log.warn("farmer: portrait could not be painted, the drawn one stays", { error: safeError(e).message }));
+  }
   // Agent-led R&D is deliberately slower than trading. Each agent's own brain proposes one hypothesis, the existing
   // walk-forward lab tests it, and both accepted and rejected attempts become durable graph memory.
   let researchTimer: NodeJS.Timeout | null = null;
@@ -560,7 +572,8 @@ async function main() {
     {
       engine: {
         chat,
-        farmer: () => farmer.summary(),
+        farmer: () => ({ ...farmer.summary(), image: existsSync(farmerImage) ? "/farmer-image" : "/farmer.svg" }),
+        farmerImage: () => (existsSync(farmerImage) ? farmerImage : null),
         farmerLog: (limit, before) => farmer.entries(limit, before),
         bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
         lab: {

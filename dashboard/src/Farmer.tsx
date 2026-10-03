@@ -16,12 +16,11 @@ function until(ts: number | null): string {
   return m < 60 ? `in ${m} min` : `in ${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
-function Portrait({ small = false }: { small?: boolean }) {
-  return (
-    <span className={`farmer-face ${small ? "sm" : ""}`} aria-hidden>
-      👨‍🌾
-    </span>
-  );
+/** His face: the painted portrait once the engine made it, else the drawn one (public/farmer.svg). */
+function Portrait({ small = false, src }: { small?: boolean; src?: string }) {
+  const [url, setUrl] = useState(src ?? "/farmer.svg");
+  useEffect(() => setUrl(src ?? "/farmer.svg"), [src]);
+  return <img className={`farmer-face ${small ? "sm" : ""}`} src={url} alt="" onError={() => setUrl("/farmer.svg")} />;
 }
 
 const line = (e: FarmerEntry) => (e.kind === "say" ? e.text : `${e.text}${e.reason ? ` ${e.reason}` : ""}`);
@@ -37,7 +36,7 @@ export function FarmerCard({ farmer }: { farmer: FarmerSummary | null | undefine
   return (
     <section className="farmer" aria-label={farmer.name}>
       <div className="farmer-head">
-        <Portrait />
+        <Portrait src={farmer.image} />
         <div className="farmer-who">
           <div className="farmer-name">{farmer.name.toUpperCase()}</div>
           <div className="dim small">
@@ -52,7 +51,7 @@ export function FarmerCard({ farmer }: { farmer: FarmerSummary | null | undefine
       </div>
       {last ? (
         <div className="farmer-quote">
-          <Portrait small />
+          <Portrait small src={farmer.image} />
           <div>
             <p>“{line(last)}”</p>
             <div className="farmer-quote-foot">
@@ -68,7 +67,7 @@ export function FarmerCard({ farmer }: { farmer: FarmerSummary | null | undefine
         <ul className="farmer-list">
           {rest.slice(0, 6).map((e) => (
             <li key={e.id}>
-              <Portrait small />
+              <Portrait small src={farmer.image} />
               <span className={e.kind !== "say" ? "farmer-act" : ""}>{line(e)}</span>
               <span className="dim small">{ago(e.ts)}</span>
             </li>
@@ -107,7 +106,10 @@ export function FarmerPage() {
         <a href="#/" className="bp-back">
           ← Live board
         </a>
-        <h1>{farmer?.name ?? "The Farmer"}</h1>
+        <div className="farmer-page-head">
+          <Portrait src={farmer?.image} />
+          <h1>{farmer?.name ?? "The Farmer"}</h1>
+        </div>
         <p className="dim">
           He looks at every bunny every {farmer ? Math.round(farmer.everyMin / 60) || 1 : 2} h and says one thing. He may rewrite a bunny's rules (never its coins, style or money), at most once per bunny per day.
           {farmer?.mode === "advise" ? " This warren trades real money, so he only suggests: the owner decides." : ""}

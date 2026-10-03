@@ -163,6 +163,8 @@ export interface FarmerSummary {
   rewrites: number;
   model: string | null;
   recent: FarmerEntry[];
+  /** His portrait: the painted one once it exists, else the drawn one. */
+  image?: string;
 }
 
 export interface Snapshot {

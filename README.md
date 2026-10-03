@@ -185,7 +185,8 @@ the engine. Trading mode and exchange keys stay in `.env`.
 when a bunny keeps losing under its rules, may rewrite those rules (never its coins, style or money), at most once per
 bunny per day. With real money he only suggests unless you set `FARMER_MODE=apply`. Every round, with each rewrite's
 old and new rules, is on `#/farmer`. `FARMER=0` turns him off; `FARMER_BRAIN` picks his brain (default Claude, then
-ChatGPT); `FARMER_INTERVAL_MIN` (120) sets how often he looks.
+ChatGPT); `FARMER_INTERVAL_MIN` (120) sets how often he looks. His portrait is painted once with your OpenAI image key, in
+the bunnies' style (`FARMER_PAINT=0` keeps the drawn one).
 
 **Ask a bunny.** Each bunny's page has an *Ask me* tab: visitors ask it for a view on a market or about itself and it
 answers with a report drawn from real candles (charts, figures, its own record). Read-only, questions are not stored,

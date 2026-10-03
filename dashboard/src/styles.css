@@ -2553,20 +2553,23 @@ button.counter:hover {
   width: 3.6rem;
   height: 3.6rem;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 2rem;
-  background: radial-gradient(circle at 35% 30%, #3a2a1c, #1a1410);
+  object-fit: cover;
+  background: #1a1410;
   border: 2px solid #e07a3f;
   box-shadow: 0 0 1rem color-mix(in srgb, #e07a3f 35%, transparent);
 }
 .farmer-face.sm {
   width: 2.1rem;
   height: 2.1rem;
-  font-size: 1.15rem;
   border-width: 1px;
   box-shadow: none;
   filter: grayscale(0.4);
+}
+.farmer-page-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.6rem;
 }
 .farmer-who {
   flex: 1;
@@ -2595,7 +2598,6 @@ button.counter:hover {
 .farmer-quote .farmer-face {
   width: 3rem;
   height: 3rem;
-  font-size: 1.6rem;
 }
 .farmer-quote p {
   margin: 0;

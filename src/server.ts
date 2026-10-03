@@ -45,6 +45,8 @@ export interface ServerDeps {
     /** The Farmer's card (brains/farmer.ts) and his full log: GET /farmer?limit=&before=. */
     farmer?: () => unknown;
     farmerLog?: (limit: number, before: number) => unknown;
+    /** The Farmer's painted portrait (a file), or null while he has only the drawn one. */
+    farmerImage?: () => string | null;
     /** Visitors' chat with the bunnies (publicChat.ts): GET /chat?bee=, POST /chat/send. Read-only; questions are not stored. */
     chat?: PublicChat;
   };
@@ -153,6 +155,13 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
         const before = Number(url.searchParams.get("before") ?? 0) || Number.MAX_SAFE_INTEGER;
         return json(res, 200, { farmer: e.farmer(), entries: e.farmerLog(limit, before) });
+      }
+      case "/farmer-image": {
+        const file = e.farmerImage?.() ?? null;
+        if (!file) return json(res, 404, { error: "no portrait yet" });
+        res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "public, max-age=3600" });
+        createReadStream(file).pipe(res);
+        return;
       }
       case "/visitors/map":
         // Where visitors come from, by the time zone their page reported. No address, no city lookup.
