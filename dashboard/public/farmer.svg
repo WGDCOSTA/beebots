@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="The Farmer">
+  <!-- The Farmer: the warren's overseer, drawn by hand as a stand-in until the engine paints his portrait (FARMER_PAINT). -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#5a2a12"/>
+      <stop offset="0.55" stop-color="#22120b"/>
+      <stop offset="1" stop-color="#0b0706"/>
+    </radialGradient>
+    <radialGradient id="skin" cx="45%" cy="40%" r="65%">
+      <stop offset="0" stop-color="#f6c79e"/>
+      <stop offset="1" stop-color="#d9946a"/>
+    </radialGradient>
+    <linearGradient id="straw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7d77c"/>
+      <stop offset="1" stop-color="#c9932f"/>
+    </linearGradient>
+    <linearGradient id="beard" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b4642f"/>
+      <stop offset="1" stop-color="#7a3e1a"/>
+    </linearGradient>
+    <linearGradient id="denim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f6ea8"/>
+      <stop offset="1" stop-color="#244573"/>
+    </linearGradient>
+    <linearGradient id="carrot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb04a"/>
+      <stop offset="1" stop-color="#e2621c"/>
+    </linearGradient>
+    <pattern id="plaid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <rect width="36" height="36" fill="#b8321f"/>
+      <rect width="36" height="10" y="13" fill="#8e2214" opacity="0.8"/>
+      <rect width="10" height="36" x="13" fill="#8e2214" opacity="0.8"/>
+      <rect width="36" height="2" y="17" fill="#f2c9a0" opacity="0.35"/>
+      <rect width="2" height="36" x="17" fill="#f2c9a0" opacity="0.35"/>
+    </pattern>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- glowing streaks, like the bunnies' portraits -->
+  <g stroke="#ff8a3d" stroke-linecap="round" opacity="0.55" filter="url(#soft)">
+    <path d="M40 120 L150 150" stroke-width="10"/>
+    <path d="M30 330 L120 300" stroke-width="8"/>
+    <path d="M470 110 L370 150" stroke-width="10"/>
+    <path d="M480 340 L390 300" stroke-width="8"/>
+  </g>
+  <circle cx="256" cy="230" r="170" fill="#ff7a2e" opacity="0.18" filter="url(#soft)"/>
+
+  <!-- shoulders: plaid shirt and overalls -->
+  <path d="M86 512 C96 410 160 372 256 372 C352 372 416 410 426 512 Z" fill="url(#plaid)"/>
+  <path d="M176 512 L186 420 L326 420 L336 512 Z" fill="url(#denim)"/>
+  <rect x="150" y="380" width="34" height="132" rx="10" fill="url(#denim)" transform="rotate(-12 167 446)"/>
+  <rect x="328" y="380" width="34" height="132" rx="10" fill="url(#denim)" transform="rotate(12 345 446)"/>
+  <circle cx="190" cy="430" r="9" fill="#e8c35a"/>
+  <circle cx="322" cy="430" r="9" fill="#e8c35a"/>
+  <!-- the bib pocket, with a little bunny looking out -->
+  <rect x="222" y="440" width="68" height="56" rx="8" fill="#2f5a8f" stroke="#1d3a60" stroke-width="3"/>
+  <g transform="translate(256 438)">
+    <ellipse cx="-10" cy="-30" rx="6" ry="18" fill="#efe7df" transform="rotate(-12 -10 -30)"/>
+    <ellipse cx="10" cy="-30" rx="6" ry="18" fill="#efe7df" transform="rotate(12 10 -30)"/>
+    <ellipse cx="-10" cy="-30" rx="2.6" ry="12" fill="#f3b2b8" transform="rotate(-12 -10 -30)"/>
+    <ellipse cx="10" cy="-30" rx="2.6" ry="12" fill="#f3b2b8" transform="rotate(12 10 -30)"/>
+    <ellipse cx="0" cy="-4" rx="20" ry="16" fill="#efe7df"/>
+    <circle cx="-7" cy="-7" r="3" fill="#1a1110"/>
+    <circle cx="7" cy="-7" r="3" fill="#1a1110"/>
+    <ellipse cx="0" cy="0" rx="3" ry="2.2" fill="#e88a95"/>
+  </g>
+
+  <!-- neck and head -->
+  <rect x="226" y="320" width="60" height="60" rx="18" fill="#d38b60"/>
+  <ellipse cx="256" cy="250" rx="98" ry="112" fill="url(#skin)"/>
+  <!-- ears -->
+  <ellipse cx="158" cy="258" rx="16" ry="26" fill="#e3a57a"/>
+  <ellipse cx="354" cy="258" rx="16" ry="26" fill="#e3a57a"/>
+
+  <!-- beard -->
+  <path d="M164 262 C166 350 214 392 256 394 C298 392 346 350 348 262 C330 300 300 312 256 312 C212 312 182 300 164 262 Z" fill="url(#beard)"/>
+  <path d="M206 300 C222 290 290 290 306 300 C292 316 220 316 206 300 Z" fill="#9a4f22"/>
+  <!-- mouth: a dry half-smile -->
+  <path d="M232 318 C246 328 270 328 284 314" stroke="#5b2511" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- nose -->
+  <ellipse cx="256" cy="268" rx="17" ry="14" fill="#e9a07a"/>
+  <!-- eyes, a little narrowed: he has seen markets before -->
+  <g fill="#2a1a12">
+    <ellipse cx="220" cy="232" rx="10" ry="8"/>
+    <ellipse cx="292" cy="232" rx="10" ry="8"/>
+  </g>
+  <g fill="#fff" opacity="0.85">
+    <circle cx="223" cy="229" r="2.6"/>
+    <circle cx="295" cy="229" r="2.6"/>
+  </g>
+  <path d="M200 214 C212 206 230 206 240 212" stroke="#7a3e1a" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M272 210 C284 204 302 206 312 214" stroke="#7a3e1a" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M196 246 C204 252 214 254 226 252" stroke="#c97c55" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M286 252 C298 254 308 252 316 246" stroke="#c97c55" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- straw hat -->
+  <ellipse cx="256" cy="176" rx="176" ry="38" fill="url(#straw)"/>
+  <ellipse cx="256" cy="182" rx="176" ry="30" fill="#b67f24" opacity="0.35"/>
+  <path d="M168 176 C170 110 204 70 256 70 C308 70 342 110 344 176 Z" fill="url(#straw)"/>
+  <path d="M170 160 C210 172 302 172 342 160 L344 176 C302 190 210 190 168 176 Z" fill="#a8352a"/>
+  <g stroke="#a87721" stroke-width="2" opacity="0.6" fill="none">
+    <path d="M190 120 C230 112 282 112 322 120"/>
+    <path d="M178 142 C224 134 288 134 334 142"/>
+    <path d="M110 186 C180 200 332 200 402 186"/>
+  </g>
+
+  <!-- a carrot held up, the warren's currency -->
+  <g transform="rotate(28 420 380)">
+    <path d="M404 300 C430 300 438 320 432 344 L416 456 C414 466 402 466 400 456 L388 340 C384 316 390 300 404 300 Z" fill="url(#carrot)"/>
+    <g stroke="#c4521a" stroke-width="3" stroke-linecap="round" opacity="0.7">
+      <path d="M394 340 L410 342"/><path d="M398 372 L414 372"/><path d="M402 404 L414 402"/>
+    </g>
+    <g fill="#4caf50">
+      <path d="M408 302 C398 278 392 262 396 248 C406 262 412 280 412 300 Z"/>
+      <path d="M412 302 C414 276 420 258 432 250 C432 268 424 288 416 302 Z"/>
+      <path d="M404 304 C388 290 378 280 374 266 C390 272 400 286 408 300 Z"/>
+    </g>
+  </g>
+  <!-- his hand -->
+  <ellipse cx="402" cy="452" rx="30" ry="24" fill="url(#skin)"/>
+</svg>

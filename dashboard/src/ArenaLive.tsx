@@ -3,6 +3,7 @@
 // Members' agents never appear here: their results reach the public only through the leaderboard.
 import { useEffect, useState } from "react";
 import { ArenaOverview, register, type Live } from "./ArenaOverview";
+import { ArenaChat } from "./ArenaChat";
 import { ArenaProfile } from "./ArenaProfile";
 import type { Agent, Catalogue } from "./ArenaParts";
 import { STYLE_KEYS } from "./arenaModel";
@@ -18,6 +19,7 @@ const hrefOf = (id: string) => `#/arena/live/${id}`;
 
 export function ArenaLive({ id }: { id?: string }) {
   const { t } = useI18n();
+  const [tab, setTab] = useState<"profile" | "chat">("profile");
   const [agents, setAgents] = useState<ShowcaseAgent[] | null>(null);
   const [cat, setCat] = useState<Catalogue | null>(null);
   useEffect(() => {
@@ -54,7 +56,24 @@ export function ArenaLive({ id }: { id?: string }) {
           ← {t("live.title")}
         </a>
         {one ? (
-          <ArenaProfile id={id} kind="house" bee={one.live?.bee} curve={one.live?.curve} rank={board.findIndex((a) => a.bot.id === id) + 1} of={board.length} />
+          <>
+            {/* Anyone may talk to a house agent: its record on one tab, a conversation on the other. */}
+            <div className="ag-tabs" role="tablist">
+              {(["profile", "chat"] as const).map((x) => (
+                <button key={x} role="tab" aria-selected={tab === x} className={tab === x ? "on" : ""} onClick={() => setTab(x)}>
+                  {x === "chat" ? "💬 " : ""}
+                  {t(`live.tab.${x}` as const)}
+                </button>
+              ))}
+            </div>
+            {tab === "profile" ? (
+              <ArenaProfile id={id} kind="house" bee={one.live?.bee} curve={one.live?.curve} rank={board.findIndex((a) => a.bot.id === id) + 1} of={board.length} />
+            ) : (
+              <div className="pcard arena-card" role="tabpanel">
+                <ArenaChat source={{ kind: "house", id }} name={one.bot.name} />
+              </div>
+            )}
+          </>
         ) : (
           <div className="pcard arena-card dim">{t("common.loading")}</div>
         )}

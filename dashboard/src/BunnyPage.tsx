@@ -2,6 +2,8 @@
 // trades and coins, the calls it made, what it learned, what it told the Warren and heard back, the skills it leans on.
 // Live numbers come from the event stream (useFeed); history from GET /bunny/<slot> (engine bunnyProfile.ts).
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArenaChat } from "./ArenaChat";
+import { I18nProvider } from "./i18n/I18n";
 import { money, signed } from "./BeeColumn";
 import { EquityChart } from "./EquityChart";
 import { PageNav } from "./LabPage";
@@ -60,6 +62,7 @@ export interface BunnyProfile {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "ask", label: "💬 Ask me" },
   { id: "trades", label: "Trades" },
   { id: "decisions", label: "Decisions" },
   { id: "learning", label: "Learning" },
@@ -196,6 +199,14 @@ export function BunnyPage() {
 
         <div className={`bp-body ${loading && data ? "refreshing" : ""}`}>
           {tab === "overview" && <Overview data={data} curve={curve} start={start} evo={evo} slot={slot} />}
+          {tab === "ask" && (
+            // Anyone may ask this bunny for its view; it answers from real market data and its own record (publicChat.ts on the engine).
+            <div className="pcard bp-ask">
+              <I18nProvider>
+                <ArenaChat source={{ kind: "bunny", id: slot }} name={meta.title} />
+              </I18nProvider>
+            </div>
+          )}
           {tab === "trades" && <Trades data={data} />}
           {tab === "decisions" && <Decisions data={data} live={feed.decisions.filter((d) => d.bee === slot && !d.pulse)} />}
           {tab === "learning" && <Learning data={data} />}

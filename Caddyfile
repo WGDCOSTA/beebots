@@ -5,7 +5,7 @@
 	# Read-only engine endpoints. Only GET is proxied; the engine refuses everything else too.
 	@api {
 		method GET
-		path /events /snapshot /history /equity /visit /health /profile /bee-image/* /setup/status /hive/status /lab/ranking /lab/playbook /hive-mind /hive-mind/* /bunny/*
+		path /events /snapshot /history /equity /visit /health /profile /bee-image/* /setup/status /hive/status /lab/ranking /lab/playbook /hive-mind /hive-mind/* /bunny/* /chat /visitors/map /farmer /farmer-image
 	}
 	handle @api {
 		reverse_proxy engine:8080 {
@@ -26,6 +26,18 @@
 		reverse_proxy engine:8080 {
 			header_up X-Forwarded-Proto {scheme}
 		}
+	}
+
+	# A visitor's question to a bunny (publicChat.ts). Read-only on the engine's side; it limits questions per address and per day.
+	@chat {
+		method POST
+		path /chat/send
+	}
+	handle @chat {
+		request_body {
+			max_size 8KB
+		}
+		reverse_proxy engine:8080
 	}
 
 	# Joining or leaving the Warren from the dashboard. The engine needs the owner password for both.

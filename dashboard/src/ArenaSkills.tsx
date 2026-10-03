@@ -1,9 +1,10 @@
 // "My skills": the rule sets an agent can trade by. Keep one from the platform's library, or write your own in the Lab's rule
 // language (data, never code: it can only compare indicators and open or close a position). A plan has a number of slots.
-// Nothing here has been backtested yet: the page says so, and no result is ever promised.
+// A kept skill can be backtested on stored history (Pro and Premium); no result is ever promised.
 import { useState } from "react";
 import { arena } from "./arenaApi";
 import type { ArenaData } from "./ArenaParts";
+import { SkillBacktest } from "./ArenaHistory";
 import { useI18n } from "./i18n/I18n";
 
 const EXAMPLE = `{
@@ -25,6 +26,7 @@ export function ArenaSkills({ data }: { data: ArenaData }) {
   const [spec, setSpec] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
   const full = skills.length >= slots;
   const have = new Set(skills.filter((s) => s.kind === "lib").map((s) => s.name));
 
@@ -70,9 +72,19 @@ export function ArenaSkills({ data }: { data: ArenaData }) {
                   {s.usedBy.length > 0 && <div className="small">{t("skills.usedBy", { names: s.usedBy.map((u) => u.name).join(", ") })}</div>}
                   {s.locked && <div className="small">{t("skills.lockedHelp")}</div>}
                 </div>
+                {!s.locked && (
+                  <button className="pbtn ghost small" aria-expanded={testing === s.id} onClick={() => setTesting(testing === s.id ? null : s.id)}>
+                    {t("hist.backtest")}
+                  </button>
+                )}
                 <button className="pbtn ghost small" disabled={busy !== null || s.usedBy.length > 0} title={s.usedBy.length ? t("skills.inUse") : undefined} onClick={() => void call(`rm${s.id}`, "skills/delete", { id: s.id })}>
                   {t("keys.remove")}
                 </button>
+                {testing === s.id && (
+                  <div className="sk-bt">
+                    <SkillBacktest skillId={s.id} skillName={s.name} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

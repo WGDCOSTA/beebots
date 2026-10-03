@@ -4,7 +4,7 @@ import { humanLabel } from "./tickerModel.js";
 // Pure helpers for the Arena pages: what the address bar means and how to word what the API answers. No React, so the root suite tests it.
 
 export type LegalDocId = "terms" | "privacy" | "risk" | "cookies";
-export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "live"; id?: string } | { kind: "me" } | { kind: "plans"; paid: boolean } | { kind: "skills" } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
+export type ArenaView = { kind: "home" } | { kind: "new" } | { kind: "ranking" } | { kind: "live"; id?: string } | { kind: "warren" } | { kind: "me" } | { kind: "plans"; paid: boolean } | { kind: "skills" } | { kind: "agent"; id: string } | { kind: "legal"; doc: LegalDocId } | { kind: "verify"; token: string };
 
 /** #/arena is home (or the landing page when signed out); #/arena/verify?token=... is the page the e-mailed link opens. */
 export function arenaView(hash: string): ArenaView {
@@ -14,6 +14,7 @@ export function arenaView(hash: string): ArenaView {
   if (sub === "ranking") return { kind: "ranking" };
   if (sub === "live") return /^[\w-]{1,40}$/.test(parts[2] ?? "") ? { kind: "live", id: parts[2]! } : { kind: "live" };
   if (sub === "me") return { kind: "me" };
+  if (sub === "warren") return { kind: "warren" };
   if (sub === "skills") return { kind: "skills" };
   if (sub === "plans") return { kind: "plans", paid: new URLSearchParams(query).get("paid") === "1" };
   if (sub === "new") return { kind: "new" };
@@ -312,7 +313,7 @@ export function planFeatures(l: PlanLimits): Array<Say & { soon?: boolean }> {
     { key: "plans.f.brains", vars: { n: l.brains } },
     { key: "plans.f.skills", vars: { n: l.skillSlots }, soon: true },
   ];
-  if (l.history) out.push({ key: "plans.f.history", soon: true });
+  if (l.history) out.push({ key: "plans.f.history" });
   if (l.autonomy) out.push({ key: "plans.f.auto" });
   return out;
 }
