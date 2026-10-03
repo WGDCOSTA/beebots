@@ -4,7 +4,8 @@
 // POST /admin/* is the admin panel (admin/admin.ts); every call there needs the owner password.
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
 // POST /hive/join and /hive/leave, which need the owner password (gate.ts, hive.ts). GET /hive/status is public and holds no key.
-// /visit is the page's hit counter: it bumps a total and returns it (see visitors.ts; no IP is stored or logged).
+// /chat?bee= and POST /chat/send: a visitor asks a bunny (publicChat.ts); it can only look at markets and talk, and the
+// question is not stored. /visit is the page's hit counter: it bumps a total and returns it (see visitors.ts; no IP is stored or logged).
 import { createReadStream } from "node:fs";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { Db } from "./db.js";
@@ -13,7 +14,9 @@ import type { Hive } from "./hive.js";
 import { log } from "./log.js";
 import { redact } from "./redact.js";
 import type { Setup } from "./setup.js";
-import { clientAddr, type Visitors } from "./visitors.js";
+import { cleanTz, clientAddr, type Visitors } from "./visitors.js";
+import { readJson } from "./gate.js";
+import type { PublicChat } from "./publicChat.js";
 
 export interface ServerDeps {
   /** Absent in setup mode (nothing is trading yet). */
@@ -39,6 +42,13 @@ export interface ServerDeps {
     };
     /** One bunny's profile page data (bunnyProfile.ts), or null for an unknown slot. */
     bunny?: (slot: string, days: number) => unknown | null;
+    /** The Farmer's card (brains/farmer.ts) and his full log: GET /farmer?limit=&before=. */
+    farmer?: () => unknown;
+    farmerLog?: (limit: number, before: number) => unknown;
+    /** The Farmer's painted portrait (a file), or null while he has only the drawn one. */
+    farmerImage?: () => string | null;
+    /** Visitors' chat with the bunnies (publicChat.ts): GET /chat?bee=, POST /chat/send. Read-only; questions are not stored. */
+    chat?: PublicChat;
   };
   /** Present only in setup mode. */
   setup?: Setup;
@@ -68,6 +78,8 @@ function json(res: ServerResponse, status: number, body: unknown) {
 
 export function startServer(deps: ServerDeps, port: number, bind: string): Server {
   const streams = new Map<string, number>();
+  /** Open live streams per time zone the page reported: the "watching now" dots on the visitors' map. */
+  const liveTz = new Map<string, number>();
   let streamsTotal = 0;
   const historyCache = new Map<number, { at: number; body: string }>();
   const server = createServer((req, res) => {
@@ -94,6 +106,21 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         .catch(() => json(res, 500, { error: "admin request failed" }));
       return;
     }
+    if (url.pathname === "/chat/send") {
+      // A same-site POST only: the custom header makes a cross-site page need a preflight, which this server never answers.
+      const chat = deps.engine?.chat;
+      if (!chat) return json(res, 404, { error: "chat is off" });
+      if (req.method !== "POST" || req.headers["x-chat"] !== "1") return json(res, 405, { error: "POST with x-chat: 1" });
+      const addr = clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress);
+      void readJson(req, 8 * 1024)
+        .then(async (b) => {
+          const body = b && typeof b === "object" ? (b as Record<string, unknown>) : {};
+          const r = await chat.ask(addr, typeof body.bee === "string" ? body.bee : "", body);
+          json(res, r.status, r.body);
+        })
+        .catch(() => json(res, 400, { error: "bad request" }));
+      return;
+    }
     if (req.method !== "GET") return json(res, 405, { error: "read-only" });
     if (url.pathname === "/setup/status") return json(res, 200, { needed: false });
 
@@ -118,11 +145,27 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         return json(res, h.ok ? 200 : 503, h);
       }
       case "/snapshot":
-        return json(res, 200, { ...(e.snapshot() as object), visitors: { total: e.visitors.total, watching: e.bus.subscribers }, update: e.update?.() ?? null });
+        return json(res, 200, { ...(e.snapshot() as object), farmer: e.farmer?.() ?? null, visitors: { total: e.visitors.total, watching: e.bus.subscribers }, update: e.update?.() ?? null });
       case "/visit": {
-        const total = e.visitors.visit(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress));
+        const total = e.visitors.visit(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress), url.searchParams.get("tz"));
         return json(res, 200, { total, watching: e.bus.subscribers });
       }
+      case "/farmer": {
+        if (!e.farmer || !e.farmerLog) return json(res, 404, { error: "no farmer" });
+        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
+        const before = Number(url.searchParams.get("before") ?? 0) || Number.MAX_SAFE_INTEGER;
+        return json(res, 200, { farmer: e.farmer(), entries: e.farmerLog(limit, before) });
+      }
+      case "/farmer-image": {
+        const file = e.farmerImage?.() ?? null;
+        if (!file) return json(res, 404, { error: "no portrait yet" });
+        res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "public, max-age=3600" });
+        createReadStream(file).pipe(res);
+        return;
+      }
+      case "/visitors/map":
+        // Where visitors come from, by the time zone their page reported. No address, no city lookup.
+        return json(res, 200, { total: e.visitors.total, watching: e.bus.subscribers, since: e.visitors.mapSince, places: e.visitors.placeCounts().slice(0, 400), live: [...liveTz].sort((a, b) => b[1] - a[1]) });
       case "/equity": {
         const days = Math.max(0.01, Math.min(60, Number(url.searchParams.get("days") ?? 30) || 30));
         return json(res, 200, e.db.equitySeries(Date.now() - days * 86_400_000, 720));
@@ -146,11 +189,18 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         if (streamsTotal >= MAX_STREAMS || mine >= MAX_STREAMS_PER_ADDR) return json(res, 503, { error: "too many live connections" });
         streams.set(addr, mine + 1);
         streamsTotal++;
+        const tz = cleanTz(url.searchParams.get("tz"));
+        if (tz && (liveTz.has(tz) || liveTz.size < 700)) liveTz.set(tz, (liveTz.get(tz) ?? 0) + 1);
         let released = false;
         const release = () => {
           if (released) return;
           released = true;
           streamsTotal--;
+          if (tz && liveTz.has(tz)) {
+            const n = liveTz.get(tz)! - 1;
+            if (n > 0) liveTz.set(tz, n);
+            else liveTz.delete(tz);
+          }
           const left = (streams.get(addr) ?? 1) - 1;
           if (left > 0) streams.set(addr, left);
           else streams.delete(addr);
@@ -203,6 +253,11 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         res.writeHead(200, { "content-type": "text/markdown; charset=utf-8", "cache-control": "no-store" });
         res.end(e.lab.report());
         return;
+      case "/chat": {
+        if (!e.chat) return json(res, 404, { error: "chat is off" });
+        const r = e.chat.info(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress), url.searchParams.get("bee") ?? "");
+        return json(res, r.status, r.body);
+      }
       default:
         if (e.bunny && url.pathname.startsWith("/bunny/")) {
           const slot = url.pathname.slice("/bunny/".length);

@@ -7,6 +7,8 @@
 //   ARENA_RUN=1        open the race track: run members' bunnies on paper (needs ARENA_OPENAI_KEY; ARENA_MAX_RUNNERS, ARENA_TICK_MS, ARENA_START_USD, ARENA_BOT_DAILY_USD, ARENA_LLM_MODEL, ARENA_LLM_USD_PER_MTOK, ARENA_SAMPLE_MS for the leaderboard samples)
 //   ARENA_STRIPE_KEY + ARENA_STRIPE_WEBHOOK_SECRET + ARENA_STRIPE_PRICE_PRO + ARENA_STRIPE_PRICE_PREMIUM   open payments on the operator's own Stripe account (ARENA_STRIPE_TAX=1 lets Stripe Tax work out VAT). Without them everyone is on Free and the plans page says payments are not open.
 //   ARENA_OPERATOR_NAME / _ADDRESS / _COMPANY_NO / _VAT / _EMAIL / _PRIVACY_EMAIL   who operates the Arena, shown on the legal pages. ARENA_LEGAL_REVIEWED_ON=YYYY-MM-DD   the day counsel signed the texts off; until it is set every legal page says it is a draft
+//   ARENA_HISTORY=0   do not fetch historical candles (default: with ARENA_RUN=1, the agents' coins are kept up to date every ARENA_HISTORY_SYNC_MS, 6 h); ARENA_TRAIN_USD   what one simulated training may spend on the platform's model (default 1); ARENA_TRAIN_PARALLEL   trainings at once (default 2)
+//   ARENA_CHAT_DAILY_LIMIT   chat messages the whole platform answers on its own model per day (default 2000; needs ARENA_RUN=1); ARENA_PUBLIC_CHAT_PER_HOUR / _DAILY_LIMIT   visitors' questions to the house agents per address per hour (5) and in all per day (300)
 //   ARENA_SKILLS_DIR   folders (comma separated) of skill packs (JSON) added to the built-in library members can pick from (default ./skills)
 //   ARENA_VAULT_KEY    32 random bytes (hex or base64) that encrypt members' own model keys. Keep it outside the data folder and back it up: without it the stored keys cannot be read. Unset = members cannot add their own keys. (ARENA_OWN_KEY_DAILY_USD: the daily ceiling for an agent on a member's key when the member set none, default 1000)
 //   ARENA_OPENAI_KEY   the platform's own OpenAI key for the free AI design and portrait of a member's first bunny (ARENA_TEXT_MODEL, ARENA_IMAGE_MODEL, ARENA_AI_DAILY_LIMIT)
@@ -29,6 +31,12 @@ import { Billing, HttpStripe, type BillingConfig } from "./billing.js";
 import { ConsoleMailer, ResendMailer, type Mailer } from "./mailer.js";
 import { ArenaStore } from "./store.js";
 import { Vault } from "./vault.js";
+import { okxChatMarket } from "./chat.js";
+import { CandleStore, syncHistory } from "./history.js";
+import { Trainer } from "./training.js";
+import { Social } from "./social.js";
+import { createOkxPublicRest } from "../okx/rest.js";
+import { COINS } from "./bots.js";
 import { skillRegistry } from "../lab/skills/index.js";
 
 const env = process.env;
@@ -51,7 +59,13 @@ if (!env.ARENA_VAULT_KEY) log.warn("arena: ARENA_VAULT_KEY is not set, members c
 
 // The race track: runs every member's bunnies on paper (runner.ts). Needs the platform's model key and is off by default.
 const leaderboard = new Leaderboard(store.dir);
+// The Warren feed: listed agents' results, follows and cheers, next to the leaderboard in the directory database.
+const social = new Social(store.dir);
 let runner: ArenaRunner | null = null;
+// Historical candles for backtests and simulated training (public OKX data, one shared file).
+const history = new CandleStore(`${env.ARENA_DIR ?? "./data/arena"}/history.sqlite`);
+let trainer: Trainer | null = null;
+let chat: { market: ReturnType<typeof okxChatMarket>; llm: OpenAiBrain | null; dailyLimit: number; publicPerHour: number; publicDailyLimit: number } | null = null;
 if (env.ARENA_RUN === "1") {
   if (!env.ARENA_OPENAI_KEY) log.warn("arena: ARENA_RUN=1 needs ARENA_OPENAI_KEY (the platform's decision model). Bots are only stored.");
   else {
@@ -74,7 +88,20 @@ if (env.ARENA_RUN === "1") {
       llm,
       ownKeyDailyUsd: Number(env.ARENA_OWN_KEY_DAILY_USD ?? 1000),
       sampleMs: Number(env.ARENA_SAMPLE_MS ?? 600_000),
+      social,
     });
+    trainer = new Trainer({ store, root: env.ARENA_DIR ?? "./data/arena", history, runner, platformBudgetUsd: Number(env.ARENA_TRAIN_USD ?? 1), maxParallel: Number(env.ARENA_TRAIN_PARALLEL ?? 2) });
+    if (env.ARENA_HISTORY !== "0") {
+      const rest = createOkxPublicRest({ apiBase: cfg.okx.apiBase, timeoutMs: 15_000 });
+      const pub = createPublicApi(cfg.okx.apiBase);
+      const sync = () =>
+        syncHistory(history, { rest, instruments: () => pub.instruments() }, COINS)
+          .then((r) => log.info("arena: history synced", { fetched: r.fetched, failed: r.failed.length }))
+          .catch((e) => log.warn("arena: history sync failed", { error: e instanceof Error ? e.message : String(e) }));
+      void sync();
+      setInterval(() => void sync(), Number(env.ARENA_HISTORY_SYNC_MS ?? 6 * 3_600_000)).unref();
+    }
+    chat = { market: okxChatMarket(real, createPublicApi(cfg.okx.apiBase)), llm, dailyLimit: Number(env.ARENA_CHAT_DAILY_LIMIT ?? 2000), publicPerHour: Number(env.ARENA_PUBLIC_CHAT_PER_HOUR ?? 5), publicDailyLimit: Number(env.ARENA_PUBLIC_CHAT_DAILY_LIMIT ?? 300) };
     runner.begin();
     log.info("arena: race track open (paper trading only)", { maxRunners: Number(env.ARENA_MAX_RUNNERS ?? 25) });
   }
@@ -92,6 +119,7 @@ const billing = new Billing(
   billingCfg ? new HttpStripe(billingCfg.secretKey) : null,
   async (userId, r) => {
     for (const id of [...r.quarantined, ...r.purged]) leaderboard.remove(id);
+    for (const id of r.purged) social.forgetBot(id);
     await runner?.update(userId); // stops what is in quarantine, starts nothing the member did not ask for
   },
 );
@@ -103,7 +131,7 @@ const sweeper = setInterval(() => {
 }, 600_000);
 store.purgeExpired(Date.now());
 
-const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner, leaderboard, billing, vault, library: library.skills, operator: { name: env.ARENA_OPERATOR_NAME, address: env.ARENA_OPERATOR_ADDRESS, companyNo: env.ARENA_OPERATOR_COMPANY_NO, vat: env.ARENA_OPERATOR_VAT, email: env.ARENA_OPERATOR_EMAIL, privacyEmail: env.ARENA_OPERATOR_PRIVACY_EMAIL, reviewedOn: env.ARENA_LEGAL_REVIEWED_ON } });
+const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, chat, history, trainer, social, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner, leaderboard, billing, vault, library: library.skills, operator: { name: env.ARENA_OPERATOR_NAME, address: env.ARENA_OPERATOR_ADDRESS, companyNo: env.ARENA_OPERATOR_COMPANY_NO, vat: env.ARENA_OPERATOR_VAT, email: env.ARENA_OPERATOR_EMAIL, privacyEmail: env.ARENA_OPERATOR_PRIVACY_EMAIL, reviewedOn: env.ARENA_LEGAL_REVIEWED_ON } });
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -133,5 +161,6 @@ for (const sig of ["SIGINT", "SIGTERM"] as const)
     clearInterval(sweeper);
     runner?.stopAll();
     store.close();
+    history.close();
     process.exit(0);
   });

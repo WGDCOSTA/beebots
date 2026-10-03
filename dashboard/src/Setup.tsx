@@ -206,7 +206,7 @@ export function Setup() {
     return (
       <div className="setup">
         <div className="setup-card">
-          <h1>beebots</h1>
+          <h1>Glitchbunny</h1>
           <p className="dim">{error || "Loading…"}</p>
         </div>
       </div>
@@ -245,7 +245,7 @@ export function Setup() {
     <div className="setup">
       <div className="setup-card">
         <div className="setup-head">
-          <h1>beebots setup</h1>
+          <h1>Glitchbunny setup</h1>
           <ol className="setup-steps">
             {STEPS.map((s, i) => (
               <li key={s} className={i === step ? "on" : i < step ? "done" : ""}>
@@ -265,7 +265,7 @@ export function Setup() {
         {step === 0 && (
           <section>
             <h2>Before anything else</h2>
-            <p>beebots is an experiment and a piece of open-source software, not a trading product. Tick all three to carry on.</p>
+            <p>Glitchbunny is an experiment and a piece of open-source software, not a trading product. Tick all three to carry on.</p>
             <label className="setup-check">
               <input type="checkbox" checked={accept.notAdvice} onChange={(e) => setAccept({ ...accept, notAdvice: e.target.checked })} />
               <span>

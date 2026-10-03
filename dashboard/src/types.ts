@@ -144,8 +144,32 @@ export const TIER_INFO: Record<Tier, { icon: string; label: string; tone: "good"
   dead: { icon: "✖", label: "dead", tone: "bad" },
 };
 
+export interface FarmerEntry {
+  id: number;
+  ts: number;
+  kind: "say" | "rewrite" | "suggest";
+  bee: string | null;
+  text: string;
+  reason: string | null;
+  oldRules: string | null;
+  newRules: string | null;
+}
+export interface FarmerSummary {
+  name: string;
+  enabled: boolean;
+  mode: "apply" | "advise";
+  everyMin: number;
+  nextAt: number | null;
+  rewrites: number;
+  model: string | null;
+  recent: FarmerEntry[];
+  /** His portrait: the painted one once it exists, else the drawn one. */
+  image?: string;
+}
+
 export interface Snapshot {
   ts: number;
+  farmer?: FarmerSummary | null;
   mode: "dry" | "demo" | "live";
   closed?: { at: number; flat: boolean } | null;
   startedAt: number;

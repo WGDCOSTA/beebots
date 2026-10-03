@@ -143,6 +143,34 @@ export async function paintBee(apiKey: string, model: string, refDir: string, na
   return Buffer.from(b64, "base64");
 }
 
+const FARMER_BRIEF =
+  "Create a character portrait in exactly the same art style as the reference images (glossy 3D animated cartoon, big " +
+  "expressive eyes, dramatic rim lighting, a dark background with glowing warm particles and light streaks, square " +
+  "head-and-shoulders framing). The character is THE FARMER, a human who looks after a warren of AI trading bunnies: a " +
+  "weathered, calm, dry-humoured farmer in his fifties with a wide straw hat with a red band, a thick ginger-grey beard, " +
+  "narrowed knowing eyes and a small half-smile, a red plaid shirt under blue denim overalls, holding up a fresh carrot, " +
+  "with a small white bunny peeking out of his overalls' bib pocket. Warm orange rim light. Take the references' rendering, " +
+  "lighting and background, not their species. No text, no letters, no logos.";
+
+/** Paints the Farmer's portrait (brains/farmer.ts) with the original characters as style references. Returns JPEG bytes. */
+export async function paintFarmer(apiKey: string, model: string, refDir: string, timeoutMs = 180_000): Promise<Buffer> {
+  const form = new FormData();
+  form.append("model", model);
+  form.append("prompt", FARMER_BRIEF);
+  form.append("size", "1024x1024");
+  form.append("quality", "medium");
+  form.append("output_format", "jpeg");
+  form.append("output_compression", "88");
+  form.append("n", "1");
+  for (const f of ["bizzy.jpg", "breezy.jpg", "boozy.jpg"]) form.append("image[]", new Blob([readFileSync(join(refDir, f))], { type: "image/jpeg" }), f);
+  const res = await fetch(`${API}/images/edits`, { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) await fail(res);
+  const j = (await res.json()) as { data?: Array<{ b64_json?: string }> };
+  const b64 = j.data?.[0]?.b64_json;
+  if (!b64) throw new OpenAiError(502, "no image in answer");
+  return Buffer.from(b64, "base64");
+}
+
 /** A cheap call that proves the key works (lists models). */
 export async function checkOpenAiKey(apiKey: string, timeoutMs = 10_000): Promise<void> {
   const res = await fetch(`${API}/models`, { headers: { authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(timeoutMs) });

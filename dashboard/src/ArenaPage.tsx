@@ -21,6 +21,8 @@ import { ArenaPlans } from "./ArenaPlans";
 import { ArenaSkills } from "./ArenaSkills";
 import { useArenaData } from "./ArenaParts";
 import { ArenaRanking } from "./ArenaRanking";
+import { ArenaLive } from "./ArenaLive";
+import { ArenaWarren } from "./ArenaWarren";
 import { ArenaShell, type Mode, type Tab } from "./ArenaShell";
 import { arena, type BillingView, type ConsentState, type Limits, type Member } from "./arenaApi";
 import { arenaView, type ArenaView } from "./arenaModel";
@@ -121,7 +123,7 @@ function Arena() {
   const member = me !== "loading" && me !== null ? me : null;
   const gated = !!member && !!consent?.needed;
   const mode: Mode = member ? (gated ? "gate" : "in") : "out";
-  const tab: Tab = view.kind === "ranking" ? "board" : view.kind === "me" || view.kind === "plans" ? "me" : view.kind === "skills" ? "home" : view.kind === "new" ? "new" : view.kind === "home" || view.kind === "agent" ? "home" : null;
+  const tab: Tab = view.kind === "live" ? "live" : view.kind === "warren" ? "warren" : view.kind === "ranking" ? "board" : view.kind === "me" || view.kind === "plans" ? "me" : view.kind === "skills" ? "home" : view.kind === "new" ? "new" : view.kind === "home" || view.kind === "agent" ? "home" : null;
   const signOut = () => {
     setNotice("");
     setMe(null);
@@ -132,6 +134,8 @@ function Arena() {
 
   let body: React.ReactNode;
   if (view.kind === "legal") body = <ArenaLegal doc={view.doc} />;
+  else if (view.kind === "live") body = <ArenaLive id={view.id} />;
+  else if (view.kind === "warren") body = <ArenaWarren signedIn={!!member && !gated} />;
   else if (view.kind === "ranking")
     body = (
       <>

@@ -17,6 +17,8 @@ import { safeError } from "../redact.js";
 import { BeeSchema, type Settings } from "../settings.js";
 import { Bots, PLATFORM, type BotView } from "./bots.js";
 import { readInsights, type Insights } from "./insights.js";
+import { bunnyProfile } from "../bunnyProfile.js";
+import { KnowledgeGraph } from "../graph/graph.js";
 import { SkillBank } from "./skills.js";
 import type { Skill } from "../lab/skills/index.js";
 import type { LlmClient } from "../brains/llm.js";
@@ -26,6 +28,7 @@ import { EnsembleSystemOne, LlmSystemOne } from "./decider.js";
 import { EST_USD_PER_MTOK, type Vault } from "./vault.js";
 import type { Leaderboard } from "./ranking.js";
 import type { ArenaStore } from "./store.js";
+import type { Social } from "./social.js";
 
 const SLOT: BeeId = "bee1";
 
@@ -59,6 +62,8 @@ export interface RunnerOpts {
   styleReviewHours?: number;
   /** The daily decision spend an agent on its member's own key may use when the member set no ceiling, in USD. */
   ownKeyDailyUsd?: number;
+  /** The Warren feed (social.ts): listed agents' closed trades and milestones become posts. */
+  social?: Social;
 }
 
 /** A stopped agent, or one in quarantine: no engine, no ranking, positions closed. */
@@ -109,19 +114,24 @@ interface Run {
   startedAt: number;
   /** Read by the engine on every tick: what the member asked for. */
   ctl: { paused: boolean; closing: boolean };
+  /** The models that really decide for it (the platform's and/or the member's own keys), for the live board's brain chip. */
+  brainView: { id: string; label: string; model: string | null; online: boolean };
   /** Autonomous agents: the style its model chose last (the engine adopts it while the agent is flat), the model to ask, and when it last asked. */
   auto: { style: StyleId | null; llm: LlmClient | null; reviewedAt: number; busy: boolean };
 }
 
 export class ArenaRunner {
   private runs = new Map<string, Run>();
+  /** An agent keeps no knowledge graph of its own; the profile reads lessons and messages from this empty one. */
+  private noGraph: KnowledgeGraph | null = null;
   private errors = new Map<string, string>();
   private queue: Promise<void> = Promise.resolve();
-  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library">;
+  private readonly o: Required<Omit<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library" | "social">> & Pick<RunnerOpts, "store" | "root" | "feed" | "decider" | "leaderboard" | "vault" | "llm" | "library" | "social">;
   private timer: NodeJS.Timeout | null = null;
   private sampler: NodeJS.Timeout | null = null;
   private settler: NodeJS.Timeout | null = null;
   private reviewer: NodeJS.Timeout | null = null;
+  private socializer: NodeJS.Timeout | null = null;
 
   constructor(opts: RunnerOpts) {
     this.o = { maxRunners: 25, tickMs: 60_000, startUsd: 1000, dailyUsd: 0.5, usdPerMTok: 0.3, sampleMs: 600_000, ownKeyDailyUsd: 1000, styleReviewHours: 6, now: Date.now, ...opts };
@@ -141,7 +151,8 @@ export class ArenaRunner {
     return this.queue;
   }
 
-  private config(bot: BotView, file: string, dailyUsd: number, usdPerMTok: number): Config {
+  /** The engine's settings for one agent (also used by simulated training). */
+  config(bot: BotView, file: string, dailyUsd: number, usdPerMTok: number): Config {
     const t = this.o.now();
     const settings = {
       version: 1,
@@ -169,9 +180,8 @@ export class ArenaRunner {
     return { ...cfg, beeIds: [SLOT] };
   }
 
-  private async start(userId: string, bot: BotView): Promise<void> {
-    mkdirSync(this.dir(userId), { recursive: true });
-    const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
+  /** The models an agent decides with, its daily ceiling and its cost estimate (also used by simulated training). */
+  brainsOf(userId: string, bot: BotView): { decider: SystemOne; dailyUsd: number; usdPerMTok: number; styleLlm: LlmClient | null; used: Array<{ label: string; model: string | null }> } {
     // Which models decide: the platform's, the member's own keys, or several together (a vote). Each own key brings the member's
     // ceiling (or the default), the platform's model brings its small one; the agent's ceiling is the sum, and the cost estimate
     // is the mean price per token. An agent that names a key that is gone never falls back to the platform's model: it does not start.
@@ -179,12 +189,14 @@ export class ArenaRunner {
     let dailyUsd = 0;
     const rates: number[] = [];
     let styleLlm: LlmClient | null = null;
+    const used: Array<{ label: string; model: string | null }> = [];
     for (const id of bot.brains) {
       if (id === PLATFORM) {
         members.push({ sys: this.o.decider, label: "platform" });
         dailyUsd += this.o.dailyUsd;
         rates.push(this.o.usdPerMTok);
         styleLlm ??= this.o.llm ?? null;
+        used.push({ label: "Platform", model: this.o.llm?.model ?? null });
         continue;
       }
       const k = this.o.vault?.for(this.o.store.tenant(userId), userId, this.o.now).secret(id);
@@ -194,18 +206,29 @@ export class ArenaRunner {
       dailyUsd += k.dailyUsd ?? this.o.ownKeyDailyUsd;
       rates.push(EST_USD_PER_MTOK[k.provider]);
       styleLlm ??= llm;
+      used.push({ label: k.provider === "openai" ? "Own OpenAI" : k.provider === "claude" ? "Own Claude" : k.provider === "zai" ? "Own GLM" : k.provider === "kimi" ? "Own Kimi" : `Own ${k.provider}`, model: k.model });
     }
     if (members.length === 0) throw new Error("it has no model to think with");
     const decider: SystemOne = members.length === 1 ? members[0]!.sys : new EnsembleSystemOne(members);
     const usdPerMTok = rates.reduce((s, x) => s + x, 0) / rates.length;
+    return { decider, dailyUsd, usdPerMTok, styleLlm, used };
+  }
+
+  /** A skill-mode agent's skill (also used by simulated training). */
+  skillOf(userId: string, bot: BotView): Skill {
     // Skill mode: the member's skill, compiled now. If it is gone or beyond the plan's slots the agent does not start, and it
     // never quietly trades as something else.
-    let skill: Skill | null = null;
-    if (bot.mode === "skill") {
-      const user = this.o.store.userById(userId);
-      skill = user && bot.skill ? new SkillBank(this.o.store.tenant(userId), user.tier, this.o.library ?? [], this.o.now).resolve(bot.skill) : null;
-      if (!skill) throw new Error("its skill is not available");
-    }
+    const user = this.o.store.userById(userId);
+    const skill = user && bot.skill ? new SkillBank(this.o.store.tenant(userId), user.tier, this.o.library ?? [], this.o.now).resolve(bot.skill) : null;
+    if (!skill) throw new Error("its skill is not available");
+    return skill;
+  }
+
+  private async start(userId: string, bot: BotView): Promise<void> {
+    mkdirSync(this.dir(userId), { recursive: true });
+    const file = join(this.dir(userId), `${bot.id}-v${bot.version}.sqlite`);
+    const { decider, dailyUsd, usdPerMTok, styleLlm, used } = this.brainsOf(userId, bot);
+    const skill = bot.mode === "skill" ? this.skillOf(userId, bot) : null;
     const cfg = this.config(bot, file, dailyUsd, usdPerMTok);
     const db = new Db(file);
     const ctl = { paused: bot.state === "paused", closing: false };
@@ -229,7 +252,13 @@ export class ArenaRunner {
         skillById: skill ? (sid: string) => (sid === bot.skill ? skill : undefined) : undefined,
       });
       await engine.start();
-      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, usdPerMTok, dailyUsd, file, startedAt: this.o.now(), ctl, auto });
+      const brainView = {
+        id: used.length > 1 ? "vote" : bot.brains[0] === PLATFORM ? "platform" : "own",
+        label: used.length > 1 ? `Vote of ${used.length}: ${used.map((u) => u.label).join(" + ")}` : (used[0]?.label ?? "Platform"),
+        model: used.length > 1 ? used.map((u) => u.model ?? "?").join(" + ") : (used[0]?.model ?? null),
+        online: true,
+      };
+      this.runs.set(bot.id, { botId: bot.id, userId, version: bot.version, bot, engine, db, jev, usdPerMTok, dailyUsd, file, startedAt: this.o.now(), ctl, auto, brainView });
       this.errors.delete(bot.id);
       if (bot.mode === "autonomous") void this.review(bot.id);
     } catch (e) {
@@ -358,6 +387,25 @@ export class ArenaRunner {
     lb.prune(ts);
   }
 
+  /** Listed agents' new results become Warren feed posts (closed trades, milestones, a new version). Results only. */
+  socialize(): void {
+    const feed = this.o.social;
+    if (!feed) return;
+    for (const r of this.runs.values()) {
+      if (!r.bot.listed || r.ctl.closing) continue;
+      const user = this.o.store.userById(r.userId);
+      const b = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
+      if (!user || !b) continue;
+      try {
+        const fills = (r.db.raw.prepare("SELECT id, ts, inst_id AS i, side, notional_usd AS n, realised_usd AS p FROM fills WHERE bee = ? AND realised_usd != 0 AND id > ? ORDER BY id LIMIT 50").all(SLOT, Math.max(0, feed.cursor(r.botId, r.version).fillId)) as Array<{ id: number; ts: number; i: string; side: string; n: number; p: number }>).map((f) => ({ id: f.id, ts: f.ts, coin: f.i.split("-")[0] ?? f.i, side: f.side === "sell" ? ("sell" as const) : ("buy" as const), notionalUsd: f.n, realisedUsd: f.p }));
+        const start = b.startEquityUsd || this.o.startUsd;
+        feed.record({ botId: r.botId, userId: r.userId, name: r.bot.name, avatar: r.bot.avatar, theme: r.bot.theme, handle: user.handle, image: r.bot.image }, r.version, fills, start > 0 ? ((b.equityUsd - start) / start) * 100 : null);
+      } catch (e) {
+        log.warn("arena: feed post failed", { bot: r.botId, error: safeError(e).message });
+      }
+    }
+  }
+
   /** Every member with a bot: the periodic safety net, and the first pass at start-up. */
   syncAll(): Promise<void> {
     const ids = (this.o.store.dir.prepare("SELECT id FROM users ORDER BY created_at, id").all() as Array<{ id: string }>).map((r) => r.id);
@@ -370,6 +418,11 @@ export class ArenaRunner {
     this.settler = setInterval(() => void this.serial(() => this.settle()), 10_000);
     this.reviewer = setInterval(() => void Promise.all([...this.runs.keys()].map((id) => this.review(id))), 600_000);
     if (this.o.leaderboard) this.sampler = setInterval(() => this.sample(), this.o.sampleMs);
+    if (this.o.social)
+      this.socializer = setInterval(() => {
+        this.socialize();
+        this.o.social?.prune();
+      }, 60_000);
   }
 
   stopAll(): void {
@@ -377,6 +430,7 @@ export class ArenaRunner {
     if (this.sampler) clearInterval(this.sampler);
     if (this.settler) clearInterval(this.settler);
     if (this.reviewer) clearInterval(this.reviewer);
+    if (this.socializer) clearInterval(this.socializer);
     for (const r of [...this.runs.values()]) this.stopRun(r, false);
   }
 
@@ -432,8 +486,8 @@ export class ArenaRunner {
     for (const id of botIds) {
       const r = this.runs.get(id);
       if (!r || r.userId !== userId) continue;
-      const bee = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
-      if (!bee) continue;
+      const snap = r.engine.snapshot().bees.find((x) => x.bee === SLOT);
+      if (!snap) continue;
       const decisions = r.db
         .recentEvents(60)
         .map((line) => {
@@ -444,9 +498,28 @@ export class ArenaRunner {
           }
         })
         .filter((e): e is { type: string } => e?.type === "decision");
-      out[id] = { bee, curve: r.db.equitySeries(since, 300)[SLOT] ?? [], decisions };
+      // The engine keeps its last call in memory only: after a restart, show the last one it recorded rather than "waiting".
+      const d0 = (decisions[0] ?? null) as { ts: number; choice: string | null; probabilities?: Array<{ label: string; p: number }>; confidence: number | null; latencyMs: number | null; status: string; required?: boolean } | null;
+      const last =
+        snap.last ??
+        (d0
+          ? { choice: d0.choice, top3: (d0.probabilities ?? []).slice(0, 3).map((x) => [x.label, x.p] as [string, number]), confidence: d0.confidence, latencyMs: d0.latencyMs, status: d0.status, ts: d0.ts, ...(d0.required ? { required: true } : {}) }
+          : null);
+      // The engine's own brain chip describes the owner's bunnies; an agent decides with the models it really uses.
+      out[id] = { bee: { ...snap, last, brain: r.brainView }, curve: r.db.equitySeries(since, 300)[SLOT] ?? [], decisions };
     }
     return out;
+  }
+
+  /**
+   * A running agent's full profile, in the shape a bunny's profile page reads (bunnyProfile.ts): equity with times,
+   * stats, per-coin record, daily P&L, fills, decisions. The caller decides who may see whose (api.ts).
+   */
+  profile(userId: string, botId: string, days = 7): unknown | null {
+    const r = this.runs.get(botId);
+    if (!r || r.userId !== userId) return null;
+    this.noGraph ??= new KnowledgeGraph(":memory:");
+    return bunnyProfile({ db: r.db, graph: this.noGraph, playbook: () => null, slots: () => [SLOT], now: this.o.now }, SLOT, days);
   }
 
   /** Where each of a member's bots stands. */

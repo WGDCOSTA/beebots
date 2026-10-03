@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { AdminPage } from "./AdminPage";
 import { ArenaPage } from "./ArenaPage";
 import { BunnyPage } from "./BunnyPage";
+import { FarmerPage } from "./Farmer";
 import { LabPage } from "./LabPage";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -10,7 +11,7 @@ import "./styles.css";
 import "./panels.css";
 import { applyProfile, type Profile } from "./types";
 
-/** Hash routes: #/ live dashboard, #/bunny/<slot> one bunny's profile, #/lab ranking + warren memory, #/admin owner panel, #/arena member sign-in and account. */
+/** Hash routes: #/ live dashboard, #/bunny/<slot> one bunny's profile, #/farmer everything the Farmer did, #/lab ranking + warren memory, #/admin owner panel, #/arena member sign-in and account. */
 function Routes() {
   const read = () => location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] ?? "";
   const [route, setRoute] = useState(read);
@@ -23,6 +24,7 @@ function Routes() {
   if (route === "admin") return <AdminPage />;
   if (route === "arena") return <ArenaPage />;
   if (route === "bunny") return <BunnyPage />;
+  if (route === "farmer") return <FarmerPage />;
   return <App />;
 }
 

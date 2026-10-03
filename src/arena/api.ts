@@ -19,6 +19,12 @@ import { libraryOf, SkillBank, SkillError } from "./skills.js";
 import { PROVIDERS, DEFAULT_MODEL, MAX_KEYS, VaultError, type Vault } from "./vault.js";
 import { THEMES } from "./themes.js";
 import type { Insights } from "./insights.js";
+import { AgentChat, ChatLog, type ChatAgent, type ChatMarket, type OwnContext } from "./chat.js";
+import { PublicChat } from "../publicChat.js";
+import type { Social } from "./social.js";
+import type { LlmClient } from "../brains/llm.js";
+import type { CandleStore } from "./history.js";
+import { BACKTESTS_PER_DAY, backtestSkill, TrainError, TRAININGS_PER_DAY, TRAIN_DAYS, usage, type Trainer } from "./training.js";
 import type { ArenaStore, ArenaUser } from "./store.js";
 
 export interface Operator {
@@ -53,6 +59,14 @@ export interface ApiOpts {
   vault?: Vault | null;
   /** Plans and payment (null = payments are not open: everyone is on Free). */
   billing?: Billing | null;
+  /** The agent chat: real market candles and the platform's model (null = chat is off). */
+  chat?: { market: ChatMarket; llm: LlmClient | null; dailyLimit?: number; publicPerHour?: number; publicDailyLimit?: number } | null;
+  /** Stored historical candles (null = none: backtests and training are off). */
+  history?: CandleStore | null;
+  /** Replays agents over history (null = training is off). */
+  trainer?: Trainer | null;
+  /** The Warren feed (social.ts): members' listed agents' results, follows and cheers (null = off). */
+  social?: Social | null;
   /** Runs members' bots on paper (null = nothing runs them: bots are only stored). */
   runner?: {
     update(userId: string): Promise<void>;
@@ -62,8 +76,13 @@ export interface ApiOpts {
     insights?(userId: string, bot: BotView, opts?: { decisions?: number; trades?: number; points?: number }): Insights | null;
     /** The member's running agents as the live board draws a bunny (runner.live). */
     live?(userId: string, botIds: string[]): Record<string, { bee: unknown; curve: Array<[number, number]>; decisions: unknown[] }>;
+    /** One running agent's full profile (runner.profile). */
+    profile?(userId: string, botId: string, days?: number): unknown | null;
   } | null;
 }
+
+/** The platform's own accounts whose agents are shown in full on the Arena's live board (ARENA_HOUSE_HANDLES). */
+const HOUSE_HANDLES = (process.env.ARENA_HOUSE_HANDLES ?? "glitchbunny,glitchbunny-labs").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
 
 const view = (u: ArenaUser) => ({ id: u.id, email: u.email, tier: u.tier, handle: u.handle, locale: u.locale, createdAt: u.createdAt });
 
@@ -80,10 +99,59 @@ function sessionOf(req: IncomingMessage): string | undefined {
   return undefined;
 }
 
+/** An agent's own record, as the chat sees it. */
+function ownContextOf(ins: Insights): OwnContext {
+  const last = ins.decisions[0];
+  return {
+    equity: ins.equity,
+    position: last?.did.kind && last.did.kind !== "none" ? `${last.did.kind} ${last.did.coin ?? ""}`.trim() : null,
+    pnlPct: ins.equity.length > 1 && ins.equity[0]![1] > 0 ? Number((((ins.equity[ins.equity.length - 1]![1] - ins.equity[0]![1]) / ins.equity[0]![1]) * 100).toFixed(2)) : null,
+    decisions: ins.decisions.map((d) => ({ ts: d.ts, did: d.did.kind, choice: d.choice, confidencePct: d.confidence === null ? null : Math.round(d.confidence * 100), rule: d.vetoedBy ?? d.forcedBy })),
+    trades: ins.trades.map((t) => ({ ts: t.ts, coin: t.coin, side: t.side, sizeUsd: t.sizeUsd, realisedUsd: t.realisedUsd })),
+  };
+}
+
 export class ArenaApi {
   private readonly now: () => number;
+  /** The live board's answer, shared by every visitor for 5 s (it is public, so a crowd costs one read). */
+  private showcase: { at: number; body: unknown } | null = null;
+
+  /** The house accounts' ids, by their public names. */
+  private houseIds(): string[] {
+    return this.store.allUserIds().filter((id) => HOUSE_HANDLES.includes(this.store.userById(id)?.handle ?? ""));
+  }
+  /** Visitors' chat with the house agents (publicChat.ts): the platform's model, read-only, nothing stored. */
+  private readonly houseChat: PublicChat | null;
+
   constructor(private readonly auth: ArenaAuth, private readonly store: ArenaStore, private readonly opts: ApiOpts) {
     this.now = opts.now ?? Date.now;
+    const c = opts.chat;
+    this.houseChat = c
+      ? new PublicChat({
+          market: c.market,
+          agent: (id) => this.houseBot(id)?.agent ?? null,
+          llm: (id) => (this.houseBot(id) ? c.llm : null),
+          own: (id) => {
+            const h = this.houseBot(id);
+            const ins = h ? (this.opts.runner?.insights?.(h.uid, h.bot, { decisions: 12, trades: 12, points: 120 }) ?? null) : null;
+            return ins ? ownContextOf(ins) : null;
+          },
+          perHour: c.publicPerHour ?? 5,
+          dailyLimit: c.publicDailyLimit ?? 300,
+          now: this.now,
+        })
+      : null;
+  }
+
+  /** A house agent that is shown on the live board, with its owner, or null. */
+  private houseBot(id: string): { uid: string; bot: BotView; agent: ChatAgent } | null {
+    for (const uid of this.houseIds()) {
+      const u = this.store.userById(uid);
+      if (!u) continue;
+      const bot = new Bots(this.store.tenant(uid), u.tier, this.now).list().find((b) => b.id === id && b.listed);
+      if (bot) return { uid, bot, agent: { name: bot.name, tagline: bot.tagline, style: bot.style, mode: bot.mode, rules: bot.rules, coins: bot.coins, state: bot.state } };
+    }
+    return null;
   }
 
   private cookie(value: string, maxAgeSec: number): string {
@@ -118,6 +186,117 @@ export class ArenaApi {
     if (!this.store.consentNeeded(u.id)) return false;
     reply(res, 403, { error: "Accept the Terms and the Privacy notice to continue.", code: "consent_required" });
     return true;
+  }
+
+  /** Historical data (Pro and Premium): what is stored, a skill's backtest, and an agent's simulated trainings. */
+  private async history(req: IncomingMessage, res: ServerResponse, route: string, u: ArenaUser): Promise<true> {
+    const h = this.opts.history ?? null;
+    const trainer = this.opts.trainer ?? null;
+    const day = new Date(this.now()).toISOString().slice(0, 10);
+    const db = this.store.tenant(u.id);
+    const allowed = LIMITS[u.tier].history;
+    const q = new URL(req.url ?? "/", "http://x").searchParams;
+    try {
+      if (req.method === "GET") {
+        if (route === "/history") {
+          const coins = new Map<string, { coin: string; from: number; to: number }>();
+          for (const c of h?.summary() ?? []) if (c.bar === "1H") coins.set(c.coin, { coin: c.coin, from: c.from, to: c.to });
+          return this.send(res, 200, { open: !!h, allowed, days: TRAIN_DAYS, coins: [...coins.values()], syncedAt: h?.lastSyncAt ?? 0, backtests: { perDay: BACKTESTS_PER_DAY[u.tier], used: usage(db, day, "backtest") } });
+        }
+        if (route === "/bots/train") {
+          const bot = new Bots(db, u.tier, this.now).find(q.get("id"));
+          return this.send(res, 200, { open: !!trainer, allowed, days: TRAIN_DAYS, perDay: TRAININGS_PER_DAY[u.tier], used: usage(db, day, "train"), trainings: trainer?.list(u.id, bot.id) ?? [] });
+        }
+        if (route === "/bots/train/detail") {
+          const t = trainer?.get(u.id, q.get("id") ?? "") ?? null;
+          if (!t) return this.send(res, 404, { error: "No such training." });
+          return this.send(res, 200, { training: t, insights: trainer!.insights(u.id, t) });
+        }
+        return this.send(res, 404, { error: "not found" });
+      }
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      const body = (await readJson(req, MAX_BODY)) as { id?: unknown; days?: unknown; skill?: unknown; coin?: unknown };
+      if (!allowed) return this.send(res, 403, { error: "Historical data is part of Pro and Premium.", code: "plan" });
+      if (route === "/skills/backtest") {
+        if (!h) return this.send(res, 503, { error: "Historical data is not available right now.", code: "closed" });
+        if (usage(db, day, "backtest") >= BACKTESTS_PER_DAY[u.tier]) return this.send(res, 429, { error: "You have used today's backtests for your plan.", code: "backtest_limit" });
+        const skill = new SkillBank(db, u.tier, this.opts.library ?? [], this.now).resolve(typeof body.skill === "string" ? body.skill : "");
+        if (!skill) return this.send(res, 404, { error: "That skill is not in your slots." });
+        const result = backtestSkill(h, skill, typeof body.coin === "string" ? body.coin.toUpperCase() : "", Number(body.days), this.now());
+        usage(db, day, "backtest", 1);
+        return this.send(res, 200, { result, used: usage(db, day, "backtest") });
+      }
+      if (!trainer) return this.send(res, 503, { error: "Training is not available right now.", code: "closed" });
+      if (route === "/bots/train/start") {
+        const bot = new Bots(db, u.tier, this.now).find(typeof body.id === "string" ? body.id : null);
+        return this.send(res, 200, { training: trainer.start(u.id, u.tier, bot, Number(body.days)), used: usage(db, day, "train") });
+      }
+      if (route === "/bots/train/cancel") {
+        trainer.cancel(u.id, typeof body.id === "string" ? body.id : "");
+        return this.send(res, 200, { ok: true });
+      }
+      return this.send(res, 404, { error: "not found" });
+    } catch (e) {
+      if (e instanceof TrainError) return this.send(res, e.status, { error: e.message, code: e.code });
+      if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
+      throw e;
+    }
+  }
+
+  /** Chat with one of the member's own agents. Read-only: it can look at markets and talk, never trade or change anything. */
+  private async chat(req: IncomingMessage, res: ServerResponse, route: string, u: ArenaUser): Promise<true> {
+    const cfg = this.opts.chat;
+    const day = new Date(this.now()).toISOString().slice(0, 10);
+    const log = new ChatLog(this.store.tenant(u.id));
+    const limit = LIMITS[u.tier].chatPerDay;
+    try {
+      if (req.method === "GET") {
+        const bot = new Bots(this.store.tenant(u.id), u.tier, this.now).find(new URL(req.url ?? "/", "http://x").searchParams.get("id"));
+        return this.send(res, 200, { open: !!cfg, limit, used: log.usedToday(day), messages: log.list(bot.id) });
+      }
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      const body = (await readJson(req, MAX_BODY)) as { id?: unknown; text?: unknown };
+      const bot = new Bots(this.store.tenant(u.id), u.tier, this.now).find(typeof body.id === "string" ? body.id : null);
+      if (route === "/bots/chat/clear") {
+        log.clear(bot.id);
+        return this.send(res, 200, { messages: [] });
+      }
+      if (!cfg) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
+      const text = typeof body.text === "string" ? body.text.trim().slice(0, 500) : "";
+      if (!text) return this.send(res, 400, { error: "Write a question first." });
+      if (log.usedToday(day) >= limit) return this.send(res, 429, { error: "You have used today's chat messages for your plan.", code: "chat_limit" });
+      // The model is the agent's first brain: the platform's, or the member's own key. An own key that is gone never falls back.
+      const first = bot.brains[0] ?? PLATFORM;
+      let llm: LlmClient | null = cfg.llm;
+      let own = false;
+      if (first !== PLATFORM) {
+        const k = this.keysOf(u)?.secret(first);
+        if (!k) return this.send(res, 409, { error: "This agent's own model key is not available.", code: "no_key" });
+        llm = this.opts.vault!.brain(k.provider, k.secret, k.model);
+        own = true;
+      }
+      if (!llm) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
+      const cap = cfg.dailyLimit ?? 2000;
+      if (!own && this.store.aiToday("chat:" + day) >= cap) return this.send(res, 429, { error: "Chat is busy today. Try again tomorrow.", code: "chat_busy" });
+      log.spend(day);
+      if (!own) this.store.aiToday("chat:" + day, 1);
+      const ins = this.opts.runner?.insights?.(u.id, bot, { decisions: 12, trades: 12, points: 120 }) ?? null;
+      const ownCtx: OwnContext | null = ins ? ownContextOf(ins) : null;
+      const history = log.list(bot.id).slice(-8).map((m) => ({ role: m.role, text: m.text || m.report?.headline || "" }));
+      const asked = log.add(bot.id, "you", this.now(), text);
+      let msg;
+      try {
+        const r = await new AgentChat({ llm, market: cfg.market, now: this.now }).reply({ agent: { name: bot.name, tagline: bot.tagline, style: bot.style, mode: bot.mode, rules: bot.rules, coins: bot.coins, state: bot.state }, text, history, locale: u.locale, own: ownCtx });
+        msg = log.add(bot.id, "agent", this.now(), r.text, r.report, r.unavailable);
+      } catch {
+        log.remove(asked.id); // nothing came back: the question is not kept without an answer
+        return this.send(res, 502, { error: "The agent could not answer just now. Try again.", code: "chat_failed" });
+      }
+      return this.send(res, 200, { message: msg, used: log.usedToday(day), limit });
+    } catch (e) {
+      if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
+      throw e;
+    }
   }
 
   /** Returns false for a path that is not the Arena's. */
@@ -199,6 +378,18 @@ export class ArenaApi {
       reply(res, 200, { templates: TEMPLATES });
       return true;
     }
+    if (route === "/history" || route.startsWith("/bots/train") || route === "/skills/backtest") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      return this.history(req, res, route, u);
+    }
+    if (route === "/bots/chat" || route === "/bots/chat/send" || route === "/bots/chat/clear") {
+      const u = this.auth.user(sessionOf(req));
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      return this.chat(req, res, route, u);
+    }
     if (req.method === "GET" && route === "/bots/insights") {
       const u = this.auth.user(sessionOf(req));
       if (!u) return this.send(res, 401, { error: "not signed in" });
@@ -211,6 +402,93 @@ export class ArenaApi {
         if (e instanceof BotError) return this.send(res, e.status, { error: e.message });
         throw e;
       }
+    }
+    // The platform's own example agents (the "house"), shown in full to everyone: the Arena's live board. Members' agents
+    // are never here; their results reach the public only through the leaderboard.
+    if (req.method === "GET" && route === "/showcase") {
+      const now = this.now();
+      if (!this.showcase || now - this.showcase.at > 5_000) {
+        const agents: unknown[] = [];
+        for (const uid of this.houseIds()) {
+          const u = this.store.userById(uid);
+          if (!u) continue;
+          const bots = new Bots(this.store.tenant(uid), u.tier, this.now).list().filter((b) => b.listed);
+          const live = this.opts.runner?.live?.(uid, bots.map((b) => b.id)) ?? {};
+          for (const b of bots) agents.push({ bot: { id: b.id, name: b.name, tagline: b.tagline, theme: b.theme, avatar: b.avatar, style: b.style, mode: b.mode, coins: b.coins, rules: b.rules, image: b.image, state: b.state, handle: u.handle }, live: live[b.id] ?? null });
+        }
+        this.showcase = { at: now, body: { agents } };
+      }
+      reply(res, 200, this.showcase.body);
+      return true;
+    }
+    if (route === "/social" || route === "/social/react" || route === "/social/follow") {
+      const feed = this.opts.social;
+      if (!feed) return this.send(res, 503, { error: "The feed is not open right now." });
+      const u = this.auth.user(sessionOf(req));
+      if (req.method === "GET") {
+        // Public: anyone can read the feed; a signed-in member also sees what they follow and how they reacted.
+        const q = new URL(req.url ?? "/", "http://x").searchParams;
+        const before = Number(q.get("before") ?? 0) || undefined;
+        const bot = q.get("bot") ?? undefined;
+        return this.send(res, 200, { posts: feed.feed(u?.id ?? null, { following: q.get("filter") === "following", bot: bot && /^[\w-]{1,40}$/.test(bot) ? bot : undefined, before }), following: u ? feed.following(u.id) : [], followers: bot ? feed.followers(bot) : null });
+      }
+      if (!u) return this.send(res, 401, { error: "not signed in" });
+      if (this.blockedByConsent(res, u)) return true;
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      if (this.store.tooMany(`social:${u.id}`, 300, this.now())) return this.send(res, 429, { error: "Too many tries. Wait a little and try again." });
+      const body = (await readJson(req, MAX_BODY)) as { post?: unknown; kind?: unknown; bot?: unknown; on?: unknown };
+      if (route === "/social/react") {
+        const counts = feed.react(u.id, Number(body.post), String(body.kind ?? ""));
+        return counts ? this.send(res, 200, { reactions: counts }) : this.send(res, 404, { error: "No such post." });
+      }
+      const bot = typeof body.bot === "string" ? body.bot : "";
+      // Only agents that are in the feed can be followed: a listed agent with at least one post.
+      if (!feed.feed(null, { bot, limit: 1 }).length) return this.send(res, 404, { error: "No such agent in the feed." });
+      feed.follow(u.id, bot, body.on !== false);
+      return this.send(res, 200, { following: feed.following(u.id), followers: feed.followers(bot) });
+    }
+    if (route === "/showcase/chat" || route === "/showcase/chat/send") {
+      // Anyone may ask a house agent; the page keeps the conversation, the server keeps nothing of it.
+      if (!this.houseChat) return this.send(res, 503, { error: "Chat is not open right now.", code: "chat_closed" });
+      const addr = clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress);
+      if (req.method === "GET") {
+        const r = this.houseChat.info(addr, new URL(req.url ?? "/", "http://x").searchParams.get("id") ?? "");
+        return this.send(res, r.status, r.body);
+      }
+      if (req.method !== "POST" || req.headers["x-arena"] !== "1") return this.send(res, 403, { error: "bad request" });
+      const body = (await readJson(req, MAX_BODY * 2)) as Record<string, unknown>;
+      const r = await this.houseChat.ask(addr, typeof body.id === "string" ? body.id : "", body);
+      return this.send(res, r.status, r.body);
+    }
+    if (req.method === "GET" && route.startsWith("/showcase-image/")) {
+      const id = route.slice("/showcase-image/".length);
+      for (const uid of this.houseIds()) {
+        let jpg: Buffer | null = null;
+        try {
+          jpg = this.store.readPortrait(uid, id);
+        } catch {
+          jpg = null;
+        }
+        if (jpg) {
+          res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "public, max-age=3600" });
+          res.end(jpg);
+          return true;
+        }
+      }
+      return this.send(res, 404, { error: "no portrait" });
+    }
+    if (req.method === "GET" && (route === "/bots/profile" || route === "/showcase/profile")) {
+      // An agent's full record: the member's own agents, or a house agent for anyone.
+      const q = new URL(req.url ?? "/", "http://x").searchParams;
+      const id = q.get("id") ?? "";
+      const days = Math.max(1, Math.min(60, Number(q.get("days") ?? 7) || 7));
+      const owners = route === "/showcase/profile" ? this.houseIds() : [this.auth.user(sessionOf(req))?.id].filter((x): x is string => !!x);
+      if (!owners.length) return this.send(res, 401, { error: "not signed in" });
+      for (const uid of owners) {
+        const p = this.opts.runner?.profile?.(uid, id, days);
+        if (p) return this.send(res, 200, p);
+      }
+      return this.send(res, 404, { error: "This agent is not running right now." });
     }
     if (req.method === "GET" && route === "/bots/live") {
       // The member's own agents as the live board draws a bunny: engine view, curve with times, latest decisions.
@@ -318,7 +596,10 @@ export class ArenaApi {
           } else if (route === "/bots/update") {
             const bot = bots.update(body.id, body);
             // Taking a bot off the leaderboard is immediate, not at the next sample.
-            if (!bot.listed) this.opts.leaderboard?.remove(bot.id);
+            if (!bot.listed) {
+              this.opts.leaderboard?.remove(bot.id);
+              this.opts.social?.forgetBot(bot.id);
+            }
             reply(res, 200, { bot });
             void this.opts.runner?.update(u.id);
           }
@@ -340,7 +621,9 @@ export class ArenaApi {
             const gone = bots.find(body.id);
             bots.remove(gone.id);
             this.opts.leaderboard?.remove(gone.id);
+            this.opts.social?.forgetBot(gone.id);
             this.store.removePortrait(u.id, gone.id);
+            this.opts.trainer?.forgetBot(u.id, gone.id);
             reply(res, 200, { ok: true });
             void this.opts.runner?.update(u.id);
           }
@@ -459,6 +742,7 @@ export class ArenaApi {
           // A subscription must not outlive the account: if Stripe cannot be told, the account stays and the member can retry.
           if (!(await this.billing().cancelFor(u.id))) return this.send(res, 502, { error: "Could not cancel your subscription. Try again in a minute, or cancel it from Manage billing first." });
           await this.opts.runner?.forget(u.id); // close the paper files before they are deleted
+          this.opts.social?.forgetUser(u.id);
           this.store.deleteUser(u.id, this.now());
           reply(res, 200, { ok: true }, { "set-cookie": this.cookie("", 0) });
         }

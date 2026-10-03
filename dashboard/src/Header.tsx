@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { money, signed } from "./BeeColumn";
 import { HiveButton } from "./Hive";
 import { ALL_BEES, PROFILE, type Snapshot, type SystemInfo } from "./types";
+import { VisitorMap } from "./VisitorMap";
 
 function Clock() {
   const [now, setNow] = useState(Date.now());
@@ -15,31 +16,19 @@ function Clock() {
 function Recon({ recon, mode }: { recon: Snapshot["recon"] | undefined; mode: Snapshot["mode"] | undefined }) {
   const state = !recon || recon.ok === null ? "idle" : recon.ok ? "ok" : "bad";
   const text =
-    state === "ok" ? "books match OKX to the cent" : state === "bad" ? recon!.detail : mode === "dry" ? "paper trading: simulated books" : "first check pending";
+    state === "ok" ? "books match OKX" : state === "bad" ? recon!.detail : mode === "dry" ? "paper trading: simulated books" : "first check pending";
   return (
     <div className={`recon recon-${state}`} title={recon?.detail}>
       <span className="recon-light" aria-hidden />
       <div>
         <div className="eyebrow">Reconciliation</div>
-        <div className="recon-text">{state === "ok" ? "✓ " : state === "bad" ? "✗ " : ""}{text}</div>
+        <div className="recon-text">
+          {state === "ok" ? "✓ " : state === "bad" ? "✗ " : ""}
+          {text}
+          {state === "ok" && <span className="recon-more"> to the cent</span>}
+        </div>
       </div>
     </div>
-  );
-}
-
-/**
- * Official Hostinger mark: path from Simple Icons 16.32.0 (slug "hostinger", CC0 path data),
- * traced from Hostinger's media kit at https://www.hostinger.com/newsroom. Brand colour #673DE6.
- * Rendered white (single-colour treatment) because purple on this near-black header is too dim on camera.
- */
-function HostingerMark() {
-  return (
-    <svg className="host-mark" viewBox="0 0 24 24" role="img" aria-label="Hostinger">
-      <path
-        fill="currentColor"
-        d="M16.415 0v7.16l5.785 3.384V2.949L16.415 0ZM1.8 0v11.237h18.815L14.89 8.09l-7.457-.003V3.024L1.8 0Zm14.615 20.894v-5.019l-7.514-.005c.007.033-5.82-3.197-5.82-3.197l19.119.091V24l-5.785-3.106ZM1.8 13.551v7.343l5.633 2.949v-6.988L1.8 13.551Z"
-      />
-    </svg>
   );
 }
 
@@ -60,11 +49,14 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
   const orders = snap?.bees.reduce((a, b) => a + b.totals.orders, 0) ?? 0;
   const decisions = snap?.bees.reduce((a, b) => a + b.totals.decisions, 0) ?? 0;
   const live = connected && !stalled;
+  const [map, setMap] = useState(false);
   return (
     <header className="top">
       <div className="brand">
         <div className="brand-row">
-          <div className="logo">beebots</div>
+          <div className="logo" aria-label="Glitchbunny">
+            Glitch<span>bunny</span>
+          </div>
           <HiveButton />
           <a className="nav-pill" href="#/lab">
             Lab & warren memory
@@ -96,14 +88,19 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
           sub={jev ? `today ${money(jev.spentTodayUsd, 3)} of ${money(jev.dailyCapUsd, 0)} cap` : undefined}
         />
         <Counter label="Decisions" value={decisions.toLocaleString()} sub={jev?.down ? "Jev unreachable: holding" : jev?.capTripped ? "Jev cap hit: holding" : "every one recorded"} tone={jev?.down || jev?.capTripped ? "bad" : undefined} />
-        <Counter label="Visitors" value={snap?.visitors ? snap.visitors.total.toLocaleString() : "–"} sub={snap?.visitors ? `${snap.visitors.watching} watching now` : undefined} />
-        <a className="counter host" href={PROFILE.links?.sponsor ?? "https://mrc.fm/beebots"} target="_blank" rel="noopener">
-          <div className="eyebrow">Hosted on</div>
-          <div className="host-row">
-            <HostingerMark />
-            <span>Hostinger</span>
+        <button className="counter" onClick={() => setMap(true)} title="See where visitors come from">
+          <div className="eyebrow">Visitors 🌍</div>
+          <div className="counter-value num">{snap?.visitors ? snap.visitors.total.toLocaleString() : "–"}</div>
+          {snap?.visitors && <div className="counter-sub num">{snap.visitors.watching} watching now</div>}
+        </button>
+        {/* The Warren club: the members' side, where anyone builds their own bunny and races it on paper (the Arena). */}
+        <a className="counter club" href="#/arena">
+          <div className="eyebrow">The Warren club</div>
+          <div className="club-row">
+            <span aria-hidden>🐰</span>
+            <span>Join</span>
           </div>
-          <div className="counter-sub">Host your own ↗</div>
+          <div className="counter-sub">Build your own bunny →</div>
         </a>
       </div>
 
@@ -118,6 +115,7 @@ export function Header({ snap, connected, stalled, soundOn, onSound }: { snap: S
           </button>
         </div>
       </div>
+      {map && <VisitorMap onClose={() => setMap(false)} />}
     </header>
   );
 }

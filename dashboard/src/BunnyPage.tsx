@@ -2,6 +2,8 @@
 // trades and coins, the calls it made, what it learned, what it told the Warren and heard back, the skills it leans on.
 // Live numbers come from the event stream (useFeed); history from GET /bunny/<slot> (engine bunnyProfile.ts).
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArenaChat } from "./ArenaChat";
+import { I18nProvider } from "./i18n/I18n";
 import { money, signed } from "./BeeColumn";
 import { EquityChart } from "./EquityChart";
 import { PageNav } from "./LabPage";
@@ -22,7 +24,7 @@ interface Msg {
   toMe: boolean;
 }
 
-interface BunnyProfile {
+export interface BunnyProfile {
   slot: string;
   generatedAt: number;
   equity: Array<[number, number]>;
@@ -60,6 +62,7 @@ interface BunnyProfile {
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "ask", label: "💬 Ask me" },
   { id: "trades", label: "Trades" },
   { id: "decisions", label: "Decisions" },
   { id: "learning", label: "Learning" },
@@ -67,7 +70,7 @@ const TABS = [
   { id: "skills", label: "Skills & score" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
-const RANGES = [
+export const RANGES = [
   { days: 1, label: "24h" },
   { days: 7, label: "7d" },
   { days: 30, label: "30d" },
@@ -196,6 +199,14 @@ export function BunnyPage() {
 
         <div className={`bp-body ${loading && data ? "refreshing" : ""}`}>
           {tab === "overview" && <Overview data={data} curve={curve} start={start} evo={evo} slot={slot} />}
+          {tab === "ask" && (
+            // Anyone may ask this bunny for its view; it answers from real market data and its own record (publicChat.ts on the engine).
+            <div className="pcard bp-ask">
+              <I18nProvider>
+                <ArenaChat source={{ kind: "bunny", id: slot }} name={meta.title} />
+              </I18nProvider>
+            </div>
+          )}
           {tab === "trades" && <Trades data={data} />}
           {tab === "decisions" && <Decisions data={data} live={feed.decisions.filter((d) => d.bee === slot && !d.pulse)} />}
           {tab === "learning" && <Learning data={data} />}
@@ -227,7 +238,7 @@ function BunnySwitcher({ current }: { current: string }) {
   );
 }
 
-function Hero({ slot, bee, evo, rank, of, start }: { slot: string; bee: PublicBee | undefined; evo: EvolutionRow | null; rank: number; of: number; start: number }) {
+export function Hero({ slot, bee, evo, rank, of, start }: { slot: string; bee: PublicBee | undefined; evo: EvolutionRow | null; rank: number; of: number; start: number }) {
   const m = beeMeta(slot);
   const t = evo ? TIER_INFO[evo.tier] : null;
   const p = bee?.position ?? null;
@@ -318,7 +329,7 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: 
   );
 }
 
-function Kpis({ s }: { s: BunnyProfile["stats"] }) {
+export function Kpis({ s }: { s: BunnyProfile["stats"] }) {
   return (
     <div className="bp-kpis">
       <div className="bp-kpi ring-kpi">
@@ -351,7 +362,7 @@ function Card({ title, hint, children, wide }: { title: string; hint?: string; c
   );
 }
 
-function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null; curve: Array<[number, number]>; start: number; evo: EvolutionRow | null; slot: string }) {
+export function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null; curve: Array<[number, number]>; start: number; evo: EvolutionRow | null; slot: string }) {
   const m = beeMeta(slot);
   const dailyBars: Bar[] = (data?.daily ?? []).map((d) => ({ key: d.day, label: d.day.slice(5), value: d.realisedUsd, sub: [`${d.trades} closed trades`, `fees ${money(d.feesUsd)}`] }));
   const pointBars: Bar[] = (evo?.history ?? []).map((h) => ({ key: h.day, label: h.day.slice(5), value: h.points, sub: [`day P&L ${pct(h.pnlPct, 2)}`, ...(h.bonus ? [`bonus: ${h.bonus}`] : [])] }));
@@ -367,9 +378,12 @@ function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null
         <Card title="Realised P&L by day" hint="UTC days">
           <BarChart bars={dailyBars} format={(v) => signed(v)} tone={pnlTone} empty="No closed trades in this range yet." />
         </Card>
-        <Card title="Points by day" hint={evo ? `level ${evo.level}${evo.nextLevelAt ? ` · next at ${evo.nextLevelAt} pts` : ""}` : "survival & rewards"}>
-          <BarChart bars={pointBars} format={(v) => `${v >= 0 ? "+" : ""}${v} pts`} tone={(v) => (v >= 0 ? m.color : BAD)} empty="Points start after its first full day." />
-        </Card>
+        {/* Points exist only where survival and rewards run (the owner's bunnies); never promise them elsewhere. */}
+        {evo && (
+          <Card title="Points by day" hint={evo ? `level ${evo.level}${evo.nextLevelAt ? ` · next at ${evo.nextLevelAt} pts` : ""}` : "survival & rewards"}>
+            <BarChart bars={pointBars} format={(v) => `${v >= 0 ? "+" : ""}${v} pts`} tone={(v) => (v >= 0 ? m.color : BAD)} empty="Points start after its first full day." />
+          </Card>
+        )}
         <Card title="Coins it trades" hint="realised P&L per coin">
           {data?.coins.length ? (
             <HBars
@@ -406,7 +420,7 @@ function Overview({ data, curve, start, evo, slot }: { data: BunnyProfile | null
   );
 }
 
-function Trades({ data }: { data: BunnyProfile | null }) {
+export function Trades({ data }: { data: BunnyProfile | null }) {
   const [closesOnly, setClosesOnly] = useState(false);
   const rows = (data?.fills ?? []).filter((f) => !closesOnly || f.close);
   return (
@@ -482,7 +496,7 @@ function Trades({ data }: { data: BunnyProfile | null }) {
   );
 }
 
-function Decisions({ data, live }: { data: BunnyProfile | null; live: ReturnType<typeof useFeed>["decisions"] }) {
+export function Decisions({ data, live }: { data: BunnyProfile | null; live: ReturnType<typeof useFeed>["decisions"] }) {
   const dots: Dot[] = (data?.decisions ?? [])
     .filter((d) => d.confidence !== null)
     .map((d) => ({ ts: d.ts, value: d.confidence!, label: d.choice ?? d.status ?? "–", sub: d.vetoedBy ? `vetoed by ${d.vetoedBy}` : d.forcedBy ? `forced by ${d.forcedBy}` : undefined, hollow: !!d.vetoedBy }));

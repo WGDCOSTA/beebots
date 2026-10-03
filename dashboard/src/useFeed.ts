@@ -120,6 +120,15 @@ async function getJson<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
+/** This page's time zone (its clock's, e.g. "Europe/Lisbon"), the only hint of place the visitors' map gets. */
+export function pageTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function useFeed(soundOn: boolean): FeedState {
   const [state, dispatch] = useReducer(reduce, initial);
   const sound = useRef(soundOn);
@@ -131,12 +140,12 @@ export function useFeed(soundOn: boolean): FeedState {
     const loadCurves = () => getJson<Partial<Record<BeeName, Curve>>>("/equity?days=30").then((curves) => alive && dispatch({ t: "curves", curves })).catch(() => {});
 
     // Hit counter: one call per page load; the engine dedupes per visitor per day and stores no IPs.
-    getJson<{ total: number; watching: number }>("/visit").then(() => loadSnap()).catch(() => {});
+    getJson<{ total: number; watching: number }>(`/visit?tz=${encodeURIComponent(pageTz())}`).then(() => loadSnap()).catch(() => {});
     void loadSnap();
     void loadCurves();
     getJson<AnyEvent[]>("/history?n=400").then((events) => alive && dispatch({ t: "history", events })).catch(() => {});
 
-    const es = new EventSource("/events");
+    const es = new EventSource(`/events?tz=${encodeURIComponent(pageTz())}`);
     es.onopen = () => {
       dispatch({ t: "connected", on: true });
       void loadSnap();
