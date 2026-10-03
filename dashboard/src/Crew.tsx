@@ -2,6 +2,7 @@
 // shows who it is, what it said last, its latest notes and when it looks next; #/crew/<id> shows everything it wrote.
 import { useEffect, useState } from "react";
 import { PageNav } from "./LabPage";
+import { BarChart, HBars, Ring } from "./ProfileCharts";
 import { beeMeta, type CrewEntry, type CrewSummary } from "./types";
 
 const EMOJI: Record<string, string> = { owl: "🦉", rat: "🐀", pig: "🐷" };
@@ -101,6 +102,143 @@ export function CrewRow({ crew }: { crew: CrewSummary[] | null | undefined }) {
   );
 }
 
+interface Dash {
+  brain: { model: string | null; brain: string | null; everyMin: number; nextAt: number | null; enabled: boolean };
+  metrics: { rounds: number; okRounds: number; successPct: number | null; avgLatencyMs: number | null; inTokens: number; outTokens: number; avgNotes: number | null; lastError: string | null };
+  rounds: Array<{ ts: number; ok: number; model: string | null; latencyMs: number | null; inTokens: number | null; outTokens: number | null; notes: number; error: string | null }>;
+  levels: Array<{ level: string; n: number }>;
+  perBee: Array<{ bee: string; level: string; n: number }>;
+  // The data it read last round (brains/crewData.ts): its shape depends on the member.
+  input: Record<string, any> | null; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+const BRAIN: Record<string, string> = { openai: "ChatGPT (OpenAI)", claude: "Claude (Anthropic)", kimi: "Kimi (Moonshot)", zai: "GLM (Z.ai)" };
+const COLOR: Record<string, string> = { owl: "#9085e9", rat: "#3fb9c9", pig: "#e77fa4" };
+const pctTone = (v: number) => (v >= 0 ? "var(--good)" : "var(--critical)");
+const fmtN = (n: number) => n.toLocaleString("en-US");
+const pctFmt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+const usd = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
+
+function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bp-kpi">
+      <span className="eyebrow">{label}</span>
+      <span className="bp-kpi-v num">{value}</span>
+      {sub && <span className="dim small">{sub}</span>}
+    </div>
+  );
+}
+
+function Card({ title, hint, children, wide }: { title: string; hint?: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <section className={`bp-card ${wide ? "wide" : ""}`}>
+      <div className="bp-card-head">
+        <h3>{title}</h3>
+        {hint && <span className="dim small">{hint}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** What it read last round, drawn for its job: the Owl's view of each bunny, the Rat's market, the Pig's books. */
+function JobCharts({ id, input, color }: { id: string; input: Dash["input"]; color: string }) {
+  if (!input) return <Card title="What it read" wide><div className="chart-empty">Its first round's data will show here.</div></Card>;
+  if (id === "owl") {
+    const bees: Array<{ slot: string; name: string; pnlPct: number | null; callsLast24h: { total: number; avgConfidence: number | null; vetoed: number; byKind: Record<string, number> }; recentClosedTrades: Array<{ netUsd: number | null }> }> = input.bunnies ?? [];
+    return (
+      <>
+        <Card title="Average confidence of each bunny's calls" hint="last 24 h">
+          <HBars rows={bees.map((b) => ({ key: b.slot, label: b.name, value: (b.callsLast24h.avgConfidence ?? 0) * 100, note: `${b.callsLast24h.total} calls · ${b.callsLast24h.vetoed} vetoed` }))} format={(v) => `${Math.round(v)}%`} tone={() => color} />
+        </Card>
+        <Card title="Each bunny's P&L" hint="since start">
+          <HBars rows={bees.map((b) => ({ key: b.slot, label: b.name, value: b.pnlPct ?? 0 }))} format={pctFmt} tone={pctTone} />
+        </Card>
+        {bees.map((b) => (
+          <Card key={b.slot} title={`${b.name}: what it chose`} hint={`${b.callsLast24h.total} calls in 24 h`}>
+            <HBars rows={Object.entries(b.callsLast24h.byKind).sort((x, y) => y[1] - x[1]).map(([k, n]) => ({ key: k, label: k.toLowerCase(), value: n, note: `${Math.round((100 * n) / Math.max(1, b.callsLast24h.total))}%` }))} format={(v) => String(v)} tone={() => color} />
+          </Card>
+        ))}
+      </>
+    );
+  }
+  if (id === "rat") {
+    const okx = input.okx ?? {};
+    const mood = input.coinMarketCap ?? {};
+    const rows = (xs: Array<Record<string, number | string | null>> | undefined, k: string) => (xs ?? []).map((c) => ({ key: String(c.coin), label: String(c.coin), value: Number(c[k] ?? 0), note: c.rsi !== undefined && c.rsi !== null ? `RSI ${c.rsi}` : undefined }));
+    return (
+      <>
+        <div className="bp-kpis wide-span">
+          <Kpi label="Fear & Greed" value={String(mood.fearGreed ?? "–")} sub={mood.fearGreedWeek ? `week ${mood.fearGreedWeek}` : undefined} />
+          <Kpi label="Altcoin season" value={String(mood.altcoinSeason ?? "–")} />
+          <Kpi label="BTC dominance" value={mood.btcDominancePct != null ? `${mood.btcDominancePct}%` : "–"} />
+          <Kpi label="Market cap 24h" value={mood.totalMcapChange24hPct != null ? pctFmt(mood.totalMcapChange24hPct) : "–"} sub={mood.totalMcapTusd ? `$${mood.totalMcapTusd}T` : undefined} />
+          <Kpi label="OKX breadth 24h" value={okx.breadth24h ? `${okx.breadth24h.up} ▲ · ${okx.breadth24h.down} ▼` : "–"} sub={`${okx.coins ?? 0} coins`} />
+        </div>
+        <Card title="Strongest 7 days" hint="OKX perps">
+          <HBars rows={rows(okx.strongest7d, "ret7dPct")} format={pctFmt} tone={pctTone} />
+        </Card>
+        <Card title="Weakest 7 days" hint="OKX perps">
+          <HBars rows={rows(okx.weakest7d, "ret7dPct")} format={pctFmt} tone={pctTone} />
+        </Card>
+        <Card title="Highest funding" hint="longs pay shorts: crowded longs">
+          <HBars rows={rows(okx.highestFunding, "fundingPct")} format={(v) => `${v.toFixed(3)}%`} tone={pctTone} />
+        </Card>
+        <Card title="Lowest funding" hint="shorts pay longs: crowded shorts">
+          <HBars rows={rows(okx.lowestFunding, "fundingPct")} format={(v) => `${v.toFixed(3)}%`} tone={pctTone} />
+        </Card>
+        <Card title="Top movers 24 h" hint="CoinMarketCap, top 150">
+          <HBars rows={(input.topMovers24h ?? []).map((c: { coin: string; pct24h: number; rank: number }) => ({ key: c.coin, label: c.coin, value: c.pct24h, note: `rank ${c.rank}` }))} format={pctFmt} tone={pctTone} />
+        </Card>
+        <Card title="Bottom movers 24 h" hint="CoinMarketCap, top 150">
+          <HBars rows={(input.bottomMovers24h ?? []).map((c: { coin: string; pct24h: number; rank: number }) => ({ key: c.coin, label: c.coin, value: c.pct24h, note: `rank ${c.rank}` }))} format={pctFmt} tone={pctTone} />
+        </Card>
+      </>
+    );
+  }
+  // pig: the books
+  const bees: Array<{ slot: string; name: string; pnlUsd: number; allTime: { feesUsd: number; fundingUsd: number; modelUsd: number; realisedUsd: number }; last7d: { netUsd: number } }> = input.bunnies ?? [];
+  const w = input.warren ?? {};
+  const b = input.budgets ?? {};
+  const cmc = b.coinMarketCap;
+  return (
+    <>
+      <div className="bp-kpis wide-span">
+        <Kpi label="Warren equity" value={w.equityUsd != null ? usd(w.equityUsd) : "–"} sub={w.startUsd != null ? `start ${usd(w.startUsd)}` : undefined} />
+        <Kpi label="Realised P&L" value={w.realisedUsd != null ? usd(w.realisedUsd) : "–"} sub="all time" />
+        <Kpi label="Fees" value={w.feesUsd != null ? usd(w.feesUsd) : "–"} sub="all time" />
+        <Kpi label="Model spend" value={w.modelUsd != null ? usd(w.modelUsd) : "–"} sub="all time" />
+        <Kpi label="Funding" value={w.fundingUsd != null ? usd(w.fundingUsd) : "–"} sub="all time" />
+      </div>
+      <Card title="Budgets today" hint="how much of each cap is used">
+        <div className="crew-rings">
+          <div>
+            <Ring value={b.jevDailyCapUsd ? (100 * (b.jevTodayUsd ?? 0)) / b.jevDailyCapUsd : null} color={color} label="Decision model budget" text={b.jevDailyCapUsd ? `${Math.round((100 * (b.jevTodayUsd ?? 0)) / b.jevDailyCapUsd)}%` : "–"} />
+            <span className="dim small">decision model {usd(b.jevTodayUsd ?? 0)} / {usd(b.jevDailyCapUsd ?? 0)}</span>
+          </div>
+          {cmc && (
+            <div>
+              <Ring value={cmc.maxCallsDay ? (100 * cmc.callsToday) / cmc.maxCallsDay : null} color={color} label="CoinMarketCap calls" text={cmc.maxCallsDay ? `${Math.round((100 * cmc.callsToday) / cmc.maxCallsDay)}%` : "–"} />
+              <span className="dim small">
+                CoinMarketCap {cmc.callsToday} / {cmc.maxCallsDay} calls
+              </span>
+            </div>
+          )}
+        </div>
+      </Card>
+      <Card title="Net result, last 7 days" hint="realised − fees + funding − model spend">
+        <HBars rows={bees.map((x) => ({ key: x.slot, label: x.name, value: x.last7d.netUsd ?? 0 }))} format={usd} tone={pctTone} />
+      </Card>
+      <Card title="Fees per bunny" hint="all time">
+        <HBars rows={bees.map((x) => ({ key: x.slot, label: x.name, value: x.allTime.feesUsd ?? 0 }))} format={usd} tone={() => "var(--critical)"} />
+      </Card>
+      <Card title="Model spend per bunny" hint="all time">
+        <HBars rows={bees.map((x) => ({ key: x.slot, label: x.name, value: x.allTime.modelUsd ?? 0 }))} format={usd} tone={() => color} />
+      </Card>
+    </>
+  );
+}
+
 /** #/crew/<id>: everything one crew member wrote, newest first. */
 const readId = () => location.hash.replace(/^#\/?/, "").split(/[/?]/)[1] ?? "owl";
 
@@ -115,6 +253,7 @@ export function CrewPage() {
   const [entries, setEntries] = useState<CrewEntry[]>([]);
   const [more, setMore] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [dash, setDash] = useState<Dash | null>(null);
   const load = (before?: number) =>
     fetch(`/crew/${id}?limit=50${before ? `&before=${before}` : ""}`, { cache: "no-store" })
       .then(async (r) => {
@@ -122,14 +261,16 @@ export function CrewPage() {
           setMissing(true);
           return;
         }
-        const j = (await r.json()) as { member: CrewSummary; entries: CrewEntry[] };
+        const j = (await r.json()) as { member: CrewSummary; entries: CrewEntry[]; dashboard?: Dash };
         setM(j.member);
+        if (j.dashboard) setDash(j.dashboard);
         setEntries((x) => (before ? [...x, ...j.entries] : j.entries));
         setMore(j.entries.length === 50);
       })
       .catch(() => setMore(false));
   useEffect(() => {
     setEntries([]);
+    setDash(null);
     setM(null);
     setMissing(false);
     void load();
@@ -152,15 +293,62 @@ export function CrewPage() {
           <p className="dim">No such crew member.</p>
         ) : (
           <>
-            <div className="farmer-page-head">
-              {m && <Face m={m} />}
-              <h1>{m?.name ?? ""}</h1>
-            </div>
             {m && (
-              <p className="dim">
-                The {m.role}. {m.job} Every {every(m.everyMin)}. He advises; he never trades, moves money or changes a bunny's coins, style or size.
-                {m.model ? ` Thinks with ${m.model}.` : ""}
-              </p>
+              <section className="bp-hero crew-hero" style={{ ["--bee" as string]: COLOR[m.id] ?? "var(--bizzy)", ["--bee-glow" as string]: `${COLOR[m.id] ?? "#f0b43c"}73` }}>
+                <div className="bp-portrait">{m.image ? <img src={m.image} alt={`${m.name} portrait`} /> : <span className="crew-big-emoji">{EMOJI[m.id]}</span>}</div>
+                <div className="bp-id">
+                  <span className="eyebrow">The crew · {m.role}</span>
+                  <h1>{m.name}</h1>
+                  <p className="bp-tagline">{m.job}</p>
+                  <p className="dim small">He advises; he never trades, moves money or changes a bunny's coins, style or size.</p>
+                </div>
+                <div className="bp-now crew-brain">
+                  <span className="eyebrow">Brain</span>
+                  <div className="crew-brain-row">
+                    {dash && <Ring value={dash.metrics.successPct} color={COLOR[m.id] ?? "var(--bizzy)"} label="Rounds that worked" text={dash.metrics.successPct === null ? "–" : `${dash.metrics.successPct}%`} />}
+                    <div>
+                      <strong>{dash?.brain.brain ? (BRAIN[dash.brain.brain] ?? dash.brain.brain) : "Off"}</strong>
+                      <div className="mono small">{m.model ?? "no model"}</div>
+                      <div className="dim small">rounds that worked</div>
+                    </div>
+                  </div>
+                  <div className="dim small">
+                    every {every(m.everyMin)} · next {until(m.nextAt)}
+                  </div>
+                  {m.error && <div className="bad small">Last round failed: {m.error}</div>}
+                </div>
+              </section>
+            )}
+            {dash && (
+              <>
+                <div className="bp-kpis">
+                  <Kpi label="Rounds" value={fmtN(dash.metrics.rounds)} sub={`${dash.metrics.okRounds} worked`} />
+                  <Kpi label="Avg answer time" value={dash.metrics.avgLatencyMs === null ? "–" : `${(dash.metrics.avgLatencyMs / 1000).toFixed(1)} s`} sub="per round" />
+                  <Kpi label="Tokens read" value={fmtN(dash.metrics.inTokens)} sub="all rounds" />
+                  <Kpi label="Tokens written" value={fmtN(dash.metrics.outTokens)} sub="all rounds" />
+                  <Kpi label="Notes per round" value={dash.metrics.avgNotes === null ? "–" : String(dash.metrics.avgNotes)} sub={`${dash.levels.find((l) => l.level === "act")?.n ?? 0} asked for action`} />
+                </div>
+                <div className="bp-grid crew-grid">
+                  <Card title="Notes per round" hint="red: a round that failed">
+                    <BarChart bars={dash.rounds.map((r, i) => ({ key: `${r.ts}-${i}`, label: new Date(r.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }), value: r.ok ? r.notes : -1, sub: r.ok ? [`${r.inTokens ?? 0} tokens in · ${r.outTokens ?? 0} out`, r.model ?? ""] : [`failed: ${r.error ?? ""}`] }))} format={(v) => (v < 0 ? "failed" : `${v} notes`)} tone={(v) => (v < 0 ? "var(--critical)" : COLOR[m!.id] ?? "var(--bizzy)")} empty="No rounds yet." />
+                  </Card>
+                  <Card title="Answer time per round" hint="seconds">
+                    <BarChart bars={dash.rounds.filter((r) => r.ok).map((r, i) => ({ key: `${r.ts}-${i}`, label: new Date(r.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }), value: (r.latencyMs ?? 0) / 1000 }))} format={(v) => `${v.toFixed(1)} s`} tone={() => COLOR[m!.id] ?? "var(--bizzy)"} empty="No rounds yet." />
+                  </Card>
+                  <Card title="Notes by level" hint="info · watch · act">
+                    <HBars rows={dash.levels.map((l) => ({ key: l.level, label: l.level, value: l.n }))} format={(v) => String(v)} tone={() => "var(--bizzy)"} />
+                  </Card>
+                  <Card title="Notes by bunny" hint="who he wrote about">
+                    <HBars
+                      rows={Object.entries(dash.perBee.reduce<Record<string, number>>((a, r) => ({ ...a, [r.bee]: (a[r.bee] ?? 0) + r.n }), {})).map(([bee, n]) => ({ key: bee || "warren", label: bee ? beeMeta(bee).short : "Whole warren", value: n }))}
+                      format={(v) => String(v)}
+                      tone={() => COLOR[m!.id] ?? "var(--bizzy)"}
+                    />
+                  </Card>
+                  <JobCharts id={m!.id} input={dash.input} color={COLOR[m!.id] ?? "var(--bizzy)"} />
+                </div>
+                <h2 className="crew-log-title">Everything he wrote</h2>
+              </>
             )}
             <ol className="farmer-log">
               {entries.map((e) => (

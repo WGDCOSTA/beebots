@@ -130,7 +130,13 @@ const SCHEMA = {
 
 const SQL = `CREATE TABLE IF NOT EXISTS crew_log (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, crew TEXT NOT NULL, kind TEXT NOT NULL, bee TEXT, title TEXT, text TEXT NOT NULL, level TEXT);
-CREATE INDEX IF NOT EXISTS crew_log_crew_ts ON crew_log(crew, ts);`;
+CREATE INDEX IF NOT EXISTS crew_log_crew_ts ON crew_log(crew, ts);
+CREATE TABLE IF NOT EXISTS crew_rounds (
+  id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, crew TEXT NOT NULL, ok INTEGER NOT NULL, model TEXT, latency_ms INTEGER,
+  in_tokens INTEGER, out_tokens INTEGER, notes INTEGER NOT NULL DEFAULT 0, error TEXT, input TEXT);
+CREATE INDEX IF NOT EXISTS crew_rounds_crew_ts ON crew_rounds(crew, ts);`;
+/** The data a member read is kept with its round for its dashboard's charts, capped so a round never weighs much. */
+const MAX_INPUT = 60_000;
 
 export interface CrewDeps {
   db: DatabaseSync;
@@ -172,7 +178,9 @@ export class CrewMember {
   start(): void {
     if (!this.enabled || this.timer) return;
     // After a restart it waits out the rest of its interval, so it never talks twice in a row.
-    const wait = Math.max(this.d.firstWaitMs ?? 45_000, this.lastRoundAt + this.intervalMs - this.now());
+    // A member with no recorded round yet (new, or new since its dashboard began recording) goes soon, so its page has data.
+    const recorded = Number((this.d.db.prepare("SELECT COUNT(*) AS n FROM crew_rounds WHERE crew = ?").get(this.spec.id) as { n: number }).n) > 0;
+    const wait = recorded ? Math.max(this.d.firstWaitMs ?? 45_000, this.lastRoundAt + this.intervalMs - this.now()) : (this.d.firstWaitMs ?? 45_000);
     this.due = this.now() + wait;
     const tick = () => {
       void this.round().finally(() => {
@@ -211,6 +219,10 @@ export class CrewMember {
         effort: "low",
       });
       const say = r.data.say.replace(/\s+/g, " ").trim().slice(0, 200) || "Nothing to add this round.";
+      const input = JSON.stringify(data ?? null);
+      this.d.db
+        .prepare("INSERT INTO crew_rounds (ts, crew, ok, model, latency_ms, in_tokens, out_tokens, notes, error, input) VALUES (?, ?, 1, ?, ?, ?, ?, ?, NULL, ?)")
+        .run(t, this.spec.id, r.model, Math.round(r.latencyMs), r.inputTokens, r.outputTokens, r.data.notes.length, input.length <= MAX_INPUT ? input : null);
       const notes = r.data.notes.map((n) => ({ ...n, bee: /^bee[1-9]$/.test(n.bee) ? n.bee : "", title: n.title.trim().slice(0, 80), text: n.text.replace(/\s+/g, " ").trim().slice(0, 500) })).filter((n) => n.text.length > 0);
       for (const n of notes) this.add({ ts: t, crew: this.spec.id, kind: "note", bee: n.bee || null, title: n.title, text: n.text, level: n.level });
       this.add({ ts: this.now(), crew: this.spec.id, kind: "say", bee: null, title: null, text: say, level: null });
@@ -227,6 +239,7 @@ export class CrewMember {
       // A failure still counts as a round for timing (no retry storm), but is shown on the card.
       this.lastRoundAt = t;
       this.lastError = safeError(e).message.slice(0, 200);
+      this.d.db.prepare("INSERT INTO crew_rounds (ts, crew, ok, model, notes, error) VALUES (?, ?, 0, ?, 0, ?)").run(t, this.spec.id, this.d.llm?.model ?? null, this.lastError);
       log.warn(`${this.spec.id}: round failed`, { error: this.lastError });
       return null;
     } finally {
@@ -239,6 +252,49 @@ export class CrewMember {
     return this.d.db
       .prepare("SELECT id, ts, crew, kind, bee, title, text, level FROM crew_log WHERE crew = ? AND id < ? ORDER BY id DESC LIMIT ?")
       .all(this.spec.id, before, Math.max(1, Math.min(200, limit))) as unknown as CrewEntry[];
+  }
+
+  /**
+   * Its dashboard: the brain it thinks with, how its rounds went (success, latency, tokens), what it wrote (by level and
+   * by bunny, over time) and the data it read last round, which its page draws as charts for its job.
+   */
+  dashboard() {
+    const rounds = this.d.db
+      .prepare("SELECT ts, ok, model, latency_ms AS latencyMs, in_tokens AS inTokens, out_tokens AS outTokens, notes, error FROM crew_rounds WHERE crew = ? ORDER BY id DESC LIMIT 60")
+      .all(this.spec.id) as Array<{ ts: number; ok: number; model: string | null; latencyMs: number | null; inTokens: number | null; outTokens: number | null; notes: number; error: string | null }>;
+    const ok = rounds.filter((r) => r.ok === 1);
+    const all = this.d.db
+      .prepare("SELECT COUNT(*) AS n, COALESCE(SUM(ok),0) AS ok, COALESCE(SUM(in_tokens),0) AS inT, COALESCE(SUM(out_tokens),0) AS outT FROM crew_rounds WHERE crew = ?")
+      .get(this.spec.id) as { n: number; ok: number; inT: number; outT: number };
+    const levels = this.d.db.prepare("SELECT COALESCE(level,'info') AS level, COUNT(*) AS n FROM crew_log WHERE crew = ? AND kind = 'note' GROUP BY level").all(this.spec.id) as Array<{ level: string; n: number }>;
+    const perBee = this.d.db
+      .prepare("SELECT COALESCE(bee,'') AS bee, COALESCE(level,'info') AS level, COUNT(*) AS n FROM crew_log WHERE crew = ? AND kind = 'note' GROUP BY bee, level")
+      .all(this.spec.id) as Array<{ bee: string; level: string; n: number }>;
+    const lastInput = this.d.db.prepare("SELECT input FROM crew_rounds WHERE crew = ? AND ok = 1 AND input IS NOT NULL ORDER BY id DESC LIMIT 1").get(this.spec.id) as { input: string } | undefined;
+    let input: unknown = null;
+    try {
+      input = lastInput ? JSON.parse(lastInput.input) : null;
+    } catch {
+      input = null;
+    }
+    const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, x) => a + x, 0) / xs.length) : null);
+    return {
+      brain: { model: this.d.llm?.model ?? null, brain: this.d.llm?.brain ?? null, everyMin: Math.round(this.intervalMs / 60_000), nextAt: this.enabled ? this.due : null, enabled: this.enabled },
+      metrics: {
+        rounds: all.n,
+        okRounds: all.ok,
+        successPct: all.n ? Math.round((100 * all.ok) / all.n) : null,
+        avgLatencyMs: avg(ok.map((r) => r.latencyMs ?? 0)),
+        inTokens: all.inT,
+        outTokens: all.outT,
+        avgNotes: ok.length ? Math.round((10 * ok.reduce((a, r) => a + r.notes, 0)) / ok.length) / 10 : null,
+        lastError: this.lastError,
+      },
+      rounds: rounds.reverse(),
+      levels,
+      perBee,
+      input,
+    };
   }
 
   /** What the main page's card needs. */

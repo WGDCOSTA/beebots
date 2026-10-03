@@ -702,7 +702,7 @@ async function main() {
         farmerImage: () => (existsSync(farmerImage) ? farmerImage : null),
         farmerLog: (limit, before) => farmer.entries(limit, before),
         crew: () => CREW_IDS.map((id) => ({ ...crew[id].summary(), animal: CREW[id].animal, image: existsSync(crewImage(id)) ? `/crew-image/${id}` : null })),
-        crewLog: (id, limit, before) => ((CREW_IDS as readonly string[]).includes(id) ? { member: { ...crew[id as CrewId].summary(), animal: CREW[id as CrewId].animal, image: existsSync(crewImage(id as CrewId)) ? `/crew-image/${id}` : null }, entries: crew[id as CrewId].entries(limit, before) } : null),
+        crewLog: (id, limit, before) => ((CREW_IDS as readonly string[]).includes(id) ? { member: { ...crew[id as CrewId].summary(), animal: CREW[id as CrewId].animal, image: existsSync(crewImage(id as CrewId)) ? `/crew-image/${id}` : null }, entries: crew[id as CrewId].entries(limit, before), dashboard: crew[id as CrewId].dashboard() } : null),
         crewImage: (id) => ((CREW_IDS as readonly string[]).includes(id) && existsSync(crewImage(id as CrewId)) ? crewImage(id as CrewId) : null),
         bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
         lab: {

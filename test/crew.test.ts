@@ -12,7 +12,7 @@ const fakeLlm = (answer: unknown, fail = false) => ({
   model: "fake-model",
   async json() {
     if (fail) throw new Error("Your credit balance is too low");
-    return { data: answer, usage: { input: 1, output: 1 } } as never;
+    return { data: answer, brain: "openai", model: "fake-model", inputTokens: 120, outputTokens: 40, latencyMs: 900 } as never;
   },
 });
 
@@ -44,6 +44,11 @@ describe("CrewMember", () => {
     expect(s).toMatchObject({ id: "owl", name: "The Owl", model: "fake-model", error: null, said: { text: "Patience pays." } });
     expect(s.notes).toHaveLength(2);
     expect(owl.entries().map((e) => e.kind)).toEqual(["say", "note", "note"]);
+    const dash = owl.dashboard();
+    expect(dash.metrics).toMatchObject({ rounds: 1, okRounds: 1, successPct: 100, avgLatencyMs: 900, inTokens: 120, outTokens: 40, avgNotes: 2 });
+    expect(dash.brain).toMatchObject({ model: "fake-model", brain: "openai" });
+    expect(dash.levels.map((l) => l.level).sort()).toEqual(["info", "watch"]);
+    expect(dash.input).toEqual({});
   });
 
   it("shows a failed round on its card and keeps working afterwards", async () => {
@@ -52,6 +57,8 @@ describe("CrewMember", () => {
     expect(await pig.round()).toBeNull();
     expect(pig.summary().error).toMatch(/credit balance/);
     expect(pig.entries()).toHaveLength(0);
+    expect(pig.dashboard().metrics).toMatchObject({ rounds: 1, okRounds: 0, successPct: 0 });
+    expect(pig.dashboard().rounds[0]).toMatchObject({ ok: 0, error: expect.stringMatching(/credit/) });
   });
 
   it("is off without a brain", () => {
