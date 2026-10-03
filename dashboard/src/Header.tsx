@@ -14,14 +14,17 @@ function Clock() {
 }
 
 function Recon({ recon, mode }: { recon: Snapshot["recon"] | undefined; mode: Snapshot["mode"] | undefined }) {
-  const state = !recon || recon.ok === null ? "idle" : recon.ok ? "ok" : "bad";
+  const paper = mode === "dry";
+  // Paper trading has no exchange account to reconcile. Its quotes are still the live public OKX feed; only our
+  // wallet, orders and fills are simulated. Keep that distinction visible instead of calling the whole feed simulated.
+  const state = paper || !recon || recon.ok === null ? "idle" : recon.ok ? "ok" : "bad";
   const text =
-    state === "ok" ? "books match OKX" : state === "bad" ? recon!.detail : mode === "dry" ? "paper trading: simulated books" : "first check pending";
+    paper ? "live OKX prices · simulated money" : state === "ok" ? "books match OKX" : state === "bad" ? recon!.detail : "first check pending";
   return (
-    <div className={`recon recon-${state}`} title={recon?.detail}>
+    <div className={`recon recon-${state}`} title={paper ? "Live public OKX market data; wallet, orders and fills are simulated." : recon?.detail}>
       <span className="recon-light" aria-hidden />
       <div>
-        <div className="eyebrow">Reconciliation</div>
+        <div className="eyebrow">{paper ? "Market feed" : "Reconciliation"}</div>
         <div className="recon-text">
           {state === "ok" ? "✓ " : state === "bad" ? "✗ " : ""}
           {text}
