@@ -2704,3 +2704,21 @@ button.counter:hover {
     font-size: 0.95rem;
   }
 }
+
+/* The home page grew (the Farmer's card sits above the columns), so it no longer fits one screen: on the home page the
+   window scrolls instead of the columns being squeezed, and the columns keep a full height. Other pages keep their own
+   scroll containers (.page, .bp, .as). */
+html:has(.app),
+body:has(.app),
+#root:has(.app) {
+  height: auto;
+  overflow-y: auto;
+}
+.app {
+  height: auto;
+  min-height: 100vh;
+}
+.app > .grid {
+  flex: none;
+  min-height: max(44rem, calc(100vh - 12rem));
+}
