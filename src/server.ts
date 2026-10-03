@@ -45,6 +45,10 @@ export interface ServerDeps {
     /** The Farmer's card (brains/farmer.ts) and his full log: GET /farmer?limit=&before=. */
     farmer?: () => unknown;
     farmerLog?: (limit: number, before: number) => unknown;
+    /** The crew (brains/crew.ts): every member's card, one member's full log, its painted portrait (a file) or null. */
+    crew?: () => unknown;
+    crewLog?: (id: string, limit: number, before: number) => unknown | null;
+    crewImage?: (id: string) => string | null;
     /** The Farmer's painted portrait (a file), or null while he has only the drawn one. */
     farmerImage?: () => string | null;
     /** Visitors' chat with the bunnies (publicChat.ts): GET /chat?bee=, POST /chat/send. Read-only; questions are not stored. */
@@ -145,11 +149,13 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         return json(res, h.ok ? 200 : 503, h);
       }
       case "/snapshot":
-        return json(res, 200, { ...(e.snapshot() as object), farmer: e.farmer?.() ?? null, visitors: { total: e.visitors.total, watching: e.bus.subscribers }, update: e.update?.() ?? null });
+        return json(res, 200, { ...(e.snapshot() as object), farmer: e.farmer?.() ?? null, crew: e.crew?.() ?? null, visitors: { total: e.visitors.total, watching: e.bus.subscribers }, update: e.update?.() ?? null });
       case "/visit": {
         const total = e.visitors.visit(clientAddr(req.headers["x-forwarded-for"], req.socket.remoteAddress), url.searchParams.get("tz"));
         return json(res, 200, { total, watching: e.bus.subscribers });
       }
+      case "/crew":
+        return e.crew ? json(res, 200, { crew: e.crew() }) : json(res, 404, { error: "no crew" });
       case "/farmer": {
         if (!e.farmer || !e.farmerLog) return json(res, 404, { error: "no farmer" });
         const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
@@ -259,6 +265,19 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
         return json(res, r.status, r.body);
       }
       default:
+        if (e.crewLog && url.pathname.startsWith("/crew/")) {
+          const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
+          const before = Number(url.searchParams.get("before") ?? 0) || Number.MAX_SAFE_INTEGER;
+          const body = e.crewLog(url.pathname.slice("/crew/".length), limit, before);
+          return body ? json(res, 200, body) : json(res, 404, { error: "no such crew member" });
+        }
+        if (e.crewImage && url.pathname.startsWith("/crew-image/")) {
+          const file = e.crewImage(url.pathname.slice("/crew-image/".length));
+          if (!file) return json(res, 404, { error: "no portrait yet" });
+          res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "public, max-age=3600" });
+          createReadStream(file).pipe(res);
+          return;
+        }
         if (e.bunny && url.pathname.startsWith("/bunny/")) {
           const slot = url.pathname.slice("/bunny/".length);
           const days = Math.max(1, Math.min(60, Number(url.searchParams.get("days") ?? 30) || 30));

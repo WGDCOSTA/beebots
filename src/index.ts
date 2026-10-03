@@ -30,6 +30,8 @@ import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
 import { Farmer, farmerStats } from "./brains/farmer.js";
+import { CREW, CREW_IDS, CrewMember, type CrewId } from "./brains/crew.js";
+import { owlData, pigData, ratData, type CrewSnapshot } from "./brains/crewData.js";
 import type { CouncilBee } from "./brains/council.js";
 import { ANTHROPIC_PROFILE, checkBrainModel, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, listBrainModels, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
@@ -40,7 +42,7 @@ import { NoteBook } from "./brains/notes.js";
 import { Researcher } from "./brains/research.js";
 import { McpGateway } from "./mcp/gateway.js";
 import { checkAlpacaKey } from "./lab/alpaca.js";
-import { checkOpenAiKey, designBee, paintBee, paintFarmer } from "./openai.js";
+import { checkOpenAiKey, crewBrief, designBee, paintBee, paintFarmer } from "./openai.js";
 import { PlaybookWatcher } from "./brains/playbook.js";
 import { LabSignals, LAB_NOTE } from "./brains/signals.js";
 import { SurvivalCouncil } from "./brains/survival.js";
@@ -410,6 +412,71 @@ async function main() {
       })
       .catch((e) => log.warn("farmer: portrait could not be painted, the drawn one stays", { error: safeError(e).message }));
   }
+  // The crew (brains/crew.ts): the Owl coaches, the Rat reads the market, the Pig keeps the books. Each has its own brain
+  // (OWL_BRAIN, RAT_BRAIN, PIG_BRAIN; default ChatGPT, then the Farmer's order), its own interval (OWL_INTERVAL_MIN, ...)
+  // and its data tools (brains/crewData.ts). OWL=0, RAT=0 or PIG=0 sends one home. They advise; they never trade.
+  const crewSnap = () => engine.snapshot() as unknown as CrewSnapshot;
+  const crewBees = () => cfg.beeIds.map((id) => ({ slot: id, name: cfg.slots[id].name, style: cfg.slots[id].style, coins: cfg.slots[id].coins, rules: cfg.slots[id].rules }));
+  const crewNode = (id: CrewId) => graph.upsert("run", id, `${CREW[id].name} (${CREW[id].role})`, { crew: id });
+  const crewLlm = (id: CrewId) => {
+    const key = id.toUpperCase();
+    if (process.env[key] === "0") return null;
+    const want = process.env[`${key}_BRAIN`]?.trim();
+    return (want ? clients[want] : undefined) ?? clients.openai ?? clients.claude ?? Object.values(clients)[0] ?? null;
+  };
+  const crew: Record<CrewId, CrewMember> = {
+    owl: new CrewMember(CREW.owl, {
+      db: db.raw,
+      llm: crewLlm("owl"),
+      intervalMin: Number(process.env.OWL_INTERVAL_MIN ?? CREW.owl.everyMinDefault),
+      gather: () => owlData(db.raw, crewSnap(), crewBees(), Date.now()),
+      // A coaching note lands in the bunny's Warren inbox, which its councils, coach and research read.
+      deliver: (_say, notes) => {
+        const from = crewNode("owl");
+        for (const n of notes) if (n.bee && cfg.beeIds.includes(n.bee as BeeId)) graph.post(from, beeNode(n.bee), `${n.title}: ${n.text}`.slice(0, 600), { source: "owl", level: n.level });
+      },
+    }),
+    rat: new CrewMember(CREW.rat, {
+      db: db.raw,
+      llm: crewLlm("rat"),
+      intervalMin: Number(process.env.RAT_INTERVAL_MIN ?? CREW.rat.everyMinDefault),
+      gather: () => ratData(crewSnap(), cmcState()),
+      // The brief becomes the Rat's lesson; every bunny's context reads his latest (graph/hive-mind.ts marketBrief).
+      deliver: (say, notes) => {
+        const brief = [say, ...notes.slice(0, 5).map((n) => `${n.title}: ${n.text}`)].join(" | ");
+        graph.learn(crewNode("rat"), brief.slice(0, 600), [], { source: "rat" });
+      },
+    }),
+    pig: new CrewMember(CREW.pig, {
+      db: db.raw,
+      llm: crewLlm("pig"),
+      intervalMin: Number(process.env.PIG_INTERVAL_MIN ?? CREW.pig.everyMinDefault),
+      gather: () => pigData(db.raw, crewSnap(), Object.fromEntries(cfg.beeIds.map((id) => [id, cfg.slots[id].name])), Date.now(), { coinMarketCap: cmc?.status() ?? null }),
+      // What needs doing about money is told to the whole Warren.
+      deliver: (_say, notes) => {
+        const from = crewNode("pig");
+        for (const n of notes) if (n.level === "act") graph.post(from, n.bee && cfg.beeIds.includes(n.bee as BeeId) ? beeNode(n.bee) : "hive", `${n.title}: ${n.text}`.slice(0, 600), { source: "pig", level: n.level });
+      },
+    }),
+  };
+  for (const id of CREW_IDS) crew[id].start();
+  // Their portraits: painted once each with the OpenAI image key, like the Farmer's. CREW_PAINT=0 never paints.
+  const crewImage = (id: CrewId) => join(imageDir(cfg.settingsPath), `crew-${id}.jpg`);
+  if (process.env.CREW_PAINT !== "0" && cfg.openai.apiKey) {
+    void (async () => {
+      for (const id of CREW_IDS) {
+        if (!crew[id].enabled || existsSync(crewImage(id))) continue;
+        try {
+          const jpg = await paintFarmer(cfg.openai.apiKey!, cfg.openai.imageModel, REF_DIR, 180_000, crewBrief(CREW[id].name, CREW[id].look));
+          mkdirSync(dirname(crewImage(id)), { recursive: true });
+          writeFileSync(crewImage(id), jpg);
+          log.info(`crew: ${id}'s portrait painted`);
+        } catch (e) {
+          log.warn(`crew: ${id}'s portrait could not be painted`, { error: safeError(e).message });
+        }
+      }
+    })();
+  }
   // Agent-led R&D is deliberately slower than trading. Each agent's own brain proposes one hypothesis, the existing
   // walk-forward lab tests it, and both accepted and rejected attempts become durable graph memory. Attempts and the
   // shared daily budget are persisted before each call: a restart cannot make the agents repeat research or overspend.
@@ -634,6 +701,9 @@ async function main() {
         farmer: () => ({ ...farmer.summary(), image: existsSync(farmerImage) ? "/farmer-image" : "/farmer.svg" }),
         farmerImage: () => (existsSync(farmerImage) ? farmerImage : null),
         farmerLog: (limit, before) => farmer.entries(limit, before),
+        crew: () => CREW_IDS.map((id) => ({ ...crew[id].summary(), animal: CREW[id].animal, image: existsSync(crewImage(id)) ? `/crew-image/${id}` : null })),
+        crewLog: (id, limit, before) => ((CREW_IDS as readonly string[]).includes(id) ? { member: { ...crew[id as CrewId].summary(), animal: CREW[id as CrewId].animal, image: existsSync(crewImage(id as CrewId)) ? `/crew-image/${id}` : null }, entries: crew[id as CrewId].entries(limit, before) } : null),
+        crewImage: (id) => ((CREW_IDS as readonly string[]).includes(id) && existsSync(crewImage(id as CrewId)) ? crewImage(id as CrewId) : null),
         bus, db, visitors: new Visitors(db), snapshot: () => engine!.snapshot(), health: () => engine!.health(), update: () => updates.status(),
         lab: {
           ranking: labRanking,
@@ -665,6 +735,7 @@ async function main() {
     saveSessions();
     coach.stop();
     farmer.stop();
+    for (const id of CREW_IDS) crew[id].stop();
     cmc?.stop();
     graph.close();
     hive.stop();
