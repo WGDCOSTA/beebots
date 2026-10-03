@@ -38,7 +38,7 @@ function settingsFile(): string {
 
 const okChecks: KeyChecks = { jev: async () => null, openai: async () => null, anthropic: async () => null, kimi: async () => null, zai: async () => null, alpaca: async (id: string) => (id.includes("bad") ? "Alpaca rejected that key pair." : null), compat: async () => null, coinmarketcap: async () => null };
 
-function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"]; experiments?: ExperimentControl } = {}) {
+function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; models?: AdminOpts["models"]; holding?: string[]; mode?: "dry" | "demo" | "live"; okxCheck?: AdminOpts["okxCheck"]; running?: BeeId[]; skillAgent?: AdminOpts["skillAgent"]; mcp?: AdminOpts["mcp"]; experiments?: ExperimentControl } = {}) {
   const settingsPath = settingsFile();
   const forgotten: string[] = [];
   const revived: string[] = [];
@@ -56,6 +56,7 @@ function harness(opts: { env?: NodeJS.ProcessEnv; checks?: Partial<KeyChecks>; h
     mode: opts.mode ?? "dry",
     version: "test",
     checks: { ...okChecks, ...opts.checks },
+    models: opts.models,
     jobs,
     coachNow: null,
     graphStats: () => ({ skill: 3 }),
@@ -192,6 +193,30 @@ describe("admin API", () => {
 
     await h.call("/admin/settings", { values: { MAX_LEVERAGE: null } });
     expect(loadOverrides(h.settingsPath)).toEqual({ LAB_SIGNALS: "true", BEE3_BRAIN: "claude" });
+  });
+
+  it("loads account-specific model choices and refuses a model the provider does not offer", async () => {
+    const checked: string[] = [];
+    const h = harness({
+      models: {
+        list: async (provider) => provider === "openai" ? ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"] : [],
+        check: async (provider, model) => {
+          checked.push(`${provider}:${model}`);
+          return model === "gpt-6-astra" ? null : `OpenAI does not list “${model}”.`;
+        },
+      },
+    });
+    const catalog = await h.call("/admin/models", { provider: "openai" });
+    expect(catalog.status).toBe(200);
+    expect((catalog.body.fields as Array<{ key: string; suggestions: string[] }>).find((f) => f.key === "OPENAI_BRAIN_MODEL")!.suggestions).toEqual(["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]);
+    expect(JSON.stringify(catalog.body)).not.toContain("sk-openai");
+
+    const bad = await h.call("/admin/settings", { values: { OPENAI_BRAIN_MODEL: "gpt-6" } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/does not list/);
+    expect(loadOverrides(h.settingsPath).OPENAI_BRAIN_MODEL).toBeUndefined();
+    expect((await h.call("/admin/settings", { values: { OPENAI_BRAIN_MODEL: "gpt-6-astra" } })).status).toBe(200);
+    expect(checked).toEqual(["openai:gpt-6", "openai:gpt-6-astra"]);
   });
 
   it("marks settings the environment controls", async () => {

@@ -86,6 +86,13 @@ snapshot, actor and reason are appended to the ledger.
 | bee2 | Claude (Anthropic) | `ANTHROPIC_API_KEY`, or an Anthropic Console sign-in (below) | `CLAUDE_MODEL=claude-opus-5` |
 | bee3 | Kimi (Moonshot AI) | `KIMI_API_KEY` or `MOONSHOT_API_KEY` | `KIMI_MODEL=kimi-k2.5` |
 
+Admin → Settings → Brains and models can load the models visible to each configured account and use that live catalog
+as a picker. OpenAI uses its official `GET /models` catalog and the brain uses the Responses API; Anthropic uses its
+Models API; Moonshot and Z.ai use their OpenAI-compatible model catalogs. Image, audio, embedding, reranking and other
+non-text products are left out. A future model id may still be typed manually, but saving it performs one tiny structured
+answer and is refused unless that exact account can actually use it. Keys stay inside the engine and never reach the
+browser. Changing a model still requires an engine restart so every recorded decision keeps an honest model identity.
+
 A fourth built-in brain, **GLM (Z.ai)**, uses `ZAI_API_KEY`, `ZAI_MODEL` (default `glm-5.3`; use the model id shown in
 your Z.ai console) and `ZAI_BASE_URL` (international `https://api.z.ai/api/paas/v4`, China
 `https://open.bigmodel.cn/api/paas/v4`).

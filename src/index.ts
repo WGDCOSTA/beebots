@@ -31,7 +31,7 @@ import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
 import { Farmer, farmerStats } from "./brains/farmer.js";
 import type { CouncilBee } from "./brains/council.js";
-import { ANTHROPIC_PROFILE, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, checkBrainModel, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, listBrainModels, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
 import { Workspace } from "./lab/workspace.js";
@@ -521,6 +521,8 @@ async function main() {
     },
   );
   const experimentControl = new ExperimentControl(db, cfg.jev.shadowEnabled);
+  const currentBrainCreds = (candidate = withOverrides(process.env, loadOverrides(SETTINGS_PATH))) =>
+    loadConfig({ ...candidate, TYPESAFE_API_KEY: candidate.TYPESAFE_API_KEY || "model-catalog-validation" }, loadSettings(SETTINGS_PATH)).brains.creds;
   const admin = new Admin({
     settingsPath: SETTINGS_PATH,
     env: process.env,
@@ -536,6 +538,10 @@ async function main() {
       alpaca: (keyId, secret, feed) => checkAlpacaKey({ keyId, secret, feed, baseUrl: process.env.ALPACA_DATA_URL?.trim() || undefined }),
       zai: (k) => checkCompatKey(cfg.brains.creds.zai?.baseUrl ?? (process.env.ZAI_BASE_URL?.trim() || ZAI_BASE_URL), k, cfg.brains.creds.zai?.model ?? (process.env.ZAI_MODEL?.trim() || ZAI_DEFAULT_MODEL), "Z.ai"),
       compat: (url, key, model, vendor) => checkCompatKey(url, key, model, vendor),
+    },
+    models: {
+      list: (provider) => listBrainModels(provider, currentBrainCreds()),
+      check: (provider, model, candidate) => checkBrainModel(provider, currentBrainCreds(candidate), model),
     },
     okxCheck: (creds, kind, walletUsd) => checkOkxAccount(cli, creds, kind, walletUsd),
     anthropicLogin: {

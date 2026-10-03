@@ -1010,17 +1010,33 @@ function FieldInput({ f, value, onChange }: { f: AdminField; value: unknown; onC
     );
   if (f.type === "number")
     return <input className="pinput num" type="number" min={f.min} max={f.max} step={f.step ?? 1} value={value === null || value === undefined ? "" : String(value)} disabled={disabled} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} />;
+  const list = f.suggestions?.length ? `choices-${f.key.toLowerCase()}` : undefined;
   return (
-    <input
-      className="pinput mono"
-      type={f.secret ? "password" : "text"}
-      placeholder={f.secret ? (f.set ? "set: type to replace" : "not set") : ""}
-      value={String(value ?? "")}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <>
+      <input
+        className="pinput mono"
+        type={f.secret ? "password" : "text"}
+        placeholder={f.secret ? (f.set ? "set: type to replace" : "not set") : ""}
+        list={list}
+        value={String(value ?? "")}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {list && (
+        <datalist id={list}>
+          {f.suggestions!.map((model) => <option value={model} key={model} />)}
+        </datalist>
+      )}
+    </>
   );
 }
+
+const MODEL_FIELD: Record<string, { provider: "openai" | "claude" | "kimi" | "zai"; label: string }> = {
+  OPENAI_BRAIN_MODEL: { provider: "openai", label: "OpenAI" },
+  CLAUDE_MODEL: { provider: "claude", label: "Anthropic" },
+  KIMI_MODEL: { provider: "kimi", label: "Moonshot" },
+  ZAI_MODEL: { provider: "zai", label: "Z.ai" },
+};
 
 function SettingsTab({ s, call, only }: { s: AdminState; call: (path: string, body: unknown, ok: string) => Promise<void>; only?: string[] }) {
   const groups = s.groups.filter((g) => !only || only.includes(g.id));
@@ -1050,6 +1066,8 @@ function SettingsTab({ s, call, only }: { s: AdminState; call: (path: string, bo
         <div className="fields">
           {fields.map((f) => {
             const value = f.key in draft ? draft[f.key] : f.secret ? "" : f.value;
+            const model = MODEL_FIELD[f.key];
+            const catalog = model ? s.modelCatalogs[model.provider] : undefined;
             return (
               <div className={`field ${f.key in draft ? "changed" : ""}`} key={f.key}>
                 <div className="field-head">
@@ -1058,6 +1076,14 @@ function SettingsTab({ s, call, only }: { s: AdminState; call: (path: string, bo
                   {!f.lockedByEnv && f.overridden && <span className="badge ok">changed here</span>}
                 </div>
                 <FieldInput f={f} value={value} onChange={(v) => setDraft({ ...draft, [f.key]: v })} />
+                {model && !f.lockedByEnv && (
+                  <div className="row-actions compact">
+                    <button className="pbtn ghost small" onClick={() => void call("models", { provider: model.provider }, `${model.label} model list refreshed.`)}>
+                      {catalog ? "Refresh available models" : "Load available models"}
+                    </button>
+                    {catalog?.error ? <span className="warn small">{catalog.error}</span> : catalog ? <span className="good small">{catalog.models.length} available to this account · choose above or type a future model ID</span> : <span className="dim small">Uses the configured key; no secret reaches the browser.</span>}
+                  </div>
+                )}
                 <div className="dim small">
                   {f.help}
                   {!f.secret && f.default !== undefined && f.default !== null ? (

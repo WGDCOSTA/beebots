@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import type { z } from "zod";
+import { z } from "zod";
 import { safeError } from "../redact.js";
 
 /** The brains that ship with beebots. The owner can add any number more (Admin → API keys → Custom brains). */
@@ -48,6 +48,9 @@ export const brainLabel = (id: string): string => brainInfo(id).label;
 /** Z.ai's OpenAI-compatible API (international). China: https://open.bigmodel.cn/api/paas/v4 */
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 export const ZAI_DEFAULT_MODEL = "glm-5.3";
+
+/** The four built-in providers whose model can be selected in Admin. */
+export type ModelProvider = BuiltinBrain;
 
 /**
  * How a compatible server is asked for JSON: "schema" = OpenAI's strict json_schema, "object" = JSON mode with the
@@ -162,8 +165,13 @@ async function httpFail(brain: BrainId, res: Response): Promise<never> {
 }
 
 type ChatBody = { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number }; model?: string };
+type ResponsesBody = {
+  output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  model?: string;
+};
 
-/** ChatGPT: OpenAI chat completions with a strict JSON schema. */
+/** ChatGPT: OpenAI Responses API with a strict JSON schema, shared by current GPT families. */
 export class OpenAiBrain implements LlmClient {
   readonly brain: BrainId = "openai";
   constructor(
@@ -175,27 +183,27 @@ export class OpenAiBrain implements LlmClient {
 
   async json<T>(ask: JsonAsk<T>): Promise<JsonAnswer<T>> {
     const t0 = Date.now();
-    const res = await fetch(`${this.base}/chat/completions`, {
+    const res = await fetch(`${this.base}/responses`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
       signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         model: this.model,
-        messages: [
-          { role: "system", content: ask.system },
-          { role: "user", content: ask.user },
-        ],
-        response_format: { type: "json_schema", json_schema: { name: ask.name, strict: true, schema: ask.schema } },
+        instructions: ask.system,
+        input: ask.user,
+        text: { format: { type: "json_schema", name: ask.name, strict: true, schema: ask.schema } },
+        max_output_tokens: ask.maxTokens ?? 4000,
       }),
     });
     if (!res.ok) await httpFail(this.brain, res);
-    const j = (await res.json()) as ChatBody;
+    const j = (await res.json()) as ResponsesBody;
+    const text = j.output?.flatMap((item) => item.content ?? []).filter((part) => part.type === "output_text").map((part) => part.text ?? "").join("") ?? "";
     return {
-      data: parseAndCheck(this.brain, j.choices?.[0]?.message?.content, ask.validate),
+      data: parseAndCheck(this.brain, text, ask.validate),
       brain: this.brain,
       model: j.model ?? this.model,
-      inputTokens: j.usage?.prompt_tokens ?? 0,
-      outputTokens: j.usage?.completion_tokens ?? 0,
+      inputTokens: j.usage?.input_tokens ?? 0,
+      outputTokens: j.usage?.output_tokens ?? 0,
       latencyMs: Date.now() - t0,
     };
   }
@@ -427,5 +435,77 @@ export async function checkCompatKey(baseUrl: string, apiKey: string | undefined
   } catch (err) {
     const e = safeError(err);
     return `Could not reach ${vendor} (${e.code}: ${e.message})`;
+  }
+}
+
+type ModelsResponse = { data?: Array<{ id?: string }>; models?: Array<{ id?: string; slug?: string }> };
+
+/** Keep models that can plausibly act as a text brain; image/audio/embedding products cannot answer its JSON prompts. */
+export function brainModelIds(provider: ModelProvider, ids: string[]): string[] {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  const excluded = /(?:embedding|moderation|image|video|audio|realtime|gpt-live|transcri|speech|whisper|tts|rerank|cogview|search(?:-api|-preview)|instruct)/i;
+  return unique
+    .filter((id) => {
+      if (excluded.test(id)) return false;
+      if (provider === "openai") return /^gpt-/i.test(id);
+      if (provider === "claude") return /^claude-/i.test(id);
+      if (provider === "kimi") return /^(kimi|moonshot)/i.test(id);
+      return /^glm-/i.test(id);
+    })
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+}
+
+async function compatibleModelIds(baseUrl: string, apiKey: string, provider: ModelProvider, timeoutMs: number): Promise<string[]> {
+  const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (res.status === 401 || res.status === 403) throw new Error(`${brainInfo(provider).vendor} rejected its configured key.`);
+  if (!res.ok) throw new Error(`${brainInfo(provider).vendor} model catalog answered HTTP ${res.status}.`);
+  const body = (await res.json()) as ModelsResponse;
+  return brainModelIds(provider, [...(body.data ?? []).map((m) => m.id ?? ""), ...(body.models ?? []).map((m) => m.id ?? m.slug ?? "")]);
+}
+
+/** Lists the text-brain models visible to the owner's configured account. No token-generating call is made. */
+export async function listBrainModels(provider: ModelProvider, creds: BrainCreds, timeoutMs = 15_000): Promise<string[]> {
+  if (provider === "openai") {
+    if (!creds.openai) throw new Error("Add an OpenAI API key first.");
+    return compatibleModelIds("https://api.openai.com/v1", creds.openai.apiKey, provider, timeoutMs);
+  }
+  if (provider === "claude") {
+    if (!creds.claude) throw new Error("Add an Anthropic API key or Console sign-in first.");
+    const ids: string[] = [];
+    for await (const model of anthropicClient(creds.claude, timeoutMs, 0).models.list({ limit: 100 })) ids.push(model.id);
+    return brainModelIds(provider, ids);
+  }
+  const c = provider === "kimi" ? creds.kimi : creds.zai;
+  if (!c) throw new Error(`Add a ${brainInfo(provider).vendor} API key first.`);
+  return compatibleModelIds(c.baseUrl, c.apiKey, provider, timeoutMs);
+}
+
+/** A saved model must exist in the catalog returned for this exact account. */
+export async function checkBrainModel(provider: ModelProvider, creds: BrainCreds, model: string, timeoutMs = 15_000): Promise<string | null> {
+  try {
+    const ids = await listBrainModels(provider, creds, timeoutMs);
+    if (!ids.includes(model)) return `${brainInfo(provider).vendor} does not list “${model}” as an available text model for this account. Refresh the list and choose one it returned.`;
+    const client: LlmClient | null =
+      provider === "openai" && creds.openai ? new OpenAiBrain(creds.openai.apiKey, model, timeoutMs) :
+      provider === "claude" && creds.claude ? new ClaudeBrain(creds.claude, model, "low", timeoutMs) :
+      provider === "kimi" && creds.kimi ? new KimiBrain(creds.kimi.apiKey, model, creds.kimi.baseUrl, timeoutMs) :
+      provider === "zai" && creds.zai ? new ZaiBrain(creds.zai.apiKey, model, creds.zai.baseUrl, timeoutMs) : null;
+    if (!client) return `No ${brainInfo(provider).vendor} credential is configured.`;
+    const Answer = z.object({ ok: z.literal(true) });
+    await client.json({
+      system: "This is a model compatibility check. Return the requested JSON only.",
+      user: "Confirm compatibility.",
+      name: "brain_model_check",
+      schema: { type: "object", additionalProperties: false, required: ["ok"], properties: { ok: { type: "boolean", const: true } } },
+      validate: Answer,
+      maxTokens: 128,
+      effort: "low",
+    });
+    return null;
+  } catch (err) {
+    return `Model compatibility check failed: ${safeError(err).message}`;
   }
 }

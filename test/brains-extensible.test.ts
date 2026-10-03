@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { brainCreds } from "../src/config.js";
-import { BRAINS, BRAIN_INFO, brainInfo, checkBaseUrl, checkCompatKey, CompatBrain, makeClients, ZaiBrain, ZAI_BASE_URL } from "../src/brains/llm.js";
+import { BRAINS, BRAIN_INFO, brainInfo, brainModelIds, checkBaseUrl, checkBrainModel, checkCompatKey, CompatBrain, listBrainModels, makeClients, OpenAiBrain, ZaiBrain, ZAI_BASE_URL } from "../src/brains/llm.js";
 import { CustomBrainSchema, SettingsSchema } from "../src/settings.js";
 
 const ask = { system: "sys", user: "usr", name: "answer", schema: { type: "object" }, validate: z.object({ ok: z.boolean() }) };
@@ -18,6 +18,25 @@ const sent = (f: ReturnType<typeof spy>, i = 0) => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("brains beyond the built-in three", () => {
+  it("lists only text-capable GPT models available to this OpenAI account", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => new Response(JSON.stringify(String(url).endsWith("/models") ? { data: [
+      { id: "gpt-6-astra" }, { id: "gpt-6.1-sol" }, { id: "gpt-image-2" }, { id: "gpt-live-1" }, { id: "text-embedding-3-small" },
+    ] } : { model: "gpt-6-astra", output: [{ type: "message", content: [{ type: "output_text", text: '{"ok":true}' }] }], usage: { input_tokens: 4, output_tokens: 3 } }), { status: 200 })));
+    const creds = { openai: { apiKey: "sk-test", model: "gpt-6-astra" } };
+    expect(await listBrainModels("openai", creds)).toEqual(["gpt-6.1-sol", "gpt-6-astra"]);
+    expect(await checkBrainModel("openai", creds, "gpt-6-astra")).toBeNull();
+    expect(await checkBrainModel("openai", creds, "gpt-6")).toMatch(/does not list/);
+    expect(brainModelIds("zai", ["glm-5.3", "embedding-3", "cogview-4"])).toEqual(["glm-5.3"]);
+  });
+
+  it("uses OpenAI Responses so current GPT families share one structured-output path", async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ model: "gpt-6-astra", output: [{ type: "message", content: [{ type: "output_text", text: '{"ok":true}' }] }], usage: { input_tokens: 4, output_tokens: 3 } }), { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    expect((await new OpenAiBrain("sk-test", "gpt-6-astra").json(ask)).data).toEqual({ ok: true });
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.openai.com/v1/responses");
+    expect(JSON.parse(String(init.body))).toMatchObject({ model: "gpt-6-astra", instructions: "sys", input: "usr", text: { format: { type: "json_schema", name: "answer", strict: true } } });
+  });
   it("ships Z.ai's GLM as a built-in with its own label and key variable", () => {
     expect(BRAINS).toContain("zai");
     expect(BRAIN_INFO.zai).toMatchObject({ label: "GLM", vendor: "Z.ai", keyEnv: "ZAI_API_KEY" });

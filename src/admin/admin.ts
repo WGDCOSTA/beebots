@@ -25,7 +25,7 @@ import { evaluateSkill, DEFAULT_TOURNAMENT } from "../lab/tournament.js";
 import { hashPassword, MAX_PASSWORD, MIN_PASSWORD, readJson, send, type PasswordGate } from "../gate.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
-import { anthropicLoginCommand, BRAINS, brainInfo, checkBaseUrl, registerBrain, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "../brains/llm.js";
+import { anthropicLoginCommand, BRAINS, brainInfo, checkBaseUrl, registerBrain, ZAI_BASE_URL, ZAI_DEFAULT_MODEL, type ModelProvider } from "../brains/llm.js";
 import { BeeSchema, CustomBrainSchema, McpGrantSchema, McpServerSchema, isReservedName, loadOverrides, loadSettings, MARKET_INFO, MARKETS, saveOverrides, saveSettings, STYLE_INFO, STYLES, type MarketId, type Settings } from "../settings.js";
 import type { AccountFacts } from "../okx/account.js";
 import { OpenAiError, type BeeDesign } from "../openai.js";
@@ -70,6 +70,11 @@ export interface AdminOpts {
   mode: Mode;
   version: string;
   checks: KeyChecks;
+  /** Account-specific model discovery and validation. Keys never leave the engine. */
+  models?: {
+    list(provider: ModelProvider): Promise<string[]>;
+    check(provider: ModelProvider, model: string, candidateEnv: NodeJS.ProcessEnv): Promise<string | null>;
+  };
   jobs: LabJobs;
   /** Run every bunny's coach review now (null when no brain has a key). */
   coachNow: (() => Promise<void>) | null;
@@ -188,6 +193,7 @@ const CustomBrainBody = z.object({
 });
 const CustomBrainTest = z.object({ id: z.string().optional(), baseUrl: z.string().trim().max(200), model: z.string().trim().min(1).max(80), apiKey: z.string().trim().max(400).optional(), vendor: z.string().trim().max(30).optional() });
 const BrainRef = z.object({ id: CustomBrainSchema.shape.id });
+const ModelRef = z.object({ provider: z.enum(BRAINS) });
 const AskAgent = z.object({ prompt: z.string().trim().min(8).max(MAX_PROMPT), brain: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,29}$/).optional(), key: z.string().trim().regex(KEY_RE).optional() });
 const McpSave = z.object({
   id: McpServerSchema.shape.id,
@@ -244,12 +250,20 @@ const ExperimentCreate = z.object({
 });
 const ExperimentAct = z.object({ id: ExperimentId, action: z.enum(["start_shadow", "stop", "rollback"]) });
 
+const MODEL_FIELD_PROVIDER: Readonly<Record<string, ModelProvider>> = {
+  OPENAI_BRAIN_MODEL: "openai",
+  CLAUDE_MODEL: "claude",
+  KIMI_MODEL: "kimi",
+  ZAI_MODEL: "zai",
+};
+
 export class Admin {
   /** Something was saved that only a restart applies. */
   private pending = false;
   private paints = 0;
   private designs = 0;
   private now: () => number;
+  private modelCatalogs: Partial<Record<ModelProvider, { models: string[]; at: number; error: string | null }>> = {};
 
   constructor(private o: AdminOpts) {
     this.now = o.now ?? Date.now;
@@ -279,6 +293,11 @@ export class Admin {
 
   private keySet(k: KeyName): boolean {
     return KEY_ENV[k].some((n) => this.envSet(n)) || !!loadSettings(this.o.settingsPath)?.[KEY_FIELD[k]];
+  }
+
+  private modelConfigured(provider: ModelProvider): boolean {
+    if (provider === "claude") return this.keySet("anthropic") || !!this.o.anthropicLogin?.active();
+    return this.keySet(provider === "openai" ? "openai" : provider === "kimi" ? "kimi" : "zai");
   }
 
   private envSet(name: string): boolean {
@@ -425,6 +444,7 @@ export class Admin {
         ? { profile: this.o.anthropicLogin.profile, active: this.o.anthropicLogin.active(), command: anthropicLoginCommand(this.o.anthropicLogin.profile) }
         : null,
       brains: this.brainsView(keys),
+      modelCatalogs: this.modelCatalogs,
       alpaca: this.alpacaView(effective.ALPACA_FEED),
       evolution: this.o.evolution?.() ?? null,
       experiments: this.o.experiments?.state() ?? { shadowEnabled: false, canExecuteChallenger: false, policies: [], experiments: [] },
@@ -442,6 +462,7 @@ export class Admin {
           max: f.max,
           step: f.step,
           options: /^BEE[123]_BRAIN$/.test(f.key) ? this.brainIds() : f.options,
+          suggestions: MODEL_FIELD_PROVIDER[f.key] ? this.modelCatalogs[MODEL_FIELD_PROVIDER[f.key]!]?.models ?? [] : undefined,
           secret: !!f.secret,
           lockedByEnv,
           overridden: f.key in overrides,
@@ -503,6 +524,19 @@ export class Admin {
       case "/admin/state":
         return send(res, 200, this.state());
 
+      case "/admin/models": {
+        const p = ModelRef.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "provider: openai, claude, kimi or zai" });
+        if (!this.o.models) return send(res, 503, { error: "Model discovery is not available here." });
+        try {
+          const models = await this.o.models.list(p.data.provider);
+          this.modelCatalogs[p.data.provider] = { models, at: this.now(), error: models.length ? null : "The provider returned no compatible text models." };
+        } catch (err) {
+          this.modelCatalogs[p.data.provider] = { models: [], at: this.now(), error: safeError(err).message };
+        }
+        return send(res, 200, this.state());
+      }
+
       case "/admin/settings": {
         const values = (body.values ?? {}) as Record<string, unknown>;
         if (typeof values !== "object" || Array.isArray(values)) return send(res, 400, { error: "values: an object" });
@@ -528,6 +562,12 @@ export class Admin {
         try {
           const candidate = withOverrides(this.o.env, next);
           loadConfig({ ...candidate, TYPESAFE_API_KEY: candidate.TYPESAFE_API_KEY || "validation-only-key" }, loadSettings(this.o.settingsPath));
+          for (const [key, value] of Object.entries(values)) {
+            const provider = MODEL_FIELD_PROVIDER[key];
+            if (!provider || value === null || !this.o.models || !this.modelConfigured(provider)) continue;
+            const err = await this.o.models.check(provider, String(value), candidate);
+            if (err) return send(res, 400, { error: `${brainInfo(provider).label}: ${err}` });
+          }
         } catch (err) {
           return send(res, 400, { error: err instanceof ConfigError ? err.message : safeError(err).message });
         }

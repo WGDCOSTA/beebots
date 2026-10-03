@@ -94,6 +94,8 @@ export interface AdminField {
   max?: number;
   step?: number;
   options?: string[];
+  /** Account-specific model ids returned by the provider; text fields still accept a future id manually. */
+  suggestions?: string[];
   secret: boolean;
   lockedByEnv: boolean;
   overridden: boolean;
@@ -357,6 +359,7 @@ export interface ExperimentsState {
 
 export interface AdminState {
   brains: BrainsView;
+  modelCatalogs: Partial<Record<"openai" | "claude" | "kimi" | "zai", { models: string[]; at: number; error: string | null }>>;
   /** Alpaca market-data keys for the lab: set?, from where, the feed. Never a key. */
   alpaca: { set: boolean; source: "env" | "settings" | null; feed: "iex" | "sip"; canEdit: boolean };
   mode: "dry" | "demo" | "live";
