@@ -1668,7 +1668,9 @@ function McpServerCard({ m, bees, call, onEdit }: { m: McpServerView; bees: Arra
   const [g, setG] = useState<Record<string, { bees: string[]; confirmed: boolean }>>(init);
   const [open, setOpen] = useState(false);
   const key = JSON.stringify(m.grants);
-  useEffect(() => setG(init()), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setG(init());
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleBee = (tool: string, bee: string) =>
     setG((p) => {
       const cur = p[tool]?.bees ?? [];

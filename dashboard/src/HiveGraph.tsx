@@ -248,7 +248,9 @@ function Canvas({ graph, onRefresh }: { graph: GraphJson; onRefresh?: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.nodes, view.links, layoutEpoch, motion]);
 
-  useEffect(() => syncRef.current(), [related, hits, fresh, pinned, focus]);
+  useEffect(() => {
+    syncRef.current();
+  }, [related, hits, fresh, pinned, focus]);
 
   const onNodesChange = useCallback((changes: NodeChange<HNode>[]) => {
     const rest: NodeChange<HNode>[] = [];

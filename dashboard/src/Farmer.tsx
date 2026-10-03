@@ -19,7 +19,9 @@ function until(ts: number | null): string {
 /** His face: the painted portrait once the engine made it, else the drawn one (public/farmer.svg). */
 function Portrait({ small = false, src }: { small?: boolean; src?: string }) {
   const [url, setUrl] = useState(src ?? "/farmer.svg");
-  useEffect(() => setUrl(src ?? "/farmer.svg"), [src]);
+  useEffect(() => {
+    setUrl(src ?? "/farmer.svg");
+  }, [src]);
   return <img className={`farmer-face ${small ? "sm" : ""}`} src={url} alt="" onError={() => setUrl("/farmer.svg")} />;
 }
 

@@ -82,7 +82,11 @@ export function ArenaChat({ source, name }: { source: ChatSource; name: string }
       live = false;
     };
   }, [source.kind, source.id]);
-  useEffect(() => end.current?.scrollIntoView?.({ block: "end", behavior: "smooth" }), [msgs.length, waiting]);
+  // Braces on purpose: newer browsers return a Promise from scrollIntoView, and an effect must return nothing or a cleanup
+  // function. Returning that Promise made React call it as a cleanup when the chat closed, which crashed the page.
+  useEffect(() => {
+    end.current?.scrollIntoView?.({ block: "end", behavior: "smooth" });
+  }, [msgs.length, waiting]);
 
   const send = useCallback(
     async (q: string) => {

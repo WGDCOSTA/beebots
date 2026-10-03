@@ -207,7 +207,10 @@ export function AgentTraining({ id, name }: { id: string; name: string }) {
   const show = sel ?? first?.id ?? null;
   const shownStatus = state?.trainings.find((x) => x.id === show)?.status;
   useEffect(() => {
-    if (!show || shownStatus === "queued" || shownStatus === "running") return setDetail(null);
+    if (!show || shownStatus === "queued" || shownStatus === "running") {
+      setDetail(null);
+      return;
+    }
     void arena<{ training: Training; insights: { equity: Array<[number, number]>; closedTrades: number; winningTrades: number } | null }>("GET", `bots/train/detail?id=${encodeURIComponent(show)}`)
       .then((r) => r.status === 200 && setDetail(r.data))
       .catch(() => {});
