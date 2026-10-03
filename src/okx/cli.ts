@@ -2,7 +2,7 @@
 // Every signed (per-bee) OKX call the engine makes goes through `okx ... --json`. Public market data does not:
 // it runs in-process on the kit's own public REST client (okx/rest.ts, okx/kit), with no child process per call.
 //
-// Secrets: the three profiles (bee1 / bee2 / bee3) in ~/.okx/config.toml carry only
+// Secrets: the per-slot profiles (bee1 through bee9) in ~/.okx/config.toml carry only
 // `site = "eea"`. The keys stay in .env and are injected per call into the child's env
 // (OKX_API_KEY / OKX_SECRET_KEY / OKX_PASSPHRASE take precedence over the profile in the kit).
 // The child gets a minimal env, so one bee's call never sees another bee's keys.
