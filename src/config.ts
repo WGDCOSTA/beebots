@@ -200,8 +200,8 @@ const EnvSchema = z.object({
   GRAPH_PATH: str("./data/lab/hive-mind.sqlite"),
   // Extra folders of importable JSON skills (comma separated), on top of ./skills.
   SKILLS_DIRS: str("./skills"),
-  // Show Jev each bunny's lab vote (its playbook skills on 1h bars). Off by default: it changes what Jev sees.
-  LAB_SIGNALS: bool(false),
+  // Show Jev each bunny's lab vote (its playbook skills on 1h bars). On by default as an evidence-only tiebreaker.
+  LAB_SIGNALS: bool(true),
   // Let the brains choose each bunny's coins (a watchlist in the playbook). The owner's coins and the style still limit it.
   BRAIN_WATCHLIST: bool(true),
   // Let the brains choose each bunny's specialisation: any style or any backtested lab skill (bees/skill.ts). The bunny
@@ -239,8 +239,12 @@ const EnvSchema = z.object({
   SCALP_MAX_LOSS_STREAK: num(4),
   SCALP_PAUSE_MIN: num(30),
   // Minutes between coach reviews (0 = off), and a hard cap on coach LLM calls per UTC day.
-  COACH_INTERVAL_MIN: num(0),
+  COACH_INTERVAL_MIN: num(360),
   COACH_MAX_CALLS_DAY: num(12),
+  // Refresh real history and re-run the tournament outside the trading process. 0 disables either loop.
+  AUTO_LAB_INTERVAL_HOURS: num(24),
+  AUTO_LAB_START_DELAY_MIN: num(5),
+  AUTO_SCALP_LAB_INTERVAL_HOURS: num(168),
   // ---- Survival and rewards (evolution.ts) ----
   // A bunny in danger trades smaller and is told how close it is to death (BEE_RETIRE_AT_PCT); its brains meet to save it.
   SURVIVAL_MODE: bool(true),
@@ -391,7 +395,7 @@ export interface Config {
   alertWebhookUrl?: string;
   /** LLM brains: keys (never logged, never sent to the dashboard) and which brain each bunny thinks with. */
   brains: { creds: BrainCreds; slots: Record<BeeId, BrainId> };
-  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; specialization: boolean; specializeMinHours: number; coachIntervalMin: number; coachMaxCallsDay: number; selfResearchIntervalMin: number; selfResearchMaxCallsDay: number };
+  lab: { dir: string; graphPath: string; playbookPath: string; skillsDirs: string[]; signals: boolean; watchlist: boolean; specialization: boolean; specializeMinHours: number; coachIntervalMin: number; coachMaxCallsDay: number; selfResearchIntervalMin: number; selfResearchMaxCallsDay: number; autoLabIntervalHours: number; autoLabStartDelayMin: number; autoScalpLabIntervalHours: number };
   evolution: {
     survival: boolean;
     dangerPct: number;
@@ -605,6 +609,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       coachMaxCallsDay: Math.max(0, e.COACH_MAX_CALLS_DAY),
       selfResearchIntervalMin: Math.max(0, e.SELF_RESEARCH_INTERVAL_MIN),
       selfResearchMaxCallsDay: Math.max(0, e.SELF_RESEARCH_MAX_CALLS_DAY),
+      autoLabIntervalHours: Math.max(0, e.AUTO_LAB_INTERVAL_HOURS),
+      autoLabStartDelayMin: Math.max(0, e.AUTO_LAB_START_DELAY_MIN),
+      autoScalpLabIntervalHours: Math.max(0, e.AUTO_SCALP_LAB_INTERVAL_HOURS),
     },
     evolution: {
       survival: e.SURVIVAL_MODE,

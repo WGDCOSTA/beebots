@@ -52,6 +52,7 @@ import { explain as memoryExplain, hiveReport, path as memoryPath, query as memo
 import { skillRegistry } from "./lab/skills/index.js";
 import type { Skill } from "./lab/skills/types.js";
 import { ExperimentControl } from "./experiment-control.js";
+import { AutoLab, labProcessRunner } from "./autolab.js";
 
 const SETTINGS_PATH = process.env.SETTINGS_PATH?.trim() || "./data/settings.json";
 // Reference portraits for generated bunnies: the dashboard's default art (copied into the image by the Dockerfile).
@@ -330,23 +331,73 @@ async function main() {
     specialization: cfg.lab.specialization,
   });
   coach.start();
+
+  // Keep the evidence underneath every learned skill fresh without ever blocking a trading tick. History downloads,
+  // walk-forward tournaments and scalp validation run in a child process; their schedule survives engine restarts.
+  const swapInstrument = (coin: string) => coin.includes("-") ? coin.toUpperCase() : `${coin.toUpperCase()}-USDT-SWAP`;
+  const autoLabInstruments = [...new Set([
+    "BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP", "HYPE-USDT-SWAP",
+    ...cfg.beeIds.filter((id) => cfg.slots[id].market === "crypto").flatMap((id) => cfg.slots[id].coins.map(swapInstrument)),
+    ...cfg.scalp.coins.map(swapInstrument),
+  ])];
+  const autoLab = new AutoLab({
+    db,
+    intervalHours: cfg.lab.autoLabIntervalHours,
+    scalpIntervalHours: cfg.lab.autoScalpLabIntervalHours,
+    startDelayMin: cfg.lab.autoLabStartDelayMin,
+    instruments: autoLabInstruments,
+    scalpCoins: [...new Set(cfg.scalp.coins.map(swapInstrument))],
+    scalpEnabled: cfg.scalp.enabled,
+    run: labProcessRunner(cfg.settingsPath),
+  });
+  autoLab.start();
+
   // Agent-led R&D is deliberately slower than trading. Each agent's own brain proposes one hypothesis, the existing
-  // walk-forward lab tests it, and both accepted and rejected attempts become durable graph memory.
+  // walk-forward lab tests it, and both accepted and rejected attempts become durable graph memory. Attempts and the
+  // shared daily budget are persisted before each call: a restart cannot make the agents repeat research or overspend.
   let researchTimer: NodeJS.Timeout | null = null;
   let researchRunning = false;
+  const researchIntervalMs = cfg.lab.selfResearchIntervalMin * 60_000;
+  const researchPollMs = Math.min(researchIntervalMs, 60 * 60_000);
   const researchCycle = async () => {
     if (researchRunning) return;
     researchRunning = true;
     try {
-      for (const bee of councilBees) await survival?.convene(bee, "research");
-    } catch (err) {
-      log.warn("self research cycle failed", { err: safeError(err) });
+      const now = Date.now();
+      const day = new Date(now).toISOString().slice(0, 10);
+      const savedDay = db.getMeta("self_research_budget_day");
+      let used = savedDay === day ? Number(db.getMeta("self_research_budget_used") ?? 0) : 0;
+      if (savedDay !== day) {
+        db.setMeta("self_research_budget_day", day);
+        db.setMeta("self_research_budget_used", "0");
+      }
+      for (const bee of councilBees) {
+        if (used >= cfg.lab.selfResearchMaxCallsDay) break;
+        const attemptKey = `self_research_${bee.slot}_attempt_at`;
+        const lastAttempt = Number(db.getMeta(attemptKey) ?? 0);
+        if (Number.isFinite(lastAttempt) && now - lastAttempt < researchIntervalMs) continue;
+        // Reserve the call durably before invoking a provider so a crash cannot replay it for free.
+        db.setMeta(attemptKey, String(now));
+        used++;
+        db.setMeta("self_research_budget_used", String(used));
+        try {
+          const result = await survival?.convene(bee, "research");
+          if (!result) log.info("self research deferred", { bee: bee.slot });
+        } catch (err) {
+          // A provider or one bunny failing must not starve the others.
+          log.warn("self research failed", { bee: bee.slot, err: safeError(err) });
+        }
+      }
     } finally {
       researchRunning = false;
-      if (cfg.lab.selfResearchIntervalMin > 0) researchTimer = setTimeout(() => void researchCycle(), cfg.lab.selfResearchIntervalMin * 60_000);
+      if (researchIntervalMs > 0) researchTimer = setTimeout(() => void researchCycle(), researchPollMs);
     }
   };
-  if (cfg.lab.selfResearchIntervalMin > 0) researchTimer = setTimeout(() => void researchCycle(), Math.min(5, cfg.lab.selfResearchIntervalMin) * 60_000);
+  if (researchIntervalMs > 0) {
+    // Let the autonomous evidence refresh begin first; R&D remains independent if that heavier child process is slow.
+    const firstResearchDelayMin = Math.min(cfg.lab.selfResearchIntervalMin, Math.max(30, cfg.lab.autoLabStartDelayMin + 20));
+    researchTimer = setTimeout(() => void researchCycle(), firstResearchDelayMin * 60_000);
+  }
   const notes = new NoteBook(join(cfg.lab.dir, "notes.json"), graph);
   // Outside MCP servers the owner connected: read from the Setup file on every call, so changes apply at once.
   const mcp = new McpGateway({ servers: () => loadSettings(SETTINGS_PATH)?.mcpServers ?? [], path: join(cfg.lab.dir, "mcp.json") });
@@ -525,6 +576,7 @@ async function main() {
     engine?.stop();
     for (const t of sessionTimers) clearInterval(t);
     if (researchTimer) clearTimeout(researchTimer);
+    autoLab.stop();
     saveSessions();
     coach.stop();
     cmc?.stop();

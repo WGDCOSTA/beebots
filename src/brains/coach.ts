@@ -109,7 +109,6 @@ export interface CoachOpts {
 export class Coach {
   private timers: NodeJS.Timeout[] = [];
   private now: () => number;
-  private calls = { day: "", n: 0 };
   private running = false;
 
   constructor(private o: CoachOpts) {
@@ -142,9 +141,12 @@ export class Coach {
 
   private budget(): boolean {
     const d = new Date(this.now()).toISOString().slice(0, 10);
-    if (d !== this.calls.day) this.calls = { day: d, n: 0 };
-    if (this.calls.n >= this.o.maxCallsPerDay) return false;
-    this.calls.n++;
+    const savedDay = this.o.db.getMeta("coach_budget_day");
+    const used = savedDay === d ? Number(this.o.db.getMeta("coach_budget_used") ?? 0) : 0;
+    if (used >= this.o.maxCallsPerDay) return false;
+    // Reserve before the provider call. A crash or restart must not reset the daily cost boundary.
+    this.o.db.setMeta("coach_budget_day", d);
+    this.o.db.setMeta("coach_budget_used", String((Number.isFinite(used) ? used : 0) + 1));
     return true;
   }
 

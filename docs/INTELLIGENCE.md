@@ -236,7 +236,11 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
 
 - **`LAB_SIGNALS=true`**: Jev's state gains `lab: { BTC: 0.6, ETH: -0.5, ... }`, the weighted vote of the bunny's
   playbook skills on the latest closed 1h bars, plus one line in its instructions saying it is a tiebreaker. The menu
-  and the risk layer are unchanged. Off by default because it changes what Jev sees (and adds a few tokens).
+  and the risk layer are unchanged. It is on by default and can be disabled explicitly.
+- **Autonomous evidence refresh** (default every 24 h): `AUTO_LAB_INTERVAL_HOURS` refreshes public 1h history and the
+  walk-forward ranking in a child process, so it cannot block trading ticks. With the scalper enabled,
+  `AUTO_SCALP_LAB_INTERVAL_HOURS` refreshes its real 1m cost test (weekly by default). Attempts and successes are stored
+  in SQLite, failures retry with backoff, and a restart does not restart the budget or schedule.
 - **Trade ingest** (always on): closed trades flow into the graph every 5 minutes.
 - **`COACH_INTERVAL_MIN`** (0 = off): each brain reviews its bunny's last 24 h (closed trades, P&L, fees, equity change,
   risk vetoes) and re-weights its adopted skills. It may drop a skill but never add one; new skills only come from a
@@ -246,7 +250,14 @@ coin, from the engine's fills), `learned`, `said`, `to`, `about`.
   compiles it and runs the existing bounded walk-forward test. It is adopted only with a positive out-of-sample score
   and at least 50% stability. Accepted and rejected attempts are both stored as experiment nodes linked to the agent,
   brain and skill, and summarized into that agent's long-term memory. `SELF_RESEARCH_MAX_CALLS_DAY` is a separate cap,
-  so research can never consume the emergency survival-council budget. Set the interval to 0 to disable the loop.
+  so research can never consume the emergency survival-council budget. Its per-agent attempts and shared daily budget
+  survive restarts; one agent or provider failing does not stop the others. Set the interval to 0 to disable the loop.
+
+Together these loops make the agents operationally autonomous inside the paper-trading mandate: observe fresh market
+evidence → propose a hypothesis → compile it → test it out of sample → accept or reject it → apply passing skills →
+measure real results → coach the weights and save the lesson. “Autonomous” does not mean unbounded: the risk layer,
+daily cost caps, evidence gates, owner kill switch and explicit live-money acknowledgement remain outside the agents'
+authority. External tools also remain limited to read-only grants chosen by the owner.
 
 ## Which coins each bunny trades: the watchlist
 

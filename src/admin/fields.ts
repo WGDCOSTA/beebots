@@ -82,6 +82,9 @@ export const ADMIN_FIELDS: AdminField[] = [
   num("COACH_INTERVAL_MIN", "learning", "Coach every (min)", "Each brain reviews its bunny's real results and re-weights its skills. 0 = off.", 0, 10_080),
   num("SELF_RESEARCH_INTERVAL_MIN", "learning", "Self-research every (min)", "Each agent proposes and walk-forward tests a skill, then records the result in its brain graph. 0 = off.", 0, 10_080),
   num("SELF_RESEARCH_MAX_CALLS_DAY", "learning", "Self-research calls/day", "Separate hard daily cap for agent-led skill-research brain calls.", 0, 200),
+  num("AUTO_LAB_INTERVAL_HOURS", "learning", "Refresh strategy lab (hours)", "Refreshes real public history and the complete skill ranking in an isolated child process. 0 = off.", 0, 8_760),
+  num("AUTO_LAB_START_DELAY_MIN", "learning", "Lab startup delay (min)", "How long after engine startup the autonomous lab waits before checking whether a refresh is due.", 0, 1_440),
+  num("AUTO_SCALP_LAB_INTERVAL_HOURS", "learning", "Refresh scalp lab (hours)", "When scalp is enabled, refreshes real 1-minute data and its after-cost evidence gate. 0 = off.", 0, 8_760),
   num("COACH_MAX_CALLS_DAY", "learning", "Coach calls per day", "Hard cap on coach LLM calls per UTC day.", 0, 200),
   // survival and rewards
   { key: "SURVIVAL_MODE", group: "evolution", label: "Survival mode", help: "Health tiers, smaller size in danger, survival line in Jev's state, rescue councils.", type: "bool" },

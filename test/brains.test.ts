@@ -209,7 +209,7 @@ describe("brain keys", () => {
     const cfg = loadConfig({ TYPESAFE_API_KEY: "k".repeat(20), BEE2_BRAIN: "kimi", MOONSHOT_API_KEY: "sk-moon-1234567890" });
     expect(cfg.brains.slots).toEqual({ bee1: "openai", bee2: "kimi", bee3: "kimi" });
     expect(cfg.brains.creds.kimi?.apiKey).toBe("sk-moon-1234567890");
-    expect(cfg.lab.signals).toBe(false);
+    expect(cfg.lab.signals).toBe(true);
   });
 
   it("LLM keys never reach a log line", () => {
