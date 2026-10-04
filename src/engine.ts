@@ -241,6 +241,13 @@ export class Engine {
     if (cfg.scalp.enabled) this.loop(() => this.scalpTick(), cfg.scalp.tickMs);
     this.timers.push(setInterval(() => this.d.bus.emit("heartbeat", {}), 15_000));
     this.timers.push(setInterval(() => this.d.db.pruneEvents(this.now() - 3 * 86_400_000), 3_600_000));
+    // Decisions older than 30 days keep their outcome but lose their bulky inputs (state, menu, probabilities).
+    const compact = () => {
+      const n = this.d.db.compactDecisions(this.now() - 30 * 86_400_000);
+      if (n) log.info("old decision inputs dropped", { compacted: n });
+    };
+    compact();
+    this.timers.push(setInterval(compact, 86_400_000));
   }
 
   saveEvolution(): void {

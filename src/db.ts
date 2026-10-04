@@ -282,6 +282,26 @@ export class Db {
     this.raw.prepare(`DELETE FROM events WHERE ts < ?`).run(olderThanTs);
   }
 
+  /**
+   * Drops the bulky inputs (state, menu, probabilities) of decisions older than `olderThanTs`, keeping the row itself:
+   * its choice, action, confidence, cost, veto and status still feed the profiles, metrics, the spend guard and the
+   * experiment ledger, which points at decisions by id. Nothing rereads old inputs: GhostProof reads forward from its
+   * cursor. Works in small batches so the engine is never blocked for long. Freed pages are reused by new rows, so the
+   * file stops growing rather than shrinking. Returns how many decisions it compacted.
+   */
+  compactDecisions(olderThanTs: number, batch = 2000): number {
+    const step = this.raw.prepare(
+      `UPDATE decisions SET state_json = NULL, menu_json = NULL, probabilities_json = NULL
+       WHERE id IN (SELECT id FROM decisions WHERE ts < ? AND (state_json IS NOT NULL OR menu_json IS NOT NULL OR probabilities_json IS NOT NULL) LIMIT ?)`,
+    );
+    let total = 0;
+    for (;;) {
+      const n = Number(step.run(olderThanTs, batch).changes);
+      total += n;
+      if (n < batch) return total;
+    }
+  }
+
   jevSpendSince(ts: number): number {
     const r = this.raw.prepare(`SELECT COALESCE(SUM(jev_cost_usd), 0) AS s FROM decisions WHERE ts >= ?`).get(ts) as { s: number };
     return r.s;

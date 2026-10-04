@@ -225,6 +225,8 @@ services:
     depends_on: [engine]
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
+    environment:
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-3}
     volumes:
       - bees-data:/data
 

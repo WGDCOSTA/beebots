@@ -233,7 +233,7 @@ back. If you forget it, run Setup again as above. Installs from before the owner
 Manager → the `engine` container's logs.
 
 **Backups:** a sidecar writes a nightly copy of each database to `/data/backups` inside the `bees-data` volume and
-keeps 7 days. That copy lives on the same server, so take an off-server copy yourself if you care about the history.
+keeps the newest 3 (`BACKUP_KEEP_DAYS` in `.env`). That copy lives on the same server, so take an off-server copy yourself if you care about the history.
 
 ## Real money (read this twice)
 
