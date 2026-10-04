@@ -86,7 +86,7 @@ export function checkBaseUrl(url: string): string | null {
 }
 
 export interface BrainCreds {
-  openai?: { apiKey: string; model: string };
+  openai?: { apiKey: string; model: string; effort?: OpenAiEffort };
   /**
    * An API key, or a sign-in with an Anthropic Console account: `profile` names an `ant auth login` profile (OAuth,
    * refreshed by the SDK) in ANTHROPIC_CONFIG_DIR. Never a claude.ai (Pro/Max) login: those are not for third-party apps.
@@ -166,12 +166,30 @@ async function httpFail(brain: BrainId, res: Response): Promise<never> {
 
 type ChatBody = { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number }; model?: string };
 type ResponsesBody = {
+  status?: string;
+  incomplete_details?: { reason?: string } | null;
   output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
   usage?: { input_tokens?: number; output_tokens?: number };
   model?: string;
 };
 
-/** ChatGPT: OpenAI Responses API with a strict JSON schema, shared by current GPT families. */
+/**
+ * How hard a GPT reasoning model thinks (Responses API `reasoning.effort`). "auto" follows each call's own effort
+ * (routine upkeep low, studies high); "off" never sends it; the rest fix it for every call. gpt-6-astra accepts
+ * low, medium, high, xhigh and max.
+ */
+export const OPENAI_EFFORTS = ["auto", "off", "low", "medium", "high", "xhigh", "max"] as const;
+export type OpenAiEffort = (typeof OPENAI_EFFORTS)[number];
+
+/** Output tokens a reasoning model may spend thinking before it writes the answer, per effort. */
+const REASONING_HEADROOM: Record<Exclude<OpenAiEffort, "auto" | "off">, number> = { low: 4_000, medium: 8_000, high: 16_000, xhigh: 32_000, max: 64_000 };
+/** Deeper thinking takes longer: the floor of the request timeout per effort. */
+const REASONING_TIMEOUT_MS: Record<Exclude<OpenAiEffort, "auto" | "off">, number> = { low: 60_000, medium: 120_000, high: 240_000, xhigh: 420_000, max: 900_000 };
+const MAX_OUTPUT_TOKENS = 128_000;
+/** Models that answered "reasoning is not supported": asked again without it, and never sent it again. */
+const noReasoning = new Set<string>();
+
+/** ChatGPT: OpenAI Responses API with a strict JSON schema, shared by current GPT families (reasoning ones included). */
 export class OpenAiBrain implements LlmClient {
   readonly brain: BrainId = "openai";
   constructor(
@@ -179,33 +197,54 @@ export class OpenAiBrain implements LlmClient {
     readonly model: string,
     private timeoutMs = 90_000,
     private base = "https://api.openai.com/v1",
+    readonly effort: OpenAiEffort = "auto",
   ) {}
+
+  private effortFor(ask: JsonAsk<unknown>): Exclude<OpenAiEffort, "auto" | "off"> | null {
+    if (this.effort === "off" || noReasoning.has(this.model)) return null;
+    return this.effort === "auto" ? (ask.effort ?? "medium") : this.effort;
+  }
 
   async json<T>(ask: JsonAsk<T>): Promise<JsonAnswer<T>> {
     const t0 = Date.now();
-    const res = await fetch(`${this.base}/responses`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-      signal: AbortSignal.timeout(this.timeoutMs),
-      body: JSON.stringify({
-        model: this.model,
-        instructions: ask.system,
-        input: ask.user,
-        text: { format: { type: "json_schema", name: ask.name, strict: true, schema: ask.schema } },
-        max_output_tokens: ask.maxTokens ?? 4000,
-      }),
-    });
-    if (!res.ok) await httpFail(this.brain, res);
-    const j = (await res.json()) as ResponsesBody;
-    const text = j.output?.flatMap((item) => item.content ?? []).filter((part) => part.type === "output_text").map((part) => part.text ?? "").join("") ?? "";
-    return {
-      data: parseAndCheck(this.brain, text, ask.validate),
-      brain: this.brain,
-      model: j.model ?? this.model,
-      inputTokens: j.usage?.input_tokens ?? 0,
-      outputTokens: j.usage?.output_tokens ?? 0,
-      latencyMs: Date.now() - t0,
-    };
+    for (let attempt = 0; ; attempt++) {
+      const effort = this.effortFor(ask as JsonAsk<unknown>);
+      const answerTokens = ask.maxTokens ?? 4000;
+      const res = await fetch(`${this.base}/responses`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
+        signal: AbortSignal.timeout(effort ? Math.max(this.timeoutMs, REASONING_TIMEOUT_MS[effort]) : this.timeoutMs),
+        body: JSON.stringify({
+          model: this.model,
+          instructions: ask.system,
+          input: ask.user,
+          text: { format: { type: "json_schema", name: ask.name, strict: true, schema: ask.schema } },
+          // Reasoning tokens count against max_output_tokens: leave room to think AND to answer.
+          max_output_tokens: Math.min(MAX_OUTPUT_TOKENS, answerTokens + (effort ? REASONING_HEADROOM[effort] : 0)),
+          ...(effort ? { reasoning: { effort } } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const err = await httpFail(this.brain, res).catch((e: BrainError) => e);
+        // A model without reasoning (or without this effort level): ask once more without it, and remember.
+        if (effort && attempt === 0 && err.status === 400 && /reasoning/i.test(err.message)) {
+          noReasoning.add(this.model);
+          continue;
+        }
+        throw err;
+      }
+      const j = (await res.json()) as ResponsesBody;
+      const text = j.output?.flatMap((item) => item.content ?? []).filter((part) => part.type === "output_text").map((part) => part.text ?? "").join("") ?? "";
+      if (j.status === "incomplete" && !text) throw new BrainError(this.brain, 502, `the answer was cut off (${j.incomplete_details?.reason ?? "incomplete"}): it spent its output tokens thinking`);
+      return {
+        data: parseAndCheck(this.brain, text, ask.validate),
+        brain: this.brain,
+        model: j.model ?? this.model,
+        inputTokens: j.usage?.input_tokens ?? 0,
+        outputTokens: j.usage?.output_tokens ?? 0,
+        latencyMs: Date.now() - t0,
+      };
+    }
   }
 }
 
@@ -329,7 +368,7 @@ export class ClaudeBrain implements LlmClient {
 /** One client per brain that has a key. Brains without a key are simply absent (their bees fall back to rules). */
 export function makeClients(c: BrainCreds): Partial<Record<BrainId, LlmClient>> {
   const out: Partial<Record<BrainId, LlmClient>> = {};
-  if (c.openai) out.openai = new OpenAiBrain(c.openai.apiKey, c.openai.model);
+  if (c.openai) out.openai = new OpenAiBrain(c.openai.apiKey, c.openai.model, undefined, undefined, c.openai.effort);
   if (c.claude) out.claude = new ClaudeBrain(c.claude, c.claude.model, c.claude.effort);
   if (c.kimi) out.kimi = new KimiBrain(c.kimi.apiKey, c.kimi.model, c.kimi.baseUrl);
   if (c.zai) out.zai = new ZaiBrain(c.zai.apiKey, c.zai.model, c.zai.baseUrl);
@@ -489,7 +528,8 @@ export async function checkBrainModel(provider: ModelProvider, creds: BrainCreds
     const ids = await listBrainModels(provider, creds, timeoutMs);
     if (!ids.includes(model)) return `${brainInfo(provider).vendor} does not list “${model}” as an available text model for this account. Refresh the list and choose one it returned.`;
     const client: LlmClient | null =
-      provider === "openai" && creds.openai ? new OpenAiBrain(creds.openai.apiKey, model, timeoutMs) :
+      // The check thinks briefly: a reasoning model needs room to think before its tiny answer, and time to do it.
+      provider === "openai" && creds.openai ? new OpenAiBrain(creds.openai.apiKey, model, Math.max(timeoutMs, 60_000), undefined, creds.openai.effort === "off" ? "off" : "low") :
       provider === "claude" && creds.claude ? new ClaudeBrain(creds.claude, model, "low", timeoutMs) :
       provider === "kimi" && creds.kimi ? new KimiBrain(creds.kimi.apiKey, model, creds.kimi.baseUrl, timeoutMs) :
       provider === "zai" && creds.zai ? new ZaiBrain(creds.zai.apiKey, model, creds.zai.baseUrl, timeoutMs) : null;
