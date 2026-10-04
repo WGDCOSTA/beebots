@@ -204,6 +204,59 @@ export class ExperimentLedger {
     return this.get(id)!;
   }
 
+  /**
+   * Store a completed offline/replay experiment atomically. It never becomes an active decision arm, so it cannot
+   * collide with a Jev shadow/canary that is already running for the same bee. Deterministic ids make callbacks safe
+   * to retry after a crash.
+   */
+  recordOffline(input: {
+    id: string;
+    bee: BeeId;
+    kind: string;
+    hypothesis: string;
+    primaryMetric: string;
+    championPolicyId: string;
+    challengerPolicyId: string;
+    status: "promoted" | "rolled_back";
+    config?: Record<string, unknown>;
+    result: Record<string, unknown>;
+    reason: string;
+    actor?: string;
+    at?: number;
+  }): ExperimentRecord {
+    const prior = this.get(input.id);
+    if (prior) return prior;
+    if (!input.hypothesis.trim()) throw new Error("experiment hypothesis is required");
+    if (!input.primaryMetric.trim()) throw new Error("experiment primary metric is required");
+    if (!input.reason.trim()) throw new Error("experiment transition reason is required");
+    if (input.championPolicyId === input.challengerPolicyId) throw new Error("champion and challenger policies must differ");
+    const champion = this.getPolicy(input.championPolicyId);
+    const challenger = this.getPolicy(input.challengerPolicyId);
+    if (!champion || !challenger) throw new Error("experiment policies must exist");
+    if (champion.bee !== input.bee || challenger.bee !== input.bee) throw new Error("experiment policies must belong to its bee");
+    const at = input.at ?? this.now();
+    const actor = input.actor ?? "offline-lab";
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db
+        .prepare(`INSERT INTO experiments
+          (id, bee, kind, status, hypothesis, primary_metric, champion_policy_id, challenger_policy_id,
+           created_ts, updated_ts, started_ts, ended_ts, config_json, result_json)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(input.id, input.bee, input.kind, input.status, input.hypothesis.trim(), input.primaryMetric.trim(), input.championPolicyId, input.challengerPolicyId, at, at, at, at, JSON.stringify(input.config ?? {}), JSON.stringify(input.result));
+      this.appendEvent(input.id, at, "created", actor, { status: "draft", offline: true });
+      this.appendEvent(input.id, at, "transition", actor, { from: "draft", to: "shadow", reason: "offline walk-forward evaluation", offline: true });
+      this.appendEvent(input.id, at, "transition", actor, { from: "shadow", to: input.status, reason: input.reason, result: input.result, offline: true });
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      const raced = this.get(input.id);
+      if (raced) return raced;
+      throw err;
+    }
+    return this.get(input.id)!;
+  }
+
   transition(id: string, to: ExperimentStatus, input: { actor?: string; reason: string; result?: Record<string, unknown> }): ExperimentRecord {
     const cur = this.get(id);
     if (!cur) throw new Error(`no such experiment: ${id}`);
@@ -267,11 +320,18 @@ export class ExperimentLedger {
         throw new Error("outcome policy is not an arm of its experiment");
       }
     }
+    const metadata = JSON.stringify(o.metadata ?? {});
+    if (o.decisionId == null && o.experimentId) {
+      const prior = this.db.prepare(`SELECT id FROM experiment_outcomes
+        WHERE experiment_id = ? AND decision_id IS NULL AND policy_version_id = ? AND horizon = ? AND metric = ? AND metadata_json = ? LIMIT 1`)
+        .get(o.experimentId, o.policyVersionId, o.horizon, o.metric, metadata) as { id: number } | undefined;
+      if (prior) return 0;
+    }
     const r = this.db
       .prepare(`INSERT OR IGNORE INTO experiment_outcomes
         (experiment_id, decision_id, policy_version_id, ts, horizon, metric, value, metadata_json)
         VALUES (?,?,?,?,?,?,?,?)`)
-      .run(o.experimentId ?? null, o.decisionId ?? null, o.policyVersionId, o.ts, o.horizon, o.metric, o.value, JSON.stringify(o.metadata ?? {}));
+      .run(o.experimentId ?? null, o.decisionId ?? null, o.policyVersionId, o.ts, o.horizon, o.metric, o.value, metadata);
     return Number(r.changes) > 0 ? Number(r.lastInsertRowid) : 0;
   }
 

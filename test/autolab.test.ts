@@ -78,4 +78,45 @@ describe("autonomous lab", () => {
     expect(await auto.runDue()).toEqual([]);
     expect(calls).toBe(0);
   });
+
+  it("rotates a live scalp universe durably and keeps passing instruments pinned", async () => {
+    const db = new MetaStore();
+    const commands: LabCommand[] = [];
+    let clock = NOW;
+    const universe = ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP", "ARB-USDT-SWAP"];
+    const auto = lab(db, async (args) => { commands.push(args); }, () => clock, {
+      intervalHours: 0,
+      scalpIntervalHours: 1,
+      scalpCoins: () => universe,
+      scalpBatchSize: 2,
+      scalpPinned: () => ["HYPE-USDT-SWAP"],
+    });
+
+    expect(await auto.runDue()).toEqual(["scalp"]);
+    expect(commands[0]).toContain("HYPE-USDT-SWAP,BTC-USDT-SWAP,ETH-USDT-SWAP");
+    clock += HOUR;
+    expect(await auto.runDue()).toEqual(["scalp"]);
+    expect(commands[2]).toContain("HYPE-USDT-SWAP,SOL-USDT-SWAP,ARB-USDT-SWAP");
+  });
+
+  it("retries the same persisted scalp batch and advances only after the report callback succeeds", async () => {
+    const db = new MetaStore();
+    const fetched: string[] = [];
+    let clock = NOW;
+    let fail = true;
+    const make = () => lab(db, async (args) => { if (args[0] === "fetch") fetched.push(args[2]!); }, () => clock, {
+      intervalHours: 0,
+      scalpIntervalHours: 1,
+      scalpCoins: () => ["BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP"],
+      scalpBatchSize: 1,
+      onScalpReport: () => { if (fail) throw new Error("ledger busy"); },
+    });
+    expect(await make().runDue()).toEqual([]);
+    expect(db.getMeta("autolab_scalp_cursor")).toBeNull();
+    fail = false;
+    clock += HOUR;
+    expect(await make().runDue()).toEqual(["scalp"]);
+    expect(fetched).toEqual(["BTC-USDT-SWAP", "BTC-USDT-SWAP"]);
+    expect(db.getMeta("autolab_scalp_cursor")).toBe("1");
+  });
 });

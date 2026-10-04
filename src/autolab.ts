@@ -18,9 +18,16 @@ export interface AutoLabOpts {
   scalpIntervalHours: number;
   startDelayMin: number;
   instruments: string[];
-  scalpCoins: string[];
+  /** A function keeps wildcard universes fresh as volume/risk gates change. */
+  scalpCoins: string[] | (() => string[]);
+  /** Number of rotating instruments per run. Omit to test the whole fixed list (legacy behaviour). */
+  scalpBatchSize?: number;
+  /** Instruments with a currently passing rule remain in every batch while the rest rotate. */
+  scalpPinned?: () => string[];
   scalpEnabled: boolean;
   run: (args: LabCommand) => Promise<void>;
+  /** Runs after the report was written but before the job is marked successful. */
+  onScalpReport?: () => Promise<void> | void;
   now?: () => number;
   pollMs?: number;
 }
@@ -33,6 +40,10 @@ export interface AutoLabState {
 
 const HOUR = 3_600_000;
 const meta = (job: AutoLabJob, what: "attempt" | "success") => `autolab_${job}_${what}_at`;
+const SCALP_CURSOR = "autolab_scalp_cursor";
+const SCALP_PENDING = "autolab_scalp_pending";
+
+interface ScalpBatch { coins: string[]; rotateCount: number }
 
 export class AutoLab {
   private timer: NodeJS.Timeout | null = null;
@@ -62,7 +73,7 @@ export class AutoLab {
     return {
       running: this.running,
       ranking: one("ranking", this.o.intervalHours, this.o.intervalHours > 0),
-      scalp: one("scalp", this.o.scalpIntervalHours, this.o.scalpEnabled && this.o.scalpCoins.length > 0 && this.o.scalpIntervalHours > 0),
+      scalp: one("scalp", this.o.scalpIntervalHours, this.o.scalpEnabled && this.scalpCoins().length > 0 && this.o.scalpIntervalHours > 0),
     };
   }
 
@@ -81,12 +92,16 @@ export class AutoLab {
         log.warn("autonomous lab job failed", { job: "ranking", err: safeError(err) });
       }
     }
-    if (this.o.scalpEnabled && this.o.scalpCoins.length > 0 && this.o.scalpIntervalHours > 0 && this.due("scalp", this.o.scalpIntervalHours, at)) {
+    if (this.o.scalpEnabled && this.scalpCoins().length > 0 && this.o.scalpIntervalHours > 0 && this.due("scalp", this.o.scalpIntervalHours, at)) {
+      const batch = this.scalpBatch();
       try {
         await this.runJob("scalp", [
-          ["fetch", "--inst", this.o.scalpCoins.join(","), "--bar", "1m", "--days", "14"],
-          ["scalp", "--inst", this.o.scalpCoins.join(",")],
-        ], at);
+          ["fetch", "--inst", batch.coins.join(","), "--bar", "1m", "--days", "14"],
+          ["scalp", "--inst", batch.coins.join(",")],
+        ], at, batch.coins, this.o.onScalpReport);
+        const cursor = Number(this.o.db.getMeta(SCALP_CURSOR)) || 0;
+        this.o.db.setMeta(SCALP_CURSOR, String(cursor + batch.rotateCount));
+        this.o.db.setMeta(SCALP_PENDING, "");
         done.push("scalp");
       } catch (err) {
         log.warn("autonomous lab job failed", { job: "scalp", err: safeError(err) });
@@ -107,12 +122,13 @@ export class AutoLab {
     }
   }
 
-  private async runJob(job: AutoLabJob, commands: LabCommand[], at: number): Promise<void> {
+  private async runJob(job: AutoLabJob, commands: LabCommand[], at: number, instruments = this.o.instruments, after?: () => Promise<void> | void): Promise<void> {
     this.running = job;
     this.o.db.setMeta(meta(job, "attempt"), String(at));
-    log.info("autonomous lab started", { job, instruments: job === "ranking" ? this.o.instruments : this.o.scalpCoins });
+    log.info("autonomous lab started", { job, instruments });
     try {
       for (const command of commands) await this.o.run(command);
+      await after?.();
       this.o.db.setMeta(meta(job, "success"), String(this.now()));
       log.info("autonomous lab completed", { job });
     } finally {
@@ -132,6 +148,31 @@ export class AutoLab {
   private read(key: string): number | null {
     const n = Number(this.o.db.getMeta(key));
     return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  private scalpCoins(): string[] {
+    const raw = typeof this.o.scalpCoins === "function" ? this.o.scalpCoins() : this.o.scalpCoins;
+    return [...new Set(raw.map((x) => x.trim().toUpperCase()).filter(Boolean))];
+  }
+
+  /** Persisting the pending batch makes retries deterministic even if the live universe moves meanwhile. */
+  private scalpBatch(): ScalpBatch {
+    const pending = this.o.db.getMeta(SCALP_PENDING);
+    if (pending) {
+      try {
+        const parsed = JSON.parse(pending) as ScalpBatch;
+        if (Array.isArray(parsed.coins) && parsed.coins.length && Number.isFinite(parsed.rotateCount)) return parsed;
+      } catch { /* replace malformed old state below */ }
+    }
+    const universe = this.scalpCoins();
+    const requested = this.o.scalpBatchSize;
+    const size = requested === undefined ? universe.length : Math.min(universe.length, Math.max(1, Math.floor(requested)));
+    const cursor = Math.max(0, Number(this.o.db.getMeta(SCALP_CURSOR)) || 0);
+    const rotating = Array.from({ length: size }, (_, i) => universe[(cursor + i) % universe.length]!).filter(Boolean);
+    const pinned = this.o.scalpPinned?.().map((x) => x.trim().toUpperCase()).filter(Boolean) ?? [];
+    const batch = { coins: [...new Set([...pinned, ...rotating])], rotateCount: rotating.length };
+    this.o.db.setMeta(SCALP_PENDING, JSON.stringify(batch));
+    return batch;
   }
 }
 

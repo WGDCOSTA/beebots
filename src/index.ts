@@ -58,6 +58,7 @@ import { skillRegistry } from "./lab/skills/index.js";
 import type { Skill } from "./lab/skills/types.js";
 import { ExperimentControl } from "./experiment-control.js";
 import { AutoLab, labProcessRunner } from "./autolab.js";
+import { recordScalpResearch } from "./lab/scalpResearch.js";
 
 // When a Jev call times out while its answer is still arriving, @typesafe-ai/sdk 0.6.0 can leave the aborted response's
 // body promise without a handler. The call itself has already failed and been handled (the bunny holds), so that late
@@ -352,23 +353,41 @@ async function main() {
   // Keep the evidence underneath every learned skill fresh without ever blocking a trading tick. History downloads,
   // walk-forward tournaments and scalp validation run in a child process; their schedule survives engine restarts.
   const swapInstrument = (coin: string) => coin.includes("-") ? coin.toUpperCase() : `${coin.toUpperCase()}-USDT-SWAP`;
-  const scalpUniverse = cfg.scalp.coins.includes("*")
-    ? feed.view().gated.slice(0, cfg.scalp.universeSize)
+  const scalpUniverse = () => cfg.scalp.coins.includes("*")
+    ? feed.view().gated
     : cfg.scalp.coins.map(swapInstrument);
   const autoLabInstruments = [...new Set([
     "BTC-USDT-SWAP", "ETH-USDT-SWAP", "SOL-USDT-SWAP", "HYPE-USDT-SWAP",
     ...cfg.beeIds.filter((id) => cfg.slots[id].market === "crypto").flatMap((id) => cfg.slots[id].coins.map(swapInstrument)),
-    ...scalpUniverse,
+    ...scalpUniverse().slice(0, cfg.scalp.universeSize),
   ])];
+  const recordLatestScalpReport = () => {
+    const report = loadScalpReport(cfg.lab.dir);
+    if (!report) throw new Error("scalp lab completed without a readable report");
+    const brain = cfg.brains.slots.bee4;
+    recordScalpResearch({ ledger: db.experiments, graph, report, mode: cfg.mode, brainModel: clients[brain]?.model ?? brain });
+  };
+  // Backfill the latest report from installations that predate the ledger bridge. The report fingerprint makes this
+  // harmless on every later restart and gives Degen its existing NO EDGE lesson immediately.
+  if (loadScalpReport(cfg.lab.dir)) {
+    try {
+      recordLatestScalpReport();
+    } catch (err) {
+      log.warn("could not backfill scalp research into the ledger", { err: safeError(err) });
+    }
+  }
   const autoLab = new AutoLab({
     db,
     intervalHours: cfg.lab.autoLabIntervalHours,
     scalpIntervalHours: cfg.lab.autoScalpLabIntervalHours,
     startDelayMin: cfg.lab.autoLabStartDelayMin,
     instruments: autoLabInstruments,
-    scalpCoins: [...new Set(scalpUniverse)],
+    scalpCoins: scalpUniverse,
+    scalpBatchSize: cfg.scalp.universeSize,
+    scalpPinned: () => scalpLabGate().rules.map((rule) => swapInstrument(rule.coin)),
     scalpEnabled: cfg.scalp.enabled,
     run: labProcessRunner(cfg.settingsPath),
+    onScalpReport: recordLatestScalpReport,
   });
   autoLab.start();
 

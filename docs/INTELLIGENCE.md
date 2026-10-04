@@ -377,8 +377,9 @@ bunnies trade on the exchange feed alone. The key only travels in CMC's request 
 
 A scalp aims at a few basis points and a round trip costs about as much: the taker fee alone is 10 bp in and out. So the
 scalper is built around costs, in three stages, and it stays flat unless every one of them says yes. Degen uses this
-method by default, scans an open (`SCALP_COINS=*`) liquid-crypto universe, and the autonomous lab tests a bounded set of
-the most liquid candidates each cycle (`SCALP_UNIVERSE_SIZE`). Access to a coin never bypasses evidence: only a passing,
+method by default, scans an open (`SCALP_COINS=*`) liquid-crypto universe, and the autonomous lab tests the next bounded,
+rotating batch each cycle (`SCALP_UNIVERSE_SIZE`). The cursor and pending batch survive restarts; failed batches repeat
+unchanged, and coins with a currently passing rule stay pinned while the rest rotate. Access to a coin never bypasses evidence: only a passing,
 current real-data rule can become a mandate.
 
 1. **The lab decides whether it may exist** (`src/lab/scalp.ts`, `pnpm lab fetch --bar 1m --days 14`, `pnpm lab scalp`).
@@ -414,6 +415,9 @@ Degen participates in the same councils, experiment ledger, self-research and du
 agent. It may propose its own skill, backtest it and remember both accepted and rejected attempts; only tested skills
 can become active. This is autonomous learning with attribution, not permission to execute arbitrary generated code.
 Its points, levels, daily loss stop, survival tiers, death line and revival rules are the same as the rest of the Warren.
+Each native 1-minute report is also a terminal `scalp_lab` experiment with every coin/rule's out-of-sample net basis
+points, linked into Degen's graph as a durable lesson. “Promoted” means only eligible as a paper candidate: the fresh
+real-report gate and every normal risk control still apply.
 
 ## Gold breakout research (a lab tool, not a live style)
 

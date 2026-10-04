@@ -107,4 +107,32 @@ describe("experiment ledger", () => {
   it("derives entropy and winner margin from the full distribution", () => {
     expect(distributionMetrics({ A: 0.7, B: 0.2, C: 0.1 })).toMatchObject({ margin: 0.5, topProbability: 0.7, options: 3 });
   });
+
+  it("records a completed offline experiment atomically and idempotently", () => {
+    const db = new Db(":memory:");
+    const ledger = new ExperimentLedger(db.raw, () => 5000);
+    const champion = ledger.ensurePolicy(descriptor("degen_wait"));
+    const challenger = ledger.ensurePolicy(descriptor("scalp_candidate"));
+    const input = {
+      id: "exp_scalp_report_a",
+      bee: "bee1" as const,
+      kind: "scalp_lab",
+      hypothesis: "the candidate keeps positive net expectancy after costs",
+      primaryMetric: "net_bps",
+      championPolicyId: champion.id,
+      challengerPolicyId: challenger.id,
+      status: "rolled_back" as const,
+      result: { edge: false, bestNetBps: -2.1 },
+      reason: "no out-of-sample edge",
+    };
+    expect(ledger.recordOffline(input)).toMatchObject({ status: "rolled_back", startedAt: 5000, endedAt: 5000 });
+    expect(ledger.recordOffline(input).id).toBe(input.id);
+    expect(ledger.list()).toHaveLength(1);
+    expect(ledger.events(input.id).map((event) => event.data.to)).toEqual([undefined, "shadow", "rolled_back"]);
+    const outcome = { experimentId: input.id, policyVersionId: challenger.id, ts: 5000, horizon: "walk_forward_1m", metric: "net_bps", value: -2.1, metadata: { dataset: "BTC", ruleId: "micro" } };
+    expect(ledger.recordOutcome(outcome)).toBeGreaterThan(0);
+    expect(ledger.recordOutcome(outcome)).toBe(0);
+    expect(db.raw.prepare("SELECT COUNT(*) AS n FROM experiment_outcomes WHERE experiment_id = ?").get(input.id)).toMatchObject({ n: 1 });
+    db.close();
+  });
 });
