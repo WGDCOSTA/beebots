@@ -48,6 +48,9 @@ export function freeSpec<T extends { kind: string; id: string }>(spec: T | undef
  * holds (`taken`), its own style's family first so each bee leans to a method that suits it.
  */
 export function methodOptions(o: { market: string; current: MethodOptions["current"]; ranking: Ranking | null; extraSkills?: string[]; limit?: number; /** Styles offered on top (the scalper, only while the lab gate is open). */ extraStyles?: string[]; taken?: string[]; family?: string }): MethodOptions {
+  // Degen authors and evolves native 1-minute rules through the scalp DSL/coin book. Generic hourly methods made it
+  // stop being a scalper, so they may inform its votes but can no longer replace its trading identity.
+  if (o.market === "crypto" && o.family === "scalp") return { current: { kind: "own", id: "degen" }, styles: [], skills: [] };
   const styles = [...(o.market === "crypto" ? [...STYLES] : ["macro"]), ...(o.market === "crypto" ? (o.extraStyles ?? []) : [])];
   const skills = (o.ranking?.results ?? [])
     .filter((r) => r.family !== "benchmark" && r.score > 0 && r.stabilityPct >= 40 && !(o.taken ?? []).includes(r.skillId))

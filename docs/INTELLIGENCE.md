@@ -415,6 +415,9 @@ Degen participates in the same councils, experiment ledger, self-research and du
 agent. It may propose its own skill, backtest it and remember both accepted and rejected attempts; only tested skills
 can become active. This is autonomous learning with attribution, not permission to execute arbitrary generated code.
 Its points, levels, daily loss stop, survival tiers, death line and revival rules are the same as the rest of the Warren.
+Its trading identity cannot be replaced by a generic hourly specialisation: Degen's brain writes native 1-minute rules
+into the coin book instead. While no rule has passed the scalp lab, **paper mode only** uses Degen's bounded 30-minute
+quick-trade fallback to collect forward experience; demo and live remain flat behind the evidence gate.
 Each native 1-minute report is also a terminal `scalp_lab` experiment with every coin/rule's out-of-sample net basis
 points, linked into Degen's graph as a durable lesson. “Promoted” means only eligible as a paper candidate: the fresh
 real-report gate and every normal risk control still apply.

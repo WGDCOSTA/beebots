@@ -222,7 +222,10 @@ export class Engine {
       await this.d.exec.init(id);
       try {
         const saved = JSON.parse(db.getMeta(`spec_${id}`) ?? "null") as ActiveSpec | null;
-        if (saved) this.spec[id] = saved;
+        // Degen's learning happens inside the native 1-minute coin book. A generic hourly specialisation changes its
+        // identity and can leave it waiting on one slow signal forever, so discard legacy choices for this slot.
+        if (saved && cfg.slots[id].style !== "degen") this.spec[id] = saved;
+        else if (saved) db.setMeta(`spec_${id}`, "null");
       } catch {
         /* no specialisation remembered */
       }
@@ -1338,6 +1341,12 @@ export class Engine {
    */
   private baseBrain(id: BeeId): BeeBrain {
     const s = this.d.cfg.slots[id];
+    // Degen stays Degen. On paper, a closed lab gate falls back to its bounded 30-minute quick-trade method so it can
+    // generate forward evidence while the autonomous scalp lab searches. Demo/live remain flat behind the native gate.
+    if (s.market === "crypto" && s.style === "degen") {
+      if (this.d.cfg.scalp.enabled && (this.scalpAvailable() || this.d.cfg.mode !== "dry")) return scalpBrain(this.scalpDeps());
+      return BRAINS.degen;
+    }
     const a = this.spec[id];
     if (a?.kind === "skill") {
       const skill = this.d.skillById?.(a.id);
@@ -1348,9 +1357,6 @@ export class Engine {
       if (s.market === "crypto" && (STYLES as readonly string[]).includes(a.id)) return BRAINS[a.id as keyof typeof BRAINS];
       if (s.market !== "crypto" && a.id === "macro") return macro;
     }
-    // Degen's native method is the fast one-minute scalp engine. It remains flat while the evidence gate is closed;
-    // turning SCALP off explicitly falls back to its slower short-horizon style instead of disabling the agent.
-    if (s.market === "crypto" && s.style === "degen" && this.d.cfg.scalp.enabled) return scalpBrain(this.scalpDeps());
     return s.market === "crypto" ? BRAINS[s.style] : macro;
   }
 
@@ -1393,6 +1399,15 @@ export class Engine {
    */
   private adoptSpecialization(id: BeeId, now: number): void {
     if (!this.d.specialization || !this.d.cfg.lab.specialization) return;
+    if (this.d.cfg.slots[id].style === "degen") {
+      if (this.spec[id]) {
+        delete this.spec[id];
+        delete this.brains[id];
+        delete this.watched[id];
+        this.d.db.setMeta(`spec_${id}`, "null");
+      }
+      return;
+    }
     const want = this.d.specialization(id) ?? null;
     const valid = want && this.specValid(id, want) ? want : null;
     const key = valid ? `${valid.kind}:${valid.id}:${JSON.stringify(valid.params ?? {})}` : "";

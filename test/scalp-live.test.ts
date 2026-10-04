@@ -8,6 +8,7 @@ import { EventBus } from "../src/events.js";
 import { SimExecutor } from "../src/exec/executor.js";
 import { Jev, type SystemOne } from "../src/jev.js";
 import { DEFAULT_COSTS, type ScalpGate } from "../src/lab/scalp.js";
+import { BUILTIN_SKILLS } from "../src/lab/skills/index.js";
 import type { MarketFeed } from "../src/market/data.js";
 import type { Candle, MarketView } from "../src/market/types.js";
 import { bee, coin, ctx, NOW, testConfig, view } from "./fixtures.js";
@@ -179,12 +180,15 @@ describe("the scalp brain: the entry", () => {
 
 // ---------- the engine ----------
 
-function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: true, reason: "lab edge on BTC", rules: [RULE], costs: DEFAULT_COSTS, ageDays: 1 }) {
+function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: true, reason: "lab edge on BTC", rules: [RULE], costs: DEFAULT_COSTS, ageDays: 1 }, degenLegacySkill = false) {
   const cfg = scalpCfg(env);
   let px = 100;
   let clock = NOW;
   let candles = breakout(NOW);
-  const coins = () => [coin("BTC", { spreadBp: 1, atr14Pct: 0.1 }, px), coin("ETH")];
+  const coins = () => [
+    coin("BTC", { spreadBp: 1, atr14Pct: 0.1, ...(degenLegacySkill ? { ret1hPct: 0.8, macdHistPct: 0.1, volZ: 1 } : {}) }, px),
+    coin("ETH"),
+  ];
   let v: MarketView = view(coins());
   const setPx = (p: number) => {
     px = p;
@@ -206,7 +210,8 @@ function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: 
   const db = new Db(":memory:");
   const engine = new Engine({
     cfg, db, feed, jev: new Jev({ ...cfg.jev, client, now: () => NOW }), exec, bus: new EventBus(db), alerts: new Alerts(undefined), now: () => NOW,
-    specialization: (id) => (id === "bee1" ? { kind: "style", id: "scalp" } : null),
+    specialization: (id) => id === "bee1" ? { kind: "style", id: "scalp" } : id === "bee4" && degenLegacySkill ? { kind: "skill", id: "sma_cross" } : null,
+    skillById: (id) => BUILTIN_SKILLS.find((skill) => skill.id === id),
     ...(gate ? { scalpGate: () => gate } : {}),
   });
   return { cfg, engine, db, note: () => (engine as unknown as { scalpNote: Record<string, string> }).scalpNote, setPx, setPath: (p: number[]) => void (path = p), setCandles: (c: Candle[]) => void (candles = c), jevCalls: () => jevCalls };
@@ -299,6 +304,22 @@ describe("the engine: Jev sets a mandate, code scalps inside it", () => {
     expect(r.engine.bees.bee1.position).toBeNull();
     expect(r.engine.snapshot().system!.scalp).toMatchObject({ enabled: true, gateOpen: false });
     expect(r.engine.snapshot().system!.scalp.reason).toMatch(/no edge/);
+  });
+
+  it("keeps Degen out of generic hourly specialisations and paper-trades its quick fallback while the scalp lab searches", async () => {
+    const closed = { open: false, reason: "the lab found no edge after costs", rules: [], costs: DEFAULT_COSTS, ageDays: 1 } satisfies ScalpGate;
+    const r = rig({}, closed, true);
+    await r.engine.start();
+    r.engine.stop();
+    for (const id of ["bee1", "bee2", "bee3"] as const) r.engine.bees[id].cap = "trade_cap";
+    await r.engine.tick();
+    const brain = (r.engine as unknown as { brain(id: string): { id: string } }).brain("bee4");
+    const degen = r.engine.snapshot().bees.find((bee) => bee.bee === "bee4")!;
+    expect(brain.id).toBe("degen");
+    expect(degen.method).toMatchObject({ kind: "own", id: "degen" });
+    expect(degen.scalp).toBeNull();
+    expect(r.engine.bees.bee4.position).toBeTruthy();
+    expect(JSON.parse(r.db.getMeta("spec_bee4") ?? "null")).toBeNull();
   });
 
   it("Degen enables SCALP by default, but the master switch can still disable it", async () => {

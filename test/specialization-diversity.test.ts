@@ -26,4 +26,9 @@ describe("one skill, one bee", () => {
     expect(resolvePick({ kind: "skill", id: "ft_bb_rsi", reason: "best score" } as never, m, 0)).toBeNull();
     expect(resolvePick({ kind: "skill", id: "brk_donchian", reason: "fits" } as never, m, 0)).toMatchObject({ id: "brk_donchian" });
   });
+
+  it("keeps Degen's native scalp identity while its brain evolves rules in the coin book", () => {
+    expect(methodOptions({ market: "crypto", current: { kind: "skill", id: "ft_bb_rsi" }, ranking, family: "scalp", extraStyles: ["scalp"] }))
+      .toEqual({ current: { kind: "own", id: "degen" }, styles: [], skills: [] });
+  });
 });
