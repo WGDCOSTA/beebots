@@ -154,7 +154,7 @@ describe("simulated training", () => {
     await done(w, first.id);
     for (let i = 1; i < TRAININGS_PER_DAY.pro; i++) await done(w, w.trainer.start(w.u.id, "pro", b, 7).id);
     expect(() => w.trainer.start(w.u.id, "pro", b, 7)).toThrow(/today's trainings/);
-  });
+  }, 30_000); // three 7-day replays
   it("stops early at the model budget, and can be cancelled", async () => {
     const w = world("pro", 0.0005);
     const b = w.bots.create(agent);

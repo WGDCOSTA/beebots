@@ -59,6 +59,8 @@ import type { Skill } from "./lab/skills/types.js";
 import { ExperimentControl } from "./experiment-control.js";
 import { AutoLab, labProcessRunner } from "./autolab.js";
 import { recordScalpResearch } from "./lab/scalpResearch.js";
+import { GhostProofClient } from "./ghostproof/client.js";
+import { GhostProofRecorder } from "./ghostproof/recorder.js";
 
 // When a Jev call times out while its answer is still arriving, @typesafe-ai/sdk 0.6.0 can leave the aborted response's
 // body promise without a handler. The call itself has already failed and been handled (the bunny holds), so that late
@@ -419,6 +421,18 @@ async function main() {
     },
   });
   farmer.start();
+  // GhostProof (docs/GHOSTPROOF.md): every decision, order and fill as an AgentProof event with hashes only, kept in a
+  // local outbox and sent to the gateway when GHOSTPROOF_TOKEN is set. GHOSTPROOF=1 turns it on.
+  const ghostToken = process.env.GHOSTPROOF_TOKEN?.trim() || null;
+  const ghostproof = process.env.GHOSTPROOF === "1"
+    ? new GhostProofRecorder({
+        db: db.raw,
+        ctx: { actorId: process.env.GHOSTPROOF_ACTOR?.trim() || `beebots-${cfg.mode}`, mode: cfg.mode, model: cfg.jev.model },
+        client: ghostToken ? new GhostProofClient({ baseUrl: process.env.GHOSTPROOF_URL?.trim() || "https://gateway.efps.live/api", token: () => ghostToken }) : null,
+      })
+    : null;
+  ghostproof?.start();
+  if (ghostproof) log.info("ghostproof: recording decisions", { sending: !!ghostToken });
   // His portrait: painted once with the OpenAI image key, in the bunnies' style, and kept in the data volume. Until then
   // (or without a key) the page shows the drawn one (dashboard/public/farmer.svg). FARMER_PAINT=0 never paints.
   const farmerImage = join(imageDir(cfg.settingsPath), "farmer.jpg");
@@ -754,6 +768,7 @@ async function main() {
     saveSessions();
     coach.stop();
     farmer.stop();
+    ghostproof?.stop();
     for (const id of CREW_IDS) crew[id].stop();
     cmc?.stop();
     graph.close();

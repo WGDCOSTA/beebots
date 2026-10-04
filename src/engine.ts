@@ -601,7 +601,7 @@ export class Engine {
     const session = this.sessionState(id, brain.snapshotCoins(ctx).map((i) => i.split("-")[0]!), now);
     const mkt = this.d.cfg.cmc.inJev && this.d.cfg.slots[id].squad === "crypto" ? jevMarketLine(this.d.cmc?.() ?? null) : null;
     const extra = { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}), ...(session ? { session } : {}), ...(mkt ? { mkt } : {}) };
-    const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null);
+    const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null, cfg.jev.tech !== false);
     if (brain.id === "boozy" && bee.top1.coin) snap.state.top1 = `${bee.top1.coin} x${bee.top1.streak}`;
     const active = this.spec[id];
     const method: PolicyDescriptor["method"] = active

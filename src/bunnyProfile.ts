@@ -33,6 +33,38 @@ type DecisionRow = {
   error: string | null;
 };
 
+/** One reason in words a person reads: the veto without its numbers, a hold choice, or the engine's status. */
+export function blockerOf(r: { choice: string | null; status: string | null; vetoed: string | null; action: string | null }): string | null {
+  let kind = "none";
+  try {
+    kind = String((JSON.parse(r.action ?? "{}") as { kind?: unknown }).kind ?? "none");
+  } catch {
+    /* unreadable action: treated as none */
+  }
+  if (kind === "open" || kind === "switch" || kind === "leg_open") return null; // it traded
+  if (r.vetoed) return `vetoed: ${r.vetoed.replace(/[\s=].*$/, "").replace(/_/g, " ")}`;
+  if (r.choice && /^(WAIT|HOLD|RIDE|KEEP|STAY)/.test(r.choice)) return `Jev chose ${r.choice.split("_")[0]}`;
+  if (r.choice) return null; // a non-hold choice that did not open (a close, an add): not a blocker
+  const st = (r.status ?? "no answer").toLowerCase().replace(/\(flat [^)]*\)/, "").replace(/[0-9.]+/g, "#").trim();
+  return st.slice(0, 60);
+}
+
+/** What kept a bunny from trading over the last `hours`: every decision that did not open, grouped by reason. */
+export function blockers(raw: Db["raw"], slot: string, now: number, hours = 24): { hours: number; decisions: number; opens: number; top: Array<{ why: string; n: number }> } {
+  const rows = raw.prepare("SELECT choice, status, vetoed_by AS vetoed, action_json AS action FROM decisions WHERE bee = ? AND ts >= ?").all(slot, now - hours * 3_600_000) as Array<{ choice: string | null; status: string | null; vetoed: string | null; action: string | null }>;
+  const by = new Map<string, number>();
+  let opens = 0;
+  for (const r of rows) {
+    const why = blockerOf(r);
+    if (why === null) {
+      if (/"kind":"(open|switch|leg_open)"/.test(r.action ?? "")) opens++;
+      continue;
+    }
+    by.set(why, (by.get(why) ?? 0) + 1);
+  }
+  return { hours, decisions: rows.length, opens, top: [...by].map(([why, n]) => ({ why, n })).sort((a, b) => b.n - a.n).slice(0, 6) };
+}
+
 export function bunnyProfile(d: BunnyProfileDeps, slot: string, days = 30): unknown | null {
   if (!d.slots().includes(slot)) return null;
   const now = (d.now ?? Date.now)();
@@ -159,6 +191,7 @@ export function bunnyProfile(d: BunnyProfileDeps, slot: string, days = 30): unkn
   return {
     slot,
     generatedAt: now,
+    blockers: blockers(raw, slot, now),
     equity,
     stats: {
       trades: closes.length,

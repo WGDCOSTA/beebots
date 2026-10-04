@@ -95,6 +95,8 @@ const EnvSchema = z.object({
   JEV_SHADOW_ENABLED: bool(false),
   JEV_SHADOW_DAILY_USD_CAP: num(0.25),
   JEV_USD_PER_MTOK: num(0.042),
+  /** Send Jev the shared technical block (RSI, MACD, Bollinger, ATR, volume, funding, OI) on top of each style's own columns. */
+  JEV_TECH: bool(true),
   TICK_MS: num(10_000),
   DATA_REFRESH_MS: num(60_000),
 
@@ -339,7 +341,7 @@ export interface Config {
   hive: { url: string };
   update: { enabled: boolean; repo: string; version: string };
   settingsPath: string;
-  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number };
+  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number; tech: boolean };
   tickMs: number;
   dataRefreshMs: number;
   okx: { site: "eea"; apiBase: string; cliTimeoutMs: number };
@@ -539,6 +541,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       shadowEnabled: e.JEV_SHADOW_ENABLED,
       shadowDailyUsdCap: Math.max(0, e.JEV_SHADOW_DAILY_USD_CAP),
       usdPerMTok: e.JEV_USD_PER_MTOK,
+      tech: e.JEV_TECH,
     },
     tickMs: Math.max(1000, e.TICK_MS),
     dataRefreshMs: Math.max(15_000, e.DATA_REFRESH_MS),

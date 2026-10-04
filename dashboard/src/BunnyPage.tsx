@@ -51,6 +51,8 @@ export interface BunnyProfile {
   fills: Array<{ ts: number; coin: string; side: "buy" | "sell"; px: number; notionalUsd: number; feeUsd: number; realisedUsd: number; close: boolean; purpose: string | null }>;
   decisions: Array<{ ts: number; choice: string | null; confidence: number | null; conviction: number | null; latencyMs: number | null; status: string | null; vetoedBy: string | null; forcedBy: string | null; error: string | null }>;
   choiceMix: Array<{ choice: string; n: number }>;
+  /** What kept it from trading over the last day: decisions that did not open, by reason. */
+  blockers?: { hours: number; decisions: number; opens: number; top: Array<{ why: string; n: number }> };
   learning: {
     lessons: Array<{ ts: number; text: string; source: string | null; consolidated: boolean }>;
     adopted: Array<{ skill: string; weight: number; since: number }>;
@@ -508,6 +510,15 @@ export function Decisions({ data, live }: { data: BunnyProfile | null; live: Ret
       <Card title="Confidence of each call" hint="hollow = vetoed by the risk layer" wide>
         <DotStrip dots={dots} color="var(--bee)" empty="No decisions yet." />
       </Card>
+      {data?.blockers && data.blockers.decisions > 0 && (
+        <Card title="Why it isn't trading" hint={`last ${data.blockers.hours} h · ${data.blockers.opens} opened of ${data.blockers.decisions} decisions`}>
+          {data.blockers.top.length ? (
+            <HBars rows={data.blockers.top.map((b) => ({ key: b.why, label: b.why, value: b.n, note: `${Math.round((100 * b.n) / Math.max(1, data.blockers!.decisions))}%` }))} format={(v) => String(v)} tone={() => "var(--warning)"} />
+          ) : (
+            <div className="chart-empty">Nothing held it back.</div>
+          )}
+        </Card>
+      )}
       <Card title="What it chose" hint={`last ${total} decisions`}>
         {data?.choiceMix.length ? (
           <HBars rows={data.choiceMix.map((c) => ({ key: c.choice, label: c.choice.replace(/_/g, " ").toLowerCase(), value: c.n, note: `${Math.round((100 * c.n) / Math.max(1, total))}%` }))} format={(v) => String(v)} tone={() => "var(--bee)"} />
