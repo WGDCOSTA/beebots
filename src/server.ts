@@ -1,5 +1,5 @@
 // Read-only HTTP: GET /events (SSE), /snapshot, /history?n=, /equity?days=, /visit, /health, /profile, /bee-image/<bunny>,
-// /lab/ranking, /lab/playbook, /hive-mind (graph.json), /hive-mind/<bunny> (what a bunny's brain knows) and
+// /lab/ranking, /lab/playbook, /lab/book (each coin's scalp rules and the lab brain's studies), /hive-mind (graph.json), /hive-mind/<bunny> (what a bunny's brain knows) and
 // /bunny/<bunny>?days= (its profile page: equity, trades, decisions, lessons, the Warren's messages; bunnyProfile.ts).
 // POST /admin/* is the admin panel (admin/admin.ts); every call there needs the owner password.
 // Never config or keys. The exceptions: /setup/*, which only exists before first-run Setup is done (setup.ts), and
@@ -39,6 +39,8 @@ export interface ServerDeps {
       path?: (from: string, to: string) => unknown;
       explain?: (node: string) => unknown;
       report?: () => string;
+      /** The coin book (lab/coinBook.ts) and the lab brain's studies, without the rules' specs. */
+      book?: () => unknown;
     };
     /** One bunny's profile page data (bunnyProfile.ts), or null for an unknown slot. */
     bunny?: (slot: string, days: number) => unknown | null;
@@ -236,6 +238,8 @@ export function startServer(deps: ServerDeps, port: number, bind: string): Serve
       }
       case "/lab/ranking":
         return e.lab ? json(res, 200, e.lab.ranking() ?? { results: [] }) : json(res, 404, { error: "lab not enabled" });
+      case "/lab/book":
+        return e.lab?.book ? json(res, 200, e.lab.book()) : json(res, 404, { error: "lab not enabled" });
       case "/lab/playbook":
         return e.lab ? json(res, 200, e.lab.playbook() ?? { bees: {} }) : json(res, 404, { error: "lab not enabled" });
       case "/hive-mind":

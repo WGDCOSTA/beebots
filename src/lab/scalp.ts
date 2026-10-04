@@ -347,7 +347,13 @@ export const stretchRevert: ScalpRule = {
 };
 
 export const SCALP_RULES: ScalpRule[] = [microBreakout, stretchRevert];
-export const scalpRule = (id: string) => SCALP_RULES.find((r) => r.id === id);
+/** Rules written as data (lab/scalpDsl.ts) that the coin book (lab/coinBook.ts) keeps; the live scalper finds them here. */
+const written = new Map<string, ScalpRule>();
+export function registerScalpRules(rules: ScalpRule[]): void {
+  written.clear();
+  for (const r of rules) if (!SCALP_RULES.some((b) => b.id === r.id)) written.set(r.id, r);
+}
+export const scalpRule = (id: string): ScalpRule | undefined => SCALP_RULES.find((r) => r.id === id) ?? written.get(id);
 
 /** Every combination of a rule's grid (defaults fill the rest), sampled evenly down to `max`. */
 export function expandScalpGrid(rule: ScalpRule, max = 96): Params[] {
@@ -503,10 +509,11 @@ export interface ScalpReport {
   verdict: { edge: boolean; passing: Array<{ dataset: string; ruleId: string; params: Params; netBps: number; trades: number }>; note: string };
 }
 
-export function buildScalpReport(sets: Array<{ id: string; candles: Candle[]; synthetic?: boolean }>, rules: ScalpRule[] = SCALP_RULES, o: Partial<ScalpEvalOpts> = {}, now = Date.now()): ScalpReport {
+/** `rules` may differ per dataset: the coin book plans which rules each coin is tested with. */
+export function buildScalpReport(sets: Array<{ id: string; candles: Candle[]; synthetic?: boolean }>, rules: ScalpRule[] | ((datasetId: string) => ScalpRule[]) = SCALP_RULES, o: Partial<ScalpEvalOpts> = {}, now = Date.now()): ScalpReport {
   const opts = { ...DEFAULT_EVAL, ...o };
   const results: RuleResult[] = [];
-  for (const d of sets) for (const r of rules) results.push(evaluateScalpRule(r, d.candles, d.id, opts));
+  for (const d of sets) for (const r of typeof rules === "function" ? rules(d.id) : rules) results.push(evaluateScalpRule(r, d.candles, d.id, opts));
   const synthetic = sets.length > 0 && sets.every((d) => d.synthetic);
   const passing = results
     .filter((r) => r.edge && r.oos.trades > 0)
@@ -587,7 +594,7 @@ export interface ScalpGate {
 }
 
 /** "BTC-USDT-SWAP 1m" -> "BTC" */
-const coinOfSet = (id: string) => id.split(/[-\s]/)[0]!.toUpperCase();
+export const coinOfSet = (id: string) => id.split(/[-\s]/)[0]!.toUpperCase();
 
 /**
  * Whether the lab's latest report lets the live scalper trade: real data (never synthetic), an edge found, and fresh

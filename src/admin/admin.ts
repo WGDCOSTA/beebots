@@ -117,6 +117,9 @@ export interface AdminOpts {
   skillAgent?: SkillAgent;
   /** The gate to outside MCP servers (mcp/gateway.ts): discovery here, grants enforced when a bunny researches. */
   mcp?: McpGateway;
+  /** The coin book (lab/coinBook.ts) and the lab's brain (brains/labBrain.ts): each coin's scalp rules, and the studies. */
+  coinBook?: import("../lab/coinBook.js").CoinBook;
+  labBrain?: import("../brains/labBrain.js").LabBrain;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
   /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
@@ -179,6 +182,13 @@ const NoteBee = z.string().regex(/^(bee[1-9]|hive)$/, "bunny: bee1..bee9 or warr
 const NoteAdd = z.object({ bee: NoteBee, title: Str(80), text: Str(700), coins: z.array(Str(20)).max(6).default([]) });
 const NoteDecide = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/), decision: z.enum(["approve", "reject"]) });
 const NoteRef = z.object({ id: z.string().regex(/^[0-9a-f]{10}$/) });
+const BookBody = z.object({
+  action: z.enum(["propose", "block", "unblock", "pin", "unpin", "retire", "requeue"]),
+  coin: z.string().trim().min(1).max(24),
+  ruleId: z.string().trim().max(48).optional(),
+  specJson: z.string().max(8000).optional(),
+  reason: z.string().trim().max(300).optional(),
+});
 const ResearchBody = z.object({ bee: z.string().regex(/^bee[1-9]$/, "bunny: bee1..bee9") });
 const CustomBrainBody = z.object({
   id: CustomBrainSchema.shape.id,
@@ -482,6 +492,7 @@ export class Admin {
         },
         workshop: { drafts: this.workspace().list(), templates: TEMPLATES, agent: this.o.skillAgent?.available() ?? [] },
         mcp: this.mcpView(),
+        book: this.o.coinBook ? { ...this.o.coinBook.view(true), brain: this.o.labBrain?.status() ?? null } : null,
         notes: {
           available: !!this.o.notes,
           notes: this.o.notes?.all().filter((n) => n.status !== "rejected").slice(0, 200) ?? [],
@@ -1124,6 +1135,44 @@ export class Admin {
           throw err;
         }
         return send(res, 200, this.state());
+      }
+
+      case "/admin/lab/book": {
+        const book = this.o.coinBook;
+        if (!book) return send(res, 503, { error: "The coin book is not available here." });
+        const p = BookBody.safeParse(body);
+        if (!p.success) return send(res, 400, { error: "action, coin and ruleId (or specJson) are needed" });
+        const { action, coin, ruleId, specJson, reason } = p.data;
+        try {
+          if (action === "propose") {
+            let spec: unknown;
+            if (specJson?.trim()) {
+              try {
+                spec = JSON.parse(specJson);
+              } catch {
+                return send(res, 400, { error: "The rule is not valid JSON." });
+              }
+            }
+            const r = book.propose({ coin, ...(spec === undefined ? { ruleId: ruleId ?? "" } : { spec }), source: "manual", reason: reason || "added by the owner" });
+            log.info("admin: coin book rule proposed", { coin, ruleId: r.ruleId });
+            return send(res, 200, { ...this.state(), note: r.note });
+          }
+          if (!ruleId) return send(res, 400, { error: "Which rule?" });
+          book.manual(action, coin, ruleId, reason);
+          log.info("admin: coin book changed", { action, coin, ruleId });
+          return send(res, 200, this.state());
+        } catch (err) {
+          return send(res, 400, { error: (err as Error).message });
+        }
+      }
+
+      case "/admin/lab/study": {
+        const lb = this.o.labBrain;
+        if (!lb) return send(res, 503, { error: "The lab brain is not available here." });
+        if (!lb.enabled) return send(res, 409, { error: "The lab brain has no brain: add an OpenAI key (or set LAB_BRAIN)." });
+        if (lb.busy()) return send(res, 409, { error: "A study is already running." });
+        void lb.study("manual").catch((err) => log.warn("admin: lab study failed", { err: safeError(err) }));
+        return send(res, 200, { ...this.state(), note: "The lab brain is studying; the result shows here in a minute or two." });
       }
 
       case "/admin/research": {

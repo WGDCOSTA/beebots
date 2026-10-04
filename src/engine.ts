@@ -71,6 +71,8 @@ export interface EngineDeps {
   cmc?: () => CmcState | null;
   /** The strategy lab's verdict on the scalper (lab/scalp.ts scalpGate): what it may trade, or closed. */
   scalpGate?: () => ScalpGate;
+  /** A live scalp closed (lab/coinBook.ts recordLive): how the lab's rule really did on that coin. */
+  scalpClosed?: (r: { coin: string; ruleId: string; netUsd: number; notionalUsd: number }) => void;
   /** Survival and rewards (evolution.ts): size factor, limit boosts, the survival line in Jev's state. */
   evolution?: Evolution;
   /**
@@ -1150,7 +1152,7 @@ export class Engine {
     // The scalper keeps its own books: a mandate's trade count, and the loss streak behind its circuit breaker.
     const sb = this.brain(id);
     if (isScalpBrain(sb) && !leg) {
-      if (!reduceOnly) sb.scalp.opened(res.avgPx, res.feeUsd, now);
+      if (!reduceOnly) sb.scalp.opened(res.avgPx, res.feeUsd, now, notionalUsd);
       else if (this.bees[id].position === null) sb.scalp.closed(realised, res.feeUsd, now);
     }
     const dir = reduceOnly ? "CLOSE" : side === "buy" ? "LONG" : "SHORT";
@@ -1375,7 +1377,7 @@ export class Engine {
     return { ...lab, makerFee: this.d.cfg.scalp.makerFee, takerFee: this.d.cfg.risk.takerFeeRate };
   }
   private scalpDeps(): ScalpDeps {
-    return { rules: () => this.scalpRules(), costs: () => this.scalpCosts(), cfg: this.d.cfg.scalp };
+    return { rules: () => this.scalpRules(), costs: () => this.scalpCosts(), cfg: this.d.cfg.scalp, ...(this.d.scalpClosed ? { closed: this.d.scalpClosed } : {}) };
   }
 
   /**

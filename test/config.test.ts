@@ -87,6 +87,6 @@ describe("config", () => {
     expect(c.dataRefreshMs).toBe(60_000);
     expect(c.risk.maxLeverage).toBe(2);
     expect(c.evolution.maxPositions).toBe(18);
-    expect(c.lab).toMatchObject({ signals: true, coachIntervalMin: 360, selfResearchIntervalMin: 360, selfResearchMaxCallsDay: 12, autoLabIntervalHours: 24, autoLabStartDelayMin: 5, autoScalpLabIntervalHours: 168 });
+    expect(c.lab).toMatchObject({ signals: true, coachIntervalMin: 360, selfResearchIntervalMin: 360, selfResearchMaxCallsDay: 12, autoLabIntervalHours: 24, autoLabStartDelayMin: 5, autoScalpLabIntervalHours: 24 });
   });
 });

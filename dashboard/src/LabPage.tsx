@@ -1,6 +1,7 @@
 // #/lab: the strategy lab's ranking, each bunny's playbook, and the warren memory (graph + the bunnies' latest messages and
 // lessons). Read-only and public, like the rest of the dashboard: no keys ever reach these endpoints.
 import { useEffect, useMemo, useState } from "react";
+import { CoinBookPanel, type BookView, type LabBrainStatus } from "./CoinBookPanel";
 import { HiveGraph } from "./HiveGraph";
 import { BRAIN_LABEL, FAMILY_LABEL, getJson, when, type GraphJson, type Playbook, type RankedSkill, type Ranking } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
@@ -372,6 +373,7 @@ export function LabPage() {
   const [playbook, setPlaybook] = useState<Playbook | null>(null);
   const [graph, setGraph] = useState<GraphJson | null>(null);
   const [evo, setEvo] = useState<Snapshot["evolution"] | null>(null);
+  const [book, setBook] = useState<{ book: BookView; brain: LabBrainStatus | null } | null>(null);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [reload, setReload] = useState(0);
@@ -380,8 +382,15 @@ export function LabPage() {
     let alive = true;
     const load = async () => {
       try {
-        const [r, p, g, snap] = await Promise.all([getJson<Ranking>("/lab/ranking"), getJson<Playbook>("/lab/playbook"), getJson<GraphJson>("/hive-mind"), getJson<Snapshot>("/snapshot")]);
+        const [r, p, g, snap, b] = await Promise.all([
+          getJson<Ranking>("/lab/ranking"),
+          getJson<Playbook>("/lab/playbook"),
+          getJson<GraphJson>("/hive-mind"),
+          getJson<Snapshot>("/snapshot"),
+          getJson<{ book: BookView; brain: LabBrainStatus | null }>("/lab/book").catch(() => null),
+        ]);
         if (alive) setEvo(snap?.evolution ?? null);
+        if (alive) setBook(b && b.book ? b : null);
         if (!alive) return;
         setRanking(r && Array.isArray(r.results) && r.results.length ? r : null);
         setPlaybook(p && p.bees ? p : null);
@@ -433,6 +442,15 @@ export function LabPage() {
               {ranking.errors.length > 0 && <p className="bad small">Errors: {ranking.errors.join("; ")}</p>}
             </>
           )}
+        </section>
+
+        <section>
+          <h2>Coin rulebook: the lab's autonomous loop</h2>
+          <p className="dim small">
+            Each coin's 1-minute scalp rules. The lab brain studies everything the brains know and writes new rules; the bunnies propose rules for their own coins; you can add, pin or block
+            rules. A rule trades only after the walk-forward lab passes it on real data after costs, and live losses demote it again.
+          </p>
+          {loaded ? <CoinBookPanel book={book?.book ?? null} brain={book?.brain ?? null} /> : <p className="dim">Loading…</p>}
         </section>
 
         <section>

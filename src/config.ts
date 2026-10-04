@@ -252,7 +252,7 @@ const EnvSchema = z.object({
   // Refresh real history and re-run the tournament outside the trading process. 0 disables either loop.
   AUTO_LAB_INTERVAL_HOURS: num(24),
   AUTO_LAB_START_DELAY_MIN: num(5),
-  AUTO_SCALP_LAB_INTERVAL_HOURS: num(168),
+  AUTO_SCALP_LAB_INTERVAL_HOURS: num(24),
   // ---- Survival and rewards (evolution.ts) ----
   // A bunny in danger trades smaller and is told how close it is to death (BEE_RETIRE_AT_PCT); its brains meet to save it.
   SURVIVAL_MODE: bool(true),
