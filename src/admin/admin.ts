@@ -1210,6 +1210,26 @@ export class Admin {
         return send(res, 200, { ok: true, note: "Coach review started; lessons appear in the warren memory in a minute or two." });
       }
 
+      // The Arena's operator controls (arena/ops.ts): every member's agents, and pause, resume or stop one or all. The Arena
+      // listens on the Docker network only for these (/ops/*), behind ARENA_OPS_TOKEN; the owner password guards this side.
+      case "/admin/arena/agents":
+      case "/admin/arena/state": {
+        const base = (this.o.env.ARENA_OPS_URL?.trim() || "http://arena:8090").replace(/\/+$/, "");
+        const token = this.o.env.ARENA_OPS_TOKEN?.trim();
+        if (!token) return send(res, 503, { error: "The Arena's operator controls are off: set ARENA_OPS_TOKEN in .env for both the engine and the Arena." });
+        const state = path === "/admin/arena/state";
+        try {
+          const r = await fetch(`${base}/ops/${state ? "state" : "agents"}`, {
+            method: state ? "POST" : "GET",
+            headers: { "x-ops-token": token, "content-type": "application/json" },
+            ...(state ? { body: JSON.stringify({ action: body.action, all: body.all === true, userId: body.userId, botId: body.botId }) } : {}),
+            signal: AbortSignal.timeout(20_000),
+          });
+          return send(res, r.status, await r.json().catch(() => ({ error: `Arena answered ${r.status}` })));
+        } catch (e) {
+          return send(res, 502, { error: `The Arena could not be reached: ${safeError(e).message}` });
+        }
+      }
       case "/admin/restart":
         send(res, 200, { ok: true, note: "Restarting. The dashboard reconnects in a few seconds." });
         log.info("admin: restart requested");

@@ -15,6 +15,7 @@
 import { createServer } from "node:http";
 import { log } from "../log.js";
 import { ArenaApi } from "./api.js";
+import { ArenaOps } from "./ops.js";
 import { PlatformAi } from "./ai.js";
 import { BREEZY_COINS } from "../bees/breezy.js";
 import { OpenAiBrain } from "../brains/llm.js";
@@ -133,11 +134,24 @@ store.purgeExpired(Date.now());
 
 const api = new ArenaApi(new ArenaAuth(store, mailer, { baseUrl }), store, { secureCookie: baseUrl.startsWith("https://"), ai, chat, history, trainer, social, aiDailyLimit: Number(env.ARENA_AI_DAILY_LIMIT ?? 100), runner, leaderboard, billing, vault, library: library.skills, operator: { name: env.ARENA_OPERATOR_NAME, address: env.ARENA_OPERATOR_ADDRESS, companyNo: env.ARENA_OPERATOR_COMPANY_NO, vat: env.ARENA_OPERATOR_VAT, email: env.ARENA_OPERATOR_EMAIL, privacyEmail: env.ARENA_OPERATOR_PRIVACY_EMAIL, reviewedOn: env.ARENA_LEGAL_REVIEWED_ON } });
 
+// The operator's controls (ops.ts), for the owner's admin panel: /ops/* on this port only (the public proxy forwards
+// /arena/* alone), and only with ARENA_OPS_TOKEN. Unset = closed.
+const ops = new ArenaOps(store, runner, env.ARENA_OPS_TOKEN?.trim() || undefined);
+if (!ops.open) log.warn("arena: ARENA_OPS_TOKEN is not set (24+ characters), the admin panel cannot control the Arena");
+
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
   if (path === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end('{"ok":true}');
+    return;
+  }
+  if (path.startsWith("/ops/")) {
+    void ops.handle(req, res, path).catch((e) => {
+      log.error("arena ops failed", { error: e instanceof Error ? e.message : String(e) });
+      if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
+      res.end('{"error":"ops failed"}');
+    });
     return;
   }
   void api.handle(req, res, path).then((handled) => {

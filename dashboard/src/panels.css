@@ -2344,3 +2344,48 @@
 .ab-listed input {
   margin-top: 4px;
 }
+
+/* Admin → Arena (AdminArena.tsx) */
+.arena-ops-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.arena-ops-tiles > div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card-2);
+}
+.arena-ops-tiles strong {
+  font-size: 20px;
+}
+.ops-state {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ops-state.s-running {
+  color: var(--good-text);
+  border-color: color-mix(in srgb, var(--good) 55%, var(--line));
+}
+.ops-state.s-paused {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+}
+.ops-state.s-stopped,
+.ops-state.s-quarantined {
+  color: var(--critical-text);
+  border-color: color-mix(in srgb, var(--critical) 55%, var(--line));
+}
+.ops-actions {
+  white-space: nowrap;
+}
+.ops-actions .pbtn + .pbtn {
+  margin-left: 6px;
+}

@@ -2,6 +2,7 @@
 // The password lives only in this page's memory; every call sends it and the engine checks it (with a lockout).
 // The trading mode and LIVE_ACK are not here on purpose: real money stays an .env decision. Each bunny's wallet and OKX
 // sub-account are set when it is created, and the keys are checked (permissions, balance vs wallet) before it is.
+import { AdminArenaTab } from "./AdminArena";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
 import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type ExperimentView, type KeyName } from "./panelTypes";
@@ -15,6 +16,7 @@ const TABS = [
   { id: "settings", label: "Settings" },
   { id: "experiments", label: "Experiments" },
   { id: "lab", label: "Lab, skills & evolution" },
+  { id: "arena", label: "Arena" },
   { id: "security", label: "Security" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -2272,6 +2274,7 @@ export function AdminPage() {
               {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
               {tab === "experiments" && <ExperimentsTab s={s} call={safeCall} />}
               {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}
+              {tab === "arena" && <AdminArenaTab password={pw} />}
               {tab === "security" && <SecurityTab call={safeCall} />}
             </div>
             <div className="row-actions end">
