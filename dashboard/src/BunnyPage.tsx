@@ -54,6 +54,8 @@ export interface BunnyProfile {
   learning: {
     lessons: Array<{ ts: number; text: string; source: string | null; consolidated: boolean }>;
     adopted: Array<{ skill: string; weight: number; since: number }>;
+    /** Its own skills, written by its brains and walk-forward tested: kept only with a positive out-of-sample score and 50%+ stability. */
+    research?: Array<{ ts: number; skill: string; accepted: boolean; score: number | null; stabilityPct: number | null; oosReturnPct: number | null; brain: string | null; why: string | null; idea: string | null }>;
     specialization: { method: string; reason: string | null; since: number } | null;
     plan: { brain: string; model: string; decidedAt: number; message: string; lessons: string[]; skills: Array<{ id: string; weight: number; reason: string; score: number }> } | null;
   };
@@ -562,6 +564,39 @@ function Learning({ data }: { data: BunnyProfile | null }) {
   const l = data?.learning;
   return (
     <div className="bp-grid">
+      <Card title="Its own research" hint={`skills its brains wrote and tested · ${(l?.research ?? []).filter((r) => r.accepted).length} of ${(l?.research ?? []).length} passed`} wide>
+        {l?.research?.length ? (
+          <>
+            <HBars
+              rows={l.research.slice(0, 12).map((r, i) => ({ key: `${r.skill}-${i}`, label: r.skill, value: r.score ?? 0, note: `${r.accepted ? "✓ passed" : "✗ rejected"}${r.stabilityPct !== null ? ` · stability ${r.stabilityPct}%` : ""}${r.oosReturnPct !== null ? ` · out of sample ${r.oosReturnPct}%` : ""}` }))}
+              format={(v) => v.toFixed(2)}
+              tone={(v) => (v > 0 ? "var(--good)" : "var(--critical)")}
+            />
+            <ol className="bp-timeline">
+              {l.research.slice(0, 8).map((r, i) => (
+                <li key={i} className={r.accepted ? "" : "old"}>
+                  <span className="bp-tl-dot" aria-hidden />
+                  <div>
+                    <p>
+                      <span className={`bp-tag ${r.accepted ? "lesson" : "warn"}`}>{r.accepted ? "passed" : "rejected"}</span> <span className="mono">{r.skill}</span>
+                      {r.score !== null ? ` · score ${r.score.toFixed(2)}` : ""}
+                    </p>
+                    {r.idea && <p className="small">{r.idea}</p>}
+                    <span className="dim small">
+                      {r.why ? `${r.why} · ` : ""}
+                      {when(r.ts)}
+                      {r.brain ? ` · ${BRAIN_LABEL[r.brain] ?? r.brain}` : ""}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="dim small">A skill it writes trades only if it beats the out-of-sample test (positive score, at least 50% stability). Until one passes it trades a lab skill no other bunny holds, or its own style.</p>
+          </>
+        ) : (
+          <div className="chart-empty">No research yet. Its brains write and test a new skill every few hours.</div>
+        )}
+      </Card>
       <Card title="What it has learned" hint="newest first" wide>
         <ol className="bp-timeline">
           {(l?.lessons ?? []).map((x, i) => (

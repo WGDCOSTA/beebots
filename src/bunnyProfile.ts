@@ -135,6 +135,23 @@ export function bunnyProfile(d: BunnyProfileDeps, slot: string, days = 30): unkn
     .slice(0, 40)
     .map((n) => ({ ts: n.updatedAt, text: String(n.props.text ?? n.label), source: n.props.source ? String(n.props.source) : null, consolidated: !!n.props.consolidated }));
 
+  // Its own research (brains/survival.ts): every skill its brains wrote and walk-forward tested, passed or not.
+  const research = d.graph
+    .out(me, "tested", 60)
+    .map((e) => d.graph.node(e.dst))
+    .filter((n): n is NonNullable<typeof n> => !!n)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((n) => ({
+      ts: n.updatedAt,
+      skill: String(n.props.skill ?? n.label),
+      accepted: !!n.props.accepted,
+      score: typeof n.props.score === "number" ? r2(n.props.score) : null,
+      stabilityPct: typeof n.props.stabilityPct === "number" ? n.props.stabilityPct : null,
+      oosReturnPct: typeof n.props.oosReturnPct === "number" ? r2(n.props.oosReturnPct) : null,
+      brain: n.props.brain ? String(n.props.brain) : null,
+      why: n.props.result ? String(n.props.result).slice(0, 300) : null,
+      idea: n.props.reason ? String(n.props.reason).slice(0, 400) : null,
+    }));
   const adopted = d.graph.out(me, "adopts", 12).map((e) => ({ skill: e.dst.replace(/^skill:/, ""), weight: r2(e.weight), since: e.updatedAt }));
   const spec = d.graph.out(me, "specialises_in", 1)[0];
   const plan = d.playbook()?.bees[slot] ?? null;
@@ -191,6 +208,7 @@ export function bunnyProfile(d: BunnyProfileDeps, slot: string, days = 30): unkn
     learning: {
       lessons,
       adopted,
+      research,
       specialization: spec ? { method: d.graph.node(spec.dst)?.label ?? spec.dst, reason: spec.props.reason ? String(spec.props.reason) : null, since: spec.updatedAt } : null,
       plan: plan
         ? {

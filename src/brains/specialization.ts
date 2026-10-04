@@ -28,11 +28,31 @@ export interface MethodOptions {
   skills: Array<{ id: string; family: string; score: number; stabilityPct: number; oosReturnPct: number; maxDrawdownPct: number; params: Record<string, number> }>;
 }
 
-/** What a bee may specialise in: its market's styles, and the lab's positive, reasonably stable skills. */
-export function methodOptions(o: { market: string; current: MethodOptions["current"]; ranking: Ranking | null; extraSkills?: string[]; limit?: number; /** Styles offered on top (the scalper, only while the lab gate is open). */ extraStyles?: string[] }): MethodOptions {
+/**
+ * One skill, one bee: the skills other bees already specialise in. Without this every council read the same ranking and
+ * every bee ended on the same champion skill (seen 2026-10-03: all three on ft_bb_rsi with identical playbooks).
+ */
+export function takenSkills(bees: Record<string, { specialization?: { kind: string; id: string } } | undefined>, self: string): string[] {
+  return Object.entries(bees)
+    .filter(([slot, plan]) => slot !== self && plan?.specialization?.kind === "skill")
+    .map(([, plan]) => plan!.specialization!.id);
+}
+
+/** A bee's current specialisation, unless another bee already holds the same skill (then it must choose again). */
+export function freeSpec<T extends { kind: string; id: string }>(spec: T | undefined, taken: string[]): T | undefined {
+  return spec && spec.kind === "skill" && taken.includes(spec.id) ? undefined : spec;
+}
+
+/**
+ * What a bee may specialise in: its market's styles, and the lab's positive, reasonably stable skills that no other bee
+ * holds (`taken`), its own style's family first so each bee leans to a method that suits it.
+ */
+export function methodOptions(o: { market: string; current: MethodOptions["current"]; ranking: Ranking | null; extraSkills?: string[]; limit?: number; /** Styles offered on top (the scalper, only while the lab gate is open). */ extraStyles?: string[]; taken?: string[]; family?: string }): MethodOptions {
   const styles = [...(o.market === "crypto" ? [...STYLES] : ["macro"]), ...(o.market === "crypto" ? (o.extraStyles ?? []) : [])];
   const skills = (o.ranking?.results ?? [])
-    .filter((r) => r.family !== "benchmark" && r.score > 0 && r.stabilityPct >= 40)
+    .filter((r) => r.family !== "benchmark" && r.score > 0 && r.stabilityPct >= 40 && !(o.taken ?? []).includes(r.skillId))
+    // Its own family first, the ranking's order within each group (a stable sort keeps it).
+    .sort((a, b) => Number(b.family === o.family) - Number(a.family === o.family))
     // Keep the list bounded for prompt size, but do not restrict agents to a tiny style-shaped shortlist.
     .slice(0, o.limit ?? 50)
     .map((r) => ({

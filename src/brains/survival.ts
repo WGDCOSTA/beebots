@@ -19,8 +19,8 @@ import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
 import { brainInfo, BRAINS, type BrainId, type LlmClient } from "./llm.js";
-import { loadPlaybook, savePlaybook, type PlaybookSkill } from "./playbook.js";
-import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
+import { loadPlaybook, NATURAL_FAMILY, savePlaybook, type PlaybookSkill } from "./playbook.js";
+import { freeSpec, methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick, takenSkills } from "./specialization.js";
 import { LIQUID_TOP, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, watchInput, watchlistSize, type CoinInfo, type WatchItem } from "./watchlist.js";
 
 const Answer = z.object({
@@ -255,12 +255,16 @@ export class SurvivalCouncil {
     const watch = this.o.watchlist
       ? watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe, ranking, adoptedSkills: current.map((s) => s.id), record: hive.tradeRecord })
       : null;
-    const prevSpec = pb?.bees[bee.slot]?.specialization;
+    // One skill, one bee (see brains/specialization.ts takenSkills).
+    const taken = takenSkills(pb?.bees ?? {}, bee.slot);
+    const prevSpec = freeSpec(pb?.bees[bee.slot]?.specialization, taken);
     const methods = methodOptions({
       market: bee.market ?? "crypto",
       current: prevSpec ? { kind: prevSpec.kind, id: prevSpec.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
       ranking,
       extraStyles: this.o.scalp?.() ? ["scalp"] : [],
+      taken,
+      family: NATURAL_FAMILY[bee.style],
     });
     const answers: Array<{ brain: BrainId; a: AnswerT }> = [];
     for (const b of brains) {
@@ -431,7 +435,7 @@ export class SurvivalCouncil {
         message: msg ?? latest.bees[bee.slot]?.message ?? "",
         decidedAt: this.now(),
         ...((watchlist ?? latest.bees[bee.slot]?.watchlist) ? { watchlist: watchlist ?? latest.bees[bee.slot]!.watchlist } : {}),
-        ...((newSpec ?? latest.bees[bee.slot]?.specialization) ? { specialization: newSpec ?? latest.bees[bee.slot]!.specialization } : {}),
+        ...((newSpec ?? freeSpec(latest.bees[bee.slot]?.specialization, takenSkills(latest.bees, bee.slot))) ? { specialization: newSpec ?? freeSpec(latest.bees[bee.slot]?.specialization, takenSkills(latest.bees, bee.slot))! } : {}),
       };
       latest.updatedAt = this.now();
       savePlaybook(this.o.playbookPath, latest);

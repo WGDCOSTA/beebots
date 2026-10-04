@@ -10,13 +10,13 @@ import { z } from "zod";
 import type { Db } from "../db.js";
 import { beeNode, brainNode, contextFor, ingestFills, skillNode } from "../graph/hive-mind.js";
 import { consolidate } from "../graph/memory.js";
-import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
+import { freeSpec, methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick, takenSkills } from "./specialization.js";
 import type { KnowledgeGraph } from "../graph/graph.js";
 import { log } from "../log.js";
 import { safeError } from "../redact.js";
 import type { CouncilBee } from "./council.js";
 import { brainInfo, type BrainId, type LlmClient } from "./llm.js";
-import { loadPlaybook, savePlaybook, type BeePlan } from "./playbook.js";
+import { loadPlaybook, NATURAL_FAMILY, savePlaybook, type BeePlan } from "./playbook.js";
 import type { Ranking } from "../lab/tournament.js";
 import type { BeeId } from "../config.js";
 import { watchInput, type CoinInfo, type WatchItem } from "./watchlist.js";
@@ -234,12 +234,20 @@ export class Coach {
     const watch = this.o.watchlist && plan.watchlist?.length
       ? watchInput({ style: bee.style, market: bee.market, ownerCoins: bee.coins, universe: this.o.universe?.() ?? [], ranking: this.o.ranking?.() ?? null, adoptedSkills: plan.skills.map((s) => s.id), record: hive.tradeRecord })
       : null;
+    // One skill, one bee: a method another bee already holds is not on offer, and a shared one is given up.
+    const taken = takenSkills(pb.bees, bee.slot);
+    if (this.o.specialization && plan.specialization && !freeSpec(plan.specialization, taken)) {
+      this.o.graph.learn(beeNode(bee.slot), `Specialisation: gave up ${plan.specialization.id}, another bunny already trades it; back to its own style until it picks a free method.`, [], { brain: bee.brain, source: "coach", kind: "diary" });
+      delete plan.specialization;
+    }
     const methods = this.o.specialization
       ? methodOptions({
           market: bee.market ?? "crypto",
           current: plan.specialization ? { kind: plan.specialization.kind, id: plan.specialization.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
           ranking: this.o.ranking?.() ?? null,
           extraStyles: this.o.scalp?.() ? ["scalp"] : [],
+          taken,
+          family: NATURAL_FAMILY[bee.style],
         })
       : null;
     const system = [

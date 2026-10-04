@@ -9,7 +9,7 @@ import { log } from "../log.js";
 import type { BeeId } from "../config.js";
 import { brainInfo, type BrainId, type LlmClient } from "./llm.js";
 import { NATURAL_FAMILY, type BeePlan, type Playbook, type PlaybookSkill } from "./playbook.js";
-import { methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick } from "./specialization.js";
+import { freeSpec, methodOptions, resolvePick, SPECIALIZATION_PROMPT, SPECIALIZATION_SCHEMA, SpecializationPick, takenSkills } from "./specialization.js";
 import { normaliseWatchlist, rulesWatchlist, watchInput, WATCHLIST_PROMPT, WATCHLIST_SCHEMA, WatchPicks, type CoinInfo } from "./watchlist.js";
 
 export interface CouncilBee extends BeeProfile {
@@ -162,12 +162,16 @@ export async function runCouncil(opts: {
     const hive = contextFor(graph, bee.slot);
     const pickCoins = opts.pickCoins ?? true;
     const pickMethod = opts.pickMethod ?? true;
-    const prevSpec = opts.previous?.bees[bee.slot]?.specialization;
+    // One skill, one bee: the playbook fills in as the council goes, so each bee sees what the others already hold.
+    const taken = takenSkills(playbook.bees, bee.slot);
+    const prevSpec = freeSpec(opts.previous?.bees[bee.slot]?.specialization, taken);
     const methods = methodOptions({
       market: bee.market ?? "crypto",
       current: prevSpec ? { kind: prevSpec.kind, id: prevSpec.id } : { kind: "own", id: (bee.market ?? "crypto") === "crypto" ? bee.style : "macro" },
       ranking,
       extraStyles: opts.scalp ? ["scalp"] : [],
+      taken,
+      family: NATURAL_FAMILY[bee.style],
     });
     const size = opts.watchSize?.(bee.slot) ?? 3;
     const watch = watchInput({
