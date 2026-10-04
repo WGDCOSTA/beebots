@@ -174,6 +174,8 @@ const EnvSchema = z.object({
   // reasoning.effort for GPT reasoning models: auto (each call's own: routine low, studies high), off, or a fixed
   // low | medium | high | xhigh | max for every call (gpt-6-astra accepts all five; more effort costs more tokens).
   OPENAI_REASONING_EFFORT: oneOf(OPENAI_EFFORTS, "auto"),
+  // The admin console's brain cost estimates (brains/usage.ts): "model=in:out" USD per 1M tokens, comma separated.
+  LLM_PRICES: str(""),
   ANTHROPIC_API_KEY: opt,
   CLAUDE_MODEL: str("claude-opus-5"),
   CLAUDE_EFFORT: oneOf(["low", "medium", "high"] as const, "medium"),

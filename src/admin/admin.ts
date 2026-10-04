@@ -120,6 +120,8 @@ export interface AdminOpts {
   /** The coin book (lab/coinBook.ts) and the lab's brain (brains/labBrain.ts): each coin's scalp rules, and the studies. */
   coinBook?: import("../lab/coinBook.js").CoinBook;
   labBrain?: import("../brains/labBrain.js").LabBrain;
+  /** The admin console's numbers for a range (24h, 7d, 30d, 90d): admin/metrics.ts plus live system state. */
+  metrics?: (range: string) => unknown;
   /** <LAB_DIR>, for imported skills and backtest history. */
   labDir?: string;
   /** Read-only OKX account check (okx/account.ts): keys, permissions, sub-account, USDC vs the wallet. */
@@ -1135,6 +1137,12 @@ export class Admin {
           throw err;
         }
         return send(res, 200, this.state());
+      }
+
+      case "/admin/metrics": {
+        if (!this.o.metrics) return send(res, 503, { error: "Metrics are not available here." });
+        const range = typeof body.range === "string" && ["24h", "7d", "30d", "90d"].includes(body.range) ? body.range : "24h";
+        return send(res, 200, this.o.metrics(range));
       }
 
       case "/admin/lab/book": {
