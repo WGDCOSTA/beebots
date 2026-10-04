@@ -29,6 +29,8 @@ export interface ScalpDeps {
   rules: () => GateRule[];
   costs: () => CostModel;
   cfg: Config["scalp"];
+  /** A scalp closed: its coin, the lab rule that traded it, net P&L after both fees, and the entry notional (lab/coinBook.ts recordLive). */
+  closed?: (r: { coin: string; ruleId: string; netUsd: number; notionalUsd: number }) => void;
 }
 
 export interface Mandate {
@@ -74,7 +76,7 @@ export interface ScalpApi {
   entry(ctx: BeeContext): ScalpPlan | { why: string };
   /** The plan the next fill belongs to (stopFor reads it). */
   begin(plan: ScalpPlan): void;
-  opened(fillPx: number, entryFeeUsd: number, now: number): void;
+  opened(fillPx: number, entryFeeUsd: number, now: number, notionalUsd?: number): void;
   /** Whether the open scalp's target exit should be a maker limit. */
   makerTarget(): boolean;
   /** A scalp closed: gross realised P&L and this fill's fee (the entry fee was taken at `opened`). */
@@ -94,7 +96,7 @@ export function scalpBrain(d: ScalpDeps): ScalpBrain {
   let pausedUntil = 0;
   let lossStreak = 0;
   let pending: ScalpPlan | null = null;
-  let active: { instId: string; targetBps: number; stopBps: number; holdMin: number; entryFeeUsd: number; makerTarget: boolean } | null = null;
+  let active: { instId: string; coin: string; ruleId: string; notionalUsd: number; targetBps: number; stopBps: number; holdMin: number; entryFeeUsd: number; makerTarget: boolean } | null = null;
   const lastSignalTs = new Map<string, number>();
   const sigCache = new Map<string, Int8Array>();
 
@@ -118,10 +120,10 @@ export function scalpBrain(d: ScalpDeps): ScalpBrain {
   const api: ScalpApi = {
     mandate: (now) => live(now),
     begin: (plan) => void (pending = plan),
-    opened(fillPx, entryFeeUsd, now) {
+    opened(fillPx, entryFeeUsd, now, notionalUsd = 0) {
       const p = pending;
       if (!p) return;
-      active = { instId: p.instId, targetBps: p.targetBps, stopBps: p.stopBps, holdMin: p.holdMin, entryFeeUsd, makerTarget: p.makerTarget };
+      active = { instId: p.instId, coin: p.coin, ruleId: p.ruleId, notionalUsd, targetBps: p.targetBps, stopBps: p.stopBps, holdMin: p.holdMin, entryFeeUsd, makerTarget: p.makerTarget };
       lastSignalTs.set(p.instId, p.signalTs);
       if (mandate) mandate.used++;
       void fillPx;
@@ -130,6 +132,13 @@ export function scalpBrain(d: ScalpDeps): ScalpBrain {
     makerTarget: () => active?.makerTarget ?? true,
     closed(realisedUsd, exitFeeUsd, now) {
       const net = realisedUsd - exitFeeUsd - (active?.entryFeeUsd ?? 0);
+      if (active && d.closed) {
+        try {
+          d.closed({ coin: active.coin, ruleId: active.ruleId, netUsd: net, notionalUsd: active.notionalUsd });
+        } catch {
+          // The book's bookkeeping must never break a trade's own.
+        }
+      }
       active = null;
       pending = null;
       lossStreak = net < 0 ? lossStreak + 1 : 0;

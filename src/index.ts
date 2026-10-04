@@ -25,7 +25,7 @@ import { ownFromEngineDb, PublicChat } from "./publicChat.js";
 import { okxChatMarket } from "./arena/chat.js";
 import { loadOverrides, loadSettings, saveSettings, STYLE_INFO } from "./settings.js";
 import { imageDir, imagePath, Setup } from "./setup.js";
-import { bunnyProfile } from "./bunnyProfile.js";
+import { blockers, bunnyProfile } from "./bunnyProfile.js";
 import { UpdateCheck } from "./update.js";
 import { Visitors } from "./visitors.js";
 import { Coach } from "./brains/coach.js";
@@ -59,6 +59,10 @@ import type { Skill } from "./lab/skills/types.js";
 import { ExperimentControl } from "./experiment-control.js";
 import { AutoLab, labProcessRunner } from "./autolab.js";
 import { recordScalpResearch } from "./lab/scalpResearch.js";
+import { GhostProofClient } from "./ghostproof/client.js";
+import { CoinBook } from "./lab/coinBook.js";
+import { LabBrain } from "./brains/labBrain.js";
+import { GhostProofRecorder } from "./ghostproof/recorder.js";
 
 // When a Jev call times out while its answer is still arriving, @typesafe-ai/sdk 0.6.0 can leave the aborted response's
 // body promise without a handler. The call itself has already failed and been handled (the bunny holds), so that late
@@ -272,7 +276,12 @@ async function main() {
   const mood = () => marketMood(cmcState());
   // The scalper's gate: the strategy lab's latest report on real 1-minute data (pnpm lab scalp), read fresh each time so a
   // new report opens or closes it without a restart.
-  const scalpLabGate = () => scalpGate(loadScalpReport(cfg.lab.dir), Date.now(), cfg.scalp.labMaxAgeDays);
+  // The coin book (lab/coinBook.ts) sits on top: what the owner blocked or the book retired or demoted is taken out, and
+  // rules validated in an earlier rotating batch stay in while their evidence is fresh.
+  const coinBook = new CoinBook(cfg.lab.dir);
+  coinBook.refresh();
+  const scalpLabGate = () => coinBook.gate(scalpGate(loadScalpReport(cfg.lab.dir), Date.now(), cfg.scalp.labMaxAgeDays), Date.now(), cfg.scalp.labMaxAgeDays);
+  let labBrain: LabBrain | null = null;
   const scalpOn = () => cfg.scalp.enabled && (!cfg.scalp.requireLab || scalpLabGate().open);
   survival = new SurvivalCouncil({
     graph,
@@ -325,6 +334,7 @@ async function main() {
     sessions: () => sessions.calendar,
     cmc: cmcState,
     scalpGate: scalpLabGate,
+    scalpClosed: (r) => coinBook.recordLive(r),
     ...(cfg.lab.watchlist ? { watchlist: (id: BeeId) => playbook.get()?.bees[id]?.watchlist ?? null } : {}),
     ...(cfg.lab.specialization ? { specialization: (id: BeeId) => playbook.get()?.bees[id]?.specialization ?? null, skillById: (sid: string) => skillMap.get(sid) } : {}),
     ...(signals
@@ -366,6 +376,8 @@ async function main() {
     if (!report) throw new Error("scalp lab completed without a readable report");
     const brain = cfg.brains.slots.bee4;
     recordScalpResearch({ ledger: db.experiments, graph, report, mode: cfg.mode, brainModel: clients[brain]?.model ?? brain });
+    // Each coin's rules move on what the lab measured (validated, failing, retired); applied once per report.
+    coinBook.applyReport(report);
   };
   // Backfill the latest report from installations that predate the ledger bridge. The report fingerprint makes this
   // harmless on every later restart and gives Degen its existing NO EDGE lesson immediately.
@@ -384,7 +396,8 @@ async function main() {
     instruments: autoLabInstruments,
     scalpCoins: scalpUniverse,
     scalpBatchSize: cfg.scalp.universeSize,
-    scalpPinned: () => scalpLabGate().rules.map((rule) => swapInstrument(rule.coin)),
+    // Coins with passing rules, then coins where the book has rules waiting for a test, then the lab brain's focus.
+    scalpPinned: () => [...new Set([...scalpLabGate().rules.map((rule) => rule.coin), ...coinBook.priorityCoins().slice(0, 10), ...(labBrain?.focus() ?? [])])].map(swapInstrument),
     scalpEnabled: cfg.scalp.enabled,
     run: labProcessRunner(cfg.settingsPath),
     onScalpReport: recordLatestScalpReport,
@@ -419,6 +432,18 @@ async function main() {
     },
   });
   farmer.start();
+  // GhostProof (docs/GHOSTPROOF.md): every decision, order and fill as an AgentProof event with hashes only, kept in a
+  // local outbox and sent to the gateway when GHOSTPROOF_TOKEN is set. GHOSTPROOF=1 turns it on.
+  const ghostToken = process.env.GHOSTPROOF_TOKEN?.trim() || null;
+  const ghostproof = process.env.GHOSTPROOF === "1"
+    ? new GhostProofRecorder({
+        db: db.raw,
+        ctx: { actorId: process.env.GHOSTPROOF_ACTOR?.trim() || `beebots-${cfg.mode}`, mode: cfg.mode, model: cfg.jev.model },
+        client: ghostToken ? new GhostProofClient({ baseUrl: process.env.GHOSTPROOF_URL?.trim() || "https://gateway.efps.live/api", token: () => ghostToken }) : null,
+      })
+    : null;
+  ghostproof?.start();
+  if (ghostproof) log.info("ghostproof: recording decisions", { sending: !!ghostToken });
   // His portrait: painted once with the OpenAI image key, in the bunnies' style, and kept in the data volume. Until then
   // (or without a key) the page shows the drawn one (dashboard/public/farmer.svg). FARMER_PAINT=0 never paints.
   const farmerImage = join(imageDir(cfg.settingsPath), "farmer.jpg");
@@ -543,6 +568,43 @@ async function main() {
     researchTimer = setTimeout(() => void researchCycle(), firstResearchDelayMin * 60_000);
   }
   const notes = new NoteBook(join(cfg.lab.dir, "notes.json"), graph);
+  // The lab's brain (brains/labBrain.ts): GPT by default (LAB_BRAIN picks another; LAB_BRAIN=0 turns it off). Every
+  // LAB_BRAIN_INTERVAL_MIN it studies everything the brains know and evolves each coin's rules in the coin book; one
+  // bunny per round proposes rules for its own coins with its own brain.
+  const labBrainId = process.env.LAB_BRAIN?.trim() || "openai";
+  const labLlm = () => (labBrainId === "0" ? null : (clients[labBrainId] ?? clients.openai ?? clients.claude ?? Object.values(clients)[0] ?? null));
+  labBrain = new LabBrain({
+    book: coinBook,
+    graph,
+    brain: labLlm,
+    bunnyBrain: (b) => clients[b.brain] ?? null,
+    bees: () => councilBees,
+    report: () => loadScalpReport(cfg.lab.dir),
+    ranking: readRanking,
+    notes,
+    market: mood,
+    universe: () => coinInfos(feed.view(), 40, cmcState()) as unknown as Array<Record<string, unknown> & { coin: string }>,
+    livePnl: () =>
+      (db.raw.prepare("SELECT bee, inst_id AS inst, COUNT(*) AS n, SUM(realised_usd - fee_usd) AS net FROM fills WHERE ts >= ? GROUP BY bee, inst_id ORDER BY ABS(SUM(realised_usd - fee_usd)) DESC LIMIT 60").all(Date.now() - 14 * 86_400_000) as Array<{ bee: string; inst: string; n: number; net: number }>)
+        .map((r) => ({ bee: r.bee, coin: r.inst.split("-")[0]!, trades: Number(r.n), netUsd: Math.round(Number(r.net) * 100) / 100 })),
+    blockers: (slot) => blockers(db.raw, slot, Date.now(), 24),
+    // The Rat writes lessons (his brief); the Owl and the Pig post messages.
+    crew: () =>
+      CREW_IDS.flatMap((id) => [
+        ...graph.lessons(`run:${id}`, 2).map((l) => ({ who: CREW[id].name, text: l.text, at: l.ts })),
+        ...graph.out(`run:${id}`, "said", 3).flatMap((e) => {
+          const n = graph.node(e.dst);
+          return n ? [{ who: CREW[id].name, text: String(n.props.text ?? n.label), at: n.updatedAt }] : [];
+        }),
+      ]).sort((a, b) => b.at - a.at),
+    requestLab: () => autoLab.request("scalp"),
+    path: join(cfg.lab.dir, "lab-brain.json"),
+    intervalMin: Math.max(0, Number(process.env.LAB_BRAIN_INTERVAL_MIN ?? 360) || 0),
+    maxCallsPerDay: Math.max(0, Number(process.env.LAB_BRAIN_MAX_CALLS_DAY ?? 8) || 0),
+    startDelayMin: Math.max(1, Number(process.env.LAB_BRAIN_START_DELAY_MIN ?? 10) || 10),
+  });
+  labBrain.start();
+  if (labBrain.enabled) log.info("lab brain: on", { brain: labBrainId, intervalMin: Number(process.env.LAB_BRAIN_INTERVAL_MIN ?? 360) });
   // Outside MCP servers the owner connected: read from the Setup file on every call, so changes apply at once.
   const mcp = new McpGateway({ servers: () => loadSettings(SETTINGS_PATH)?.mcpServers ?? [], path: join(cfg.lab.dir, "mcp.json") });
   const research = new Researcher({
@@ -613,6 +675,8 @@ async function main() {
   const currentBrainCreds = (candidate = withOverrides(process.env, loadOverrides(SETTINGS_PATH))) =>
     loadConfig({ ...candidate, TYPESAFE_API_KEY: candidate.TYPESAFE_API_KEY || "model-catalog-validation" }, loadSettings(SETTINGS_PATH)).brains.creds;
   const admin = new Admin({
+    coinBook,
+    ...(labBrain ? { labBrain } : {}),
     settingsPath: SETTINGS_PATH,
     env: process.env,
     gate,
@@ -733,6 +797,8 @@ async function main() {
           path: (from, to) => memoryPath(graph, from, to),
           explain: (node) => memoryExplain(graph, node),
           report: () => hiveReport(graph),
+          // The coin book and the lab brain's studies, for everyone: names and numbers, never the rules' specs.
+          book: () => ({ book: coinBook.view(false), brain: labBrain?.status() ?? null }),
         },
         bunny: (slot, days) => bunnyProfile({ db, graph, playbook: () => playbook.get(), slots: () => cfg.beeIds }, slot, days),
       },
@@ -754,6 +820,8 @@ async function main() {
     saveSessions();
     coach.stop();
     farmer.stop();
+    ghostproof?.stop();
+    labBrain?.stop();
     for (const id of CREW_IDS) crew[id].stop();
     cmc?.stop();
     graph.close();

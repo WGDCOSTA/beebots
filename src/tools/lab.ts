@@ -29,7 +29,8 @@ import { BEES, labEnv, MAX_BEES, slotId, withOverrides } from "../config.js";
 import { KnowledgeGraph, nodeId } from "../graph/graph.js";
 import { contextFor, ingestRanking } from "../graph/hive-mind.js";
 import { consolidate, explain as memoryExplain, hiveReport, path as memoryPath, query as memoryQuery } from "../graph/memory.js";
-import { buildScalpReport, loadScalpReport, saveScalpReport, scalpGate, scalpReportMarkdown, type CostModel } from "../lab/scalp.js";
+import { buildScalpReport, coinOfSet, loadScalpReport, saveScalpReport, scalpGate, scalpReportMarkdown, type CostModel } from "../lab/scalp.js";
+import { CoinBook } from "../lab/coinBook.js";
 import { alpacaCacheName, ALPACA_DEFAULT_SYMBOLS, fetchAlpaca } from "../lab/alpaca.js";
 import { BAR_MS, ccxtExchange, datasetSource, fetchHistory, fetchHistoryCcxt, parseCsv, parseFreqtradeJson, readCache, syntheticCandles, writeCache, type Bar, type Dataset } from "../lab/history.js";
 import { skillRegistry, type Skill } from "../lab/skills/index.js";
@@ -196,9 +197,11 @@ function cmdScalp(f: Record<string, string>) {
   };
   console.log(`scalper lab: ${datasets.map((d) => `${d.id}:${d.candles.length}`).join(", ")}; maker ${costs.makerFee * 1e4} bp, taker ${costs.takerFee * 1e4} bp`);
   const t0 = Date.now();
+  // Each coin is tested with the rules its book entry plans (built-ins plus written candidates, lab/coinBook.ts).
+  const book = new CoinBook(env.dir);
   const report = buildScalpReport(
     datasets.map((d) => ({ id: d.id, candles: d.candles, synthetic: d.source === "synthetic" })),
-    undefined,
+    (id) => book.testPlan(coinOfSet(id)),
     { costs, folds: num("folds", 4) },
   );
   console.log(`done in ${((Date.now() - t0) / 1000).toFixed(1)} s\n`);

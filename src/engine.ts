@@ -71,6 +71,8 @@ export interface EngineDeps {
   cmc?: () => CmcState | null;
   /** The strategy lab's verdict on the scalper (lab/scalp.ts scalpGate): what it may trade, or closed. */
   scalpGate?: () => ScalpGate;
+  /** A live scalp closed (lab/coinBook.ts recordLive): how the lab's rule really did on that coin. */
+  scalpClosed?: (r: { coin: string; ruleId: string; netUsd: number; notionalUsd: number }) => void;
   /** Survival and rewards (evolution.ts): size factor, limit boosts, the survival line in Jev's state. */
   evolution?: Evolution;
   /**
@@ -601,7 +603,7 @@ export class Engine {
     const session = this.sessionState(id, brain.snapshotCoins(ctx).map((i) => i.split("-")[0]!), now);
     const mkt = this.d.cfg.cmc.inJev && this.d.cfg.slots[id].squad === "crypto" ? jevMarketLine(this.d.cmc?.() ?? null) : null;
     const extra = { ...(lab ? { lab } : {}), ...(survival ? { survival } : {}), ...(session ? { session } : {}), ...(mkt ? { mkt } : {}) };
-    const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null);
+    const snap = buildSnapshot(brain, ctx, Object.keys(extra).length ? extra : null, cfg.jev.tech !== false);
     if (brain.id === "boozy" && bee.top1.coin) snap.state.top1 = `${bee.top1.coin} x${bee.top1.streak}`;
     const active = this.spec[id];
     const method: PolicyDescriptor["method"] = active
@@ -1150,7 +1152,7 @@ export class Engine {
     // The scalper keeps its own books: a mandate's trade count, and the loss streak behind its circuit breaker.
     const sb = this.brain(id);
     if (isScalpBrain(sb) && !leg) {
-      if (!reduceOnly) sb.scalp.opened(res.avgPx, res.feeUsd, now);
+      if (!reduceOnly) sb.scalp.opened(res.avgPx, res.feeUsd, now, notionalUsd);
       else if (this.bees[id].position === null) sb.scalp.closed(realised, res.feeUsd, now);
     }
     const dir = reduceOnly ? "CLOSE" : side === "buy" ? "LONG" : "SHORT";
@@ -1375,7 +1377,7 @@ export class Engine {
     return { ...lab, makerFee: this.d.cfg.scalp.makerFee, takerFee: this.d.cfg.risk.takerFeeRate };
   }
   private scalpDeps(): ScalpDeps {
-    return { rules: () => this.scalpRules(), costs: () => this.scalpCosts(), cfg: this.d.cfg.scalp };
+    return { rules: () => this.scalpRules(), costs: () => this.scalpCosts(), cfg: this.d.cfg.scalp, ...(this.d.scalpClosed ? { closed: this.d.scalpClosed } : {}) };
   }
 
   /**

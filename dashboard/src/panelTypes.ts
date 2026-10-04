@@ -1,4 +1,5 @@
 // Shapes of the strategy-lab and admin endpoints (engine: /lab/*, /hive-mind, POST /admin/*). Display only.
+import type { BookView, LabBrainStatus } from "./CoinBookPanel";
 
 export interface RankedSkill {
   rank: number;
@@ -419,7 +420,7 @@ export interface AdminState {
   styles: Array<{ id: string; label: string; blurb: string }>;
   groups: Array<{ id: string; title: string; help: string }>;
   fields: AdminField[];
-  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState; notes: NotesState; mcp: McpView };
+  lab: { job: JobStatus | null; graph: Record<string, number>; playbook: Playbook | null; check: CheckState; workshop: WorkshopState; notes: NotesState; mcp: McpView; book?: (BookView & { brain: LabBrainStatus | null }) | null };
   coachAvailable: boolean;
 }
 

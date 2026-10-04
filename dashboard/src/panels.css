@@ -2389,3 +2389,26 @@
 .ops-actions .pbtn + .pbtn {
   margin-left: 6px;
 }
+
+/* Coin rulebook (CoinBookPanel.tsx) */
+.coinbook .study {
+  border-left: 2px solid var(--line);
+  padding: 2px 0 2px 10px;
+  margin: 8px 0 12px;
+}
+.coinbook .study p,
+.coinbook .study ul {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.coinbook textarea.pinput {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  margin: 6px 0;
+}
+.coinbook tr.detail td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

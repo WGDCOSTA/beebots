@@ -77,6 +77,25 @@ export class AutoLab {
     };
   }
 
+  /**
+   * Asks for a job sooner than its interval (the lab brain queued new rules). At most once per `minGapHours`, and the
+   * usual attempt backoff still applies, so requests can never hammer the exchange or the CPU. Returns whether it took.
+   */
+  request(job: AutoLabJob, minGapHours = 6, at = this.now()): boolean {
+    const key = `autolab_${job}_requested_at`;
+    const last = this.read(key) ?? 0;
+    if (at - last < minGapHours * HOUR) return false;
+    if (job === "scalp" && !(this.o.scalpEnabled && this.o.scalpIntervalHours > 0)) return false;
+    this.o.db.setMeta(key, String(at));
+    // A success older than any interval makes the job due; the attempt backoff (due()) is untouched.
+    this.o.db.setMeta(meta(job, "success"), "1");
+    if (this.timer && !this.running) {
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => void this.tick(), 60_000);
+    }
+    return true;
+  }
+
   /** Public for a deterministic unit test and an optional future Admin "run now" action. */
   async runDue(at = this.now()): Promise<AutoLabJob[]> {
     if (this.running) return [];

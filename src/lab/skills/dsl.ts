@@ -26,13 +26,13 @@ import * as S from "../series.js";
 import { FAMILIES, positions, type Params, type Skill } from "./types.js";
 
 const Operand = z.union([z.string().min(1).max(60), z.number()]);
-const Cond: z.ZodType<CondT> = z.lazy(() =>
+export const Cond: z.ZodType<CondT> = z.lazy(() =>
   z.union([
     z.object({ left: Operand, op: z.enum(["<", "<=", ">", ">=", "crosses_above", "crosses_below"]), right: Operand }).strict(),
     z.object({ any: z.array(Cond).min(1).max(8) }).strict(),
   ]),
 );
-type CondT = { left: string | number; op: "<" | "<=" | ">" | ">=" | "crosses_above" | "crosses_below"; right: string | number } | { any: CondT[] };
+export type CondT = { left: string | number; op: "<" | "<=" | ">" | ">=" | "crosses_above" | "crosses_below"; right: string | number } | { any: CondT[] };
 const Side = z.object({ entry: z.array(Cond).min(1).max(8), exit: z.array(Cond).min(1).max(8) }).strict();
 
 export const SkillSpecSchema = z
@@ -120,7 +120,7 @@ export function compileExpr(src: string | number, params: Record<string, unknown
 
 type Test = (i: number) => boolean;
 
-function compileConds(conds: CondT[], params: Record<string, unknown>): (c: Candle[], p: Params) => Test {
+export function compileConds(conds: CondT[], params: Record<string, unknown>): (c: Candle[], p: Params) => Test {
   const parts = conds.map((cond) => {
     if ("any" in cond) {
       const alts = cond.any.map((a) => compileConds([a], params));

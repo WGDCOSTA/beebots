@@ -5,6 +5,7 @@
 import { AdminArenaTab } from "./AdminArena";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
+import { CoinBookPanel } from "./CoinBookPanel";
 import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type ExperimentView, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
@@ -2044,6 +2045,8 @@ function LabTab({ s, call, refresh, password }: { s: AdminState; call: (path: st
       <SkillWorkshop s={s} password={password} refresh={refresh} />
 
       <ResearchNotes s={s} call={call} refresh={refresh} />
+
+      <CoinBookPanel title="Coin rulebook & lab brain" book={s.lab.book ?? null} brain={s.lab.book?.brain ?? null} act={call} />
 
       <Connectors s={s} call={call} />
 
