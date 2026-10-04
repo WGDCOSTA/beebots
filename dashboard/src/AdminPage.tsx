@@ -6,21 +6,39 @@ import { AdminArenaTab } from "./AdminArena";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { PageNav } from "./LabPage";
 import { CoinBookPanel } from "./CoinBookPanel";
+import { MonitorPane, type MonitorId } from "./AdminConsole";
 import { adminCall, ApiError, BRAIN_LABEL, when, type AdminField, type AdminState, type BrainsView, type McpGrant, type McpServerView, type DraftFull, type DraftSummary, type ExchangeCheck, type ExchangeKind, type ExperimentView, type KeyName } from "./panelTypes";
 import { WatchChips } from "./WatchChips";
 import { TIER_INFO } from "./types";
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "keys", label: "API keys" },
-  { id: "bees", label: "Bunnies" },
-  { id: "settings", label: "Settings" },
-  { id: "experiments", label: "Experiments" },
-  { id: "lab", label: "Lab, skills & evolution" },
-  { id: "arena", label: "Arena" },
-  { id: "security", label: "Security" },
+// The console's navigation: live monitoring first, then everything the owner configures.
+const NAV = [
+  {
+    group: "Monitor",
+    items: [
+      { id: "dashboard", label: "Dashboard", icon: "◧" },
+      { id: "trading", label: "Trading", icon: "↗" },
+      { id: "consumption", label: "Consumption", icon: "◔" },
+      { id: "decisions", label: "Decisions & AI", icon: "✦" },
+      { id: "system", label: "System", icon: "⚙" },
+    ],
+  },
+  {
+    group: "Configure",
+    items: [
+      { id: "overview", label: "Setup status", icon: "☰" },
+      { id: "bees", label: "Bunnies", icon: "🐇" },
+      { id: "keys", label: "API keys", icon: "⚿" },
+      { id: "settings", label: "Settings", icon: "⚒" },
+      { id: "lab", label: "Lab, skills & evolution", icon: "⚗" },
+      { id: "experiments", label: "Experiments", icon: "⚖" },
+      { id: "arena", label: "Arena", icon: "⚔" },
+      { id: "security", label: "Security", icon: "🔒" },
+    ],
+  },
 ] as const;
-type Tab = (typeof TABS)[number]["id"];
+type Tab = (typeof NAV)[number]["items"][number]["id"];
+const MONITOR: readonly string[] = NAV[0].items.map((i) => i.id);
 
 const KEY_INFO: Record<KeyName, { label: string; help: string; placeholder: string; removable: boolean }> = {
   jev: { label: "Jev (TypeSafe AI)", help: "Makes every trading decision. console.typesafe.ai/keys", placeholder: "Jev API key", removable: false },
@@ -2178,7 +2196,7 @@ export function AdminPage() {
   const [s, setS] = useState<AdminState | null>(null);
   // Custom brains carry their own labels; this keeps every BRAIN_LABEL lookup on the page in step.
   for (const c of s?.brains?.custom ?? []) BRAIN_LABEL[c.id] = c.label;
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -2236,9 +2254,12 @@ export function AdminPage() {
   return (
     <div className="page">
       <PageNav current="admin" />
-      <div className="page-inner">
+      <div className="page-inner cx-wide">
         <div className="admin-head">
-          <h1>Admin</h1>
+          <div className="cx-title">
+            <h1>Admin console</h1>
+            {s && <span className={`cx-mode mode-${s.mode}`}>{s.mode === "live" ? "● LIVE" : s.mode === "demo" ? "OKX demo" : "Paper"}</span>}
+          </div>
           {s && (
             <button className="pbtn ghost small" onClick={() => signOut()}>
               Lock
@@ -2263,22 +2284,33 @@ export function AdminPage() {
               </div>
             )}
             {s.mode === "live" && <div className="banner danger">● This engine trades REAL MONEY. Change settings with care.</div>}
-            <div className="tabs" role="tablist">
-              {TABS.map((t) => (
-                <button key={t.id} role="tab" aria-selected={tab === t.id} className={`tab ${tab === t.id ? "on" : ""}`} onClick={() => setTab(t.id)}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div className={busy ? "busy" : ""}>
-              {tab === "overview" && <Overview s={s} setTab={setTab} />}
-              {tab === "keys" && <KeysTab s={s} call={safeCall} password={pw} />}
-              {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} password={pw} />}
-              {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
-              {tab === "experiments" && <ExperimentsTab s={s} call={safeCall} />}
-              {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}
-              {tab === "arena" && <AdminArenaTab password={pw} />}
-              {tab === "security" && <SecurityTab call={safeCall} />}
+            <div className="cx-shell">
+              <nav className="cx-nav" aria-label="Admin sections">
+                {NAV.map((g) => (
+                  <div key={g.group} className="cx-nav-group">
+                    <div className="eyebrow cx-nav-title">{g.group}</div>
+                    {g.items.map((t) => (
+                      <button key={t.id} className={`cx-nav-item ${tab === t.id ? "on" : ""}`} aria-current={tab === t.id ? "page" : undefined} onClick={() => setTab(t.id)}>
+                        <span className="cx-nav-icon" aria-hidden>
+                          {t.icon}
+                        </span>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </nav>
+              <div className={`cx-main ${busy ? "busy" : ""}`}>
+                {MONITOR.includes(tab) && <MonitorPane key={tab} view={tab as MonitorId} password={pw} />}
+                {tab === "overview" && <Overview s={s} setTab={setTab} />}
+                {tab === "keys" && <KeysTab s={s} call={safeCall} password={pw} />}
+                {tab === "bees" && <BeesTab key={JSON.stringify(s.bees)} s={s} call={safeCall} password={pw} />}
+                {tab === "settings" && <SettingsTab s={s} call={safeCall} only={["brains", "risk", "breakout", "trend", "momentum", "engine"]} />}
+                {tab === "experiments" && <ExperimentsTab s={s} call={safeCall} />}
+                {tab === "lab" && <LabTab s={s} call={safeCall} refresh={refresh} password={pw} />}
+                {tab === "arena" && <AdminArenaTab password={pw} />}
+                {tab === "security" && <SecurityTab call={safeCall} />}
+              </div>
             </div>
             <div className="row-actions end">
               <button className="pbtn ghost" onClick={restart}>

@@ -61,6 +61,8 @@ import { AutoLab, labProcessRunner } from "./autolab.js";
 import { recordScalpResearch } from "./lab/scalpResearch.js";
 import { GhostProofClient } from "./ghostproof/client.js";
 import { CoinBook } from "./lab/coinBook.js";
+import { metered, parsePrices, UsageMeter } from "./brains/usage.js";
+import { adminMetrics, RANGES, type RangeId } from "./admin/metrics.js";
 import { LabBrain } from "./brains/labBrain.js";
 import { GhostProofRecorder } from "./ghostproof/recorder.js";
 
@@ -203,6 +205,11 @@ async function main() {
   // The warren memory (knowledge graph) and the configured LLM brains. Brains never place orders: they curate skills and lessons.
   const graph = new KnowledgeGraph(cfg.lab.graphPath);
   const clients = makeClients(cfg.brains.creds);
+  // Every brain call is metered (brains/usage.ts): tokens, latency and errors per brain, model and purpose, for the
+  // admin console's consumption view.
+  const usage = new UsageMeter(db.raw);
+  usage.prune();
+  for (const k of Object.keys(clients)) clients[k] = metered(clients[k]!, usage);
   const councilBees: CouncilBee[] = cfg.beeIds.map((id) => {
     const s = cfg.slots[id];
     const brain = cfg.brains.slots[id];
@@ -576,7 +583,7 @@ async function main() {
   const labEffort = (OPENAI_EFFORTS as readonly string[]).includes(process.env.LAB_BRAIN_EFFORT?.trim() ?? "") ? (process.env.LAB_BRAIN_EFFORT!.trim() as OpenAiEffort) : undefined;
   const labModel = process.env.LAB_BRAIN_MODEL?.trim();
   const openaiCreds = cfg.brains.creds.openai;
-  const labOwnGpt = labBrainId === "openai" && openaiCreds && (labModel || labEffort) ? new OpenAiBrain(openaiCreds.apiKey, labModel || openaiCreds.model, undefined, undefined, labEffort ?? openaiCreds.effort) : null;
+  const labOwnGpt = labBrainId === "openai" && openaiCreds && (labModel || labEffort) ? metered(new OpenAiBrain(openaiCreds.apiKey, labModel || openaiCreds.model, undefined, undefined, labEffort ?? openaiCreds.effort), usage) : null;
   const labLlm = () => (labBrainId === "0" ? null : (labOwnGpt ?? clients[labBrainId] ?? clients.openai ?? clients.claude ?? Object.values(clients)[0] ?? null));
   labBrain = new LabBrain({
     book: coinBook,
@@ -682,6 +689,34 @@ async function main() {
   const admin = new Admin({
     coinBook,
     ...(labBrain ? { labBrain } : {}),
+    // The admin console (admin/metrics.ts): the engine's own records per time bucket, plus live system state.
+    metrics: (range: string) => {
+      const r = (range in RANGES ? range : "24h") as RangeId;
+      const settingsNow = withOverrides(process.env, loadOverrides(SETTINGS_PATH));
+      return {
+        ...adminMetrics({
+          db: db.raw,
+          bees: cfg.beeIds.map((id) => ({ slot: id, name: cfg.slots[id].name, style: cfg.slots[id].style, startEquityUsd: startEquityOf(cfg, id) ?? null })),
+          range: r,
+          now: Date.now(),
+          prices: parsePrices(settingsNow.LLM_PRICES),
+          jevDailyCapUsd: cfg.jev.dailyUsdCap,
+        }),
+        live: {
+          health: engine!.health(),
+          autolab: autoLab.state(),
+          labBrain: labBrain ? { ...labBrain.status(), studies: labBrain.status().studies.slice(0, 1) } : null,
+          coinBook: coinBook.view(false).totals,
+          ghostproof: ghostproof?.status() ?? null,
+          scalpGate: (() => {
+            const g = scalpLabGate();
+            return { open: g.open, reason: g.reason, rules: g.rules.length };
+          })(),
+          brains: Object.fromEntries(Object.entries(clients).map(([k, c]) => [k, c?.model ?? null])),
+          prices: settingsNow.LLM_PRICES ?? "",
+        },
+      };
+    },
     settingsPath: SETTINGS_PATH,
     env: process.env,
     gate,
