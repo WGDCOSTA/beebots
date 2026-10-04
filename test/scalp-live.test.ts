@@ -180,7 +180,7 @@ describe("the scalp brain: the entry", () => {
 
 // ---------- the engine ----------
 
-function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: true, reason: "lab edge on BTC", rules: [RULE], costs: DEFAULT_COSTS, ageDays: 1 }, degenLegacySkill = false) {
+function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: true, reason: "lab edge on BTC", rules: [RULE], costs: DEFAULT_COSTS, ageDays: 1 }, degenLegacySkill = false, jevChoice?: string) {
   const cfg = scalpCfg(env);
   let px = 100;
   let clock = NOW;
@@ -200,7 +200,7 @@ function rig(env: Record<string, string> = {}, gate: ScalpGate | null = { open: 
     async systemOne(req: unknown) {
       const labels = Object.keys((req as { questions: { action: { criteria: Record<string, string> } } }).questions.action.criteria);
       jevCalls++;
-      const choice = labels.find((l) => l === "SCALP_ON_BTC_BOTH") ?? labels[0]!;
+      const choice = (jevChoice && labels.includes(jevChoice) ? jevChoice : undefined) ?? labels.find((l) => l === "SCALP_ON_BTC_BOTH") ?? labels[0]!;
       return { model: "fake", usage: { input_tokens: 1, output_tokens: 0 }, answers: { action: { type: "choice", choice, confidence: 1, probabilities: { [choice]: 1 } }, conviction: { type: "score", score: 1, confidence: 1, legend: {}, probabilities: {} } } } as never;
     },
   };
@@ -308,17 +308,20 @@ describe("the engine: Jev sets a mandate, code scalps inside it", () => {
 
   it("keeps Degen out of generic hourly specialisations and paper-trades its quick fallback while the scalp lab searches", async () => {
     const closed = { open: false, reason: "the lab found no edge after costs", rules: [], costs: DEFAULT_COSTS, ageDays: 1 } satisfies ScalpGate;
-    const r = rig({}, closed, true);
+    const r = rig({}, closed, true, "WAIT");
     await r.engine.start();
     r.engine.stop();
     for (const id of ["bee1", "bee2", "bee3"] as const) r.engine.bees[id].cap = "trade_cap";
+    r.engine.bees.bee4.flatSince = NOW - 31 * 60_000;
     await r.engine.tick();
     const brain = (r.engine as unknown as { brain(id: string): { id: string } }).brain("bee4");
     const degen = r.engine.snapshot().bees.find((bee) => bee.bee === "bee4")!;
     expect(brain.id).toBe("degen");
     expect(degen.method).toMatchObject({ kind: "own", id: "degen" });
     expect(degen.scalp).toBeNull();
-    expect(r.engine.bees.bee4.position).toBeTruthy();
+    const recorded = r.db.raw.prepare("SELECT choice, action_json AS action, vetoed_by AS vetoed, forced_by AS forced, status FROM decisions WHERE bee = 'bee4' ORDER BY id DESC LIMIT 1").get() as { choice: string; action: string; vetoed: string | null; forced: string | null; status: string };
+    expect(r.engine.bees.bee4.position, JSON.stringify(recorded)).toBeTruthy();
+    expect(recorded.forced).toBe("max_flat");
     expect(JSON.parse(r.db.getMeta("spec_bee4") ?? "null")).toBeNull();
   });
 

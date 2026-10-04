@@ -33,7 +33,9 @@ export const degen: BeeBrain = {
     "Prefer tight spreads, live volume and a clean one-hour impulse; a tiny move that cannot clear fees is not an edge. " +
     "Bank modest gains, cut a failed impulse quickly, and WAIT rather than trade for entertainment. Your lab evidence, hard stops, fee budget, daily loss stop and death line always outrank aggression.",
   convictionLabels: ["noise", "tradeable", "sharp", "surgical"],
-  neverForce: true,
+  // In paper mode, a clean candidate becomes a small exploration probe after MAX_FLAT_MINUTES. That prevents the
+  // learner from collecting no forward evidence because Jev keeps choosing WAIT. Demo/live never use this escape.
+  neverForce: false,
   requiresStrictSetup: true,
   openGate: { minConviction: 1, minProb: () => 0.55 },
   profitLock: [
@@ -80,7 +82,11 @@ export const degen: BeeBrain = {
     if ((ctx.uplR ?? 0) >= 0.7) m.BANK = { desc: "capture the short gain", intent: { kind: "close", reason: "short_profit" } };
     return m;
   },
-  forcedEntry: () => null,
+  forcedEntry(ctx) {
+    if (ctx.cfg.mode !== "dry") return null;
+    const c = candidates(ctx)[0];
+    return c ? { kind: "open", instId: c.s.instId, side: c.side, sizeFrac: 0.2, setup: "strict" } : null;
+  },
   sizeFrac(intent) {
     return intent.sizeFrac;
   },
