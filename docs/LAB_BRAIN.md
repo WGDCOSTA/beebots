@@ -95,6 +95,8 @@ A grid holds at most 512 combinations; the lab samples down to 96.
 | Variable | Default | |
 |---|---|---|
 | `LAB_BRAIN` | `openai` | Any brain id with a key; `0` turns the study off (the book still evolves from lab and live results). |
+| `LAB_BRAIN_MODEL` | the ChatGPT model | Its own GPT for the study (e.g. `gpt-6-astra`), apart from the bunnies'. |
+| `LAB_BRAIN_EFFORT` | `OPENAI_REASONING_EFFORT` | Its own `reasoning.effort`: low, medium, high, xhigh or max. |
 | `LAB_BRAIN_INTERVAL_MIN` | 360 | Minutes between studies. |
 | `LAB_BRAIN_MAX_CALLS_DAY` | 8 | Brain calls per day, studies and bunny proposals together; counted durably. |
 | `LAB_BRAIN_START_DELAY_MIN` | 10 | The first study after a start, if none is due sooner. |

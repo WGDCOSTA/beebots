@@ -33,7 +33,7 @@ import { Farmer, farmerStats } from "./brains/farmer.js";
 import { CREW, CREW_IDS, CrewMember, type CrewId } from "./brains/crew.js";
 import { owlData, pigData, ratData, type CrewSnapshot } from "./brains/crewData.js";
 import type { CouncilBee } from "./brains/council.js";
-import { ANTHROPIC_PROFILE, checkBrainModel, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, listBrainModels, makeClients, ZAI_BASE_URL, ZAI_DEFAULT_MODEL } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, checkBrainModel, checkClaudeKey, checkCompatKey, checkKimiKey, hasAnthropicLogin, listBrainModels, makeClients, OPENAI_EFFORTS, OpenAiBrain, ZAI_BASE_URL, ZAI_DEFAULT_MODEL, type OpenAiEffort } from "./brains/llm.js";
 import { Admin } from "./admin/admin.js";
 import { LabJobs } from "./admin/jobs.js";
 import { Workspace } from "./lab/workspace.js";
@@ -572,7 +572,12 @@ async function main() {
   // LAB_BRAIN_INTERVAL_MIN it studies everything the brains know and evolves each coin's rules in the coin book; one
   // bunny per round proposes rules for its own coins with its own brain.
   const labBrainId = process.env.LAB_BRAIN?.trim() || "openai";
-  const labLlm = () => (labBrainId === "0" ? null : (clients[labBrainId] ?? clients.openai ?? clients.claude ?? Object.values(clients)[0] ?? null));
+  // LAB_BRAIN_MODEL / LAB_BRAIN_EFFORT give the study its own GPT (e.g. gpt-6-astra at max) apart from the bunnies'.
+  const labEffort = (OPENAI_EFFORTS as readonly string[]).includes(process.env.LAB_BRAIN_EFFORT?.trim() ?? "") ? (process.env.LAB_BRAIN_EFFORT!.trim() as OpenAiEffort) : undefined;
+  const labModel = process.env.LAB_BRAIN_MODEL?.trim();
+  const openaiCreds = cfg.brains.creds.openai;
+  const labOwnGpt = labBrainId === "openai" && openaiCreds && (labModel || labEffort) ? new OpenAiBrain(openaiCreds.apiKey, labModel || openaiCreds.model, undefined, undefined, labEffort ?? openaiCreds.effort) : null;
+  const labLlm = () => (labBrainId === "0" ? null : (labOwnGpt ?? clients[labBrainId] ?? clients.openai ?? clients.claude ?? Object.values(clients)[0] ?? null));
   labBrain = new LabBrain({
     book: coinBook,
     graph,

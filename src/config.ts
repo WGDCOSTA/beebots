@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ANTHROPIC_PROFILE, BRAINS, BRAIN_ID_RE, hasAnthropicLogin, ZAI_BASE_URL, ZAI_DEFAULT_MODEL, type BrainCreds, type BrainId } from "./brains/llm.js";
+import { ANTHROPIC_PROFILE, BRAINS, BRAIN_ID_RE, hasAnthropicLogin, OPENAI_EFFORTS, ZAI_BASE_URL, ZAI_DEFAULT_MODEL, type BrainCreds, type BrainId, type OpenAiEffort } from "./brains/llm.js";
 import { parseHug, parseLock, type HugRung, type LockRung } from "./bees/ratchet.js";
 import { squadOf, STYLE_INFO, STYLES, type MarketId, type Settings, type StyleId } from "./settings.js";
 
@@ -170,7 +170,10 @@ const EnvSchema = z.object({
   APP_VERSION: str("dev"),
   // ---- LLM brains and the strategy lab (brains/*, lab/*, graph/*) ----
   // ChatGPT reuses OPENAI_API_KEY. Claude: ANTHROPIC_API_KEY. Kimi (Moonshot AI): KIMI_API_KEY (or MOONSHOT_API_KEY).
-  OPENAI_BRAIN_MODEL: str("gpt-5.4"),
+  OPENAI_BRAIN_MODEL: str("gpt-6-astra"),
+  // reasoning.effort for GPT reasoning models: auto (each call's own: routine low, studies high), off, or a fixed
+  // low | medium | high | xhigh | max for every call (gpt-6-astra accepts all five; more effort costs more tokens).
+  OPENAI_REASONING_EFFORT: oneOf(OPENAI_EFFORTS, "auto"),
   ANTHROPIC_API_KEY: opt,
   CLAUDE_MODEL: str("claude-opus-5"),
   CLAUDE_EFFORT: oneOf(["low", "medium", "high"] as const, "medium"),
@@ -649,7 +652,7 @@ function brainSlots(ids: BeeId[], main: Record<(typeof BEES)[number], BrainId>, 
 
 /** Brain keys from the environment first, then the Setup file. A brain without a key is left out. */
 export function brainCreds(
-  e: { OPENAI_API_KEY?: string; OPENAI_BRAIN_MODEL: string; ANTHROPIC_API_KEY?: string; CLAUDE_MODEL: string; CLAUDE_EFFORT: "low" | "medium" | "high"; KIMI_API_KEY?: string; MOONSHOT_API_KEY?: string; KIMI_MODEL: string; KIMI_BASE_URL: string; ZAI_API_KEY?: string; ZAI_MODEL?: string; ZAI_BASE_URL?: string },
+  e: { OPENAI_API_KEY?: string; OPENAI_BRAIN_MODEL: string; OPENAI_REASONING_EFFORT?: OpenAiEffort; ANTHROPIC_API_KEY?: string; CLAUDE_MODEL: string; CLAUDE_EFFORT: "low" | "medium" | "high"; KIMI_API_KEY?: string; MOONSHOT_API_KEY?: string; KIMI_MODEL: string; KIMI_BASE_URL: string; ZAI_API_KEY?: string; ZAI_MODEL?: string; ZAI_BASE_URL?: string },
   settings: Settings | null,
 ): BrainCreds {
   const openai = e.OPENAI_API_KEY ?? settings?.openaiKey;
@@ -659,7 +662,7 @@ export function brainCreds(
   const kimi = e.KIMI_API_KEY ?? e.MOONSHOT_API_KEY ?? settings?.kimiKey;
   const zai = e.ZAI_API_KEY ?? settings?.zaiKey;
   return {
-    ...(openai ? { openai: { apiKey: openai, model: e.OPENAI_BRAIN_MODEL } } : {}),
+    ...(openai ? { openai: { apiKey: openai, model: e.OPENAI_BRAIN_MODEL, effort: e.OPENAI_REASONING_EFFORT ?? "auto" } } : {}),
     ...(claude ? { claude: { ...claude, model: e.CLAUDE_MODEL, effort: e.CLAUDE_EFFORT } } : {}),
     ...(kimi ? { kimi: { apiKey: kimi, model: e.KIMI_MODEL, baseUrl: e.KIMI_BASE_URL.replace(/\/+$/, "") } } : {}),
     ...(zai ? { zai: { apiKey: zai, model: e.ZAI_MODEL ?? ZAI_DEFAULT_MODEL, baseUrl: (e.ZAI_BASE_URL ?? ZAI_BASE_URL).replace(/\/+$/, "") } } : {}),
