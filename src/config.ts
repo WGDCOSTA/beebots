@@ -97,6 +97,9 @@ const EnvSchema = z.object({
   JEV_USD_PER_MTOK: num(0.042),
   /** Send Jev the shared technical block (RSI, MACD, Bollinger, ATR, volume, funding, OI) on top of each style's own columns. */
   JEV_TECH: bool(true),
+  // Minutes a bunny keeps Jev's last "hold/wait" while nothing it could choose has changed (same options, same
+  // position, same 1R bucket). Stops, trails and caps run in code every tick regardless. 0 = ask Jev every tick.
+  JEV_REASK_MIN: num(0),
   TICK_MS: num(10_000),
   DATA_REFRESH_MS: num(60_000),
 
@@ -351,7 +354,7 @@ export interface Config {
   hive: { url: string };
   update: { enabled: boolean; repo: string; version: string };
   settingsPath: string;
-  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number; tech: boolean };
+  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number; tech: boolean; reaskMin: number };
   tickMs: number;
   dataRefreshMs: number;
   okx: { site: "eea"; apiBase: string; cliTimeoutMs: number };
@@ -558,6 +561,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       shadowDailyUsdCap: Math.max(0, e.JEV_SHADOW_DAILY_USD_CAP),
       usdPerMTok: e.JEV_USD_PER_MTOK,
       tech: e.JEV_TECH,
+      reaskMin: Math.max(0, e.JEV_REASK_MIN),
     },
     tickMs: Math.max(1000, e.TICK_MS),
     dataRefreshMs: Math.max(15_000, e.DATA_REFRESH_MS),

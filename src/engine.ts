@@ -169,6 +169,8 @@ export class Engine {
   private recon: { ok: boolean | null; detail: string; ts: number } = { ok: null, detail: "not run yet", ts: 0 };
   private liveStartedAt: number | null = null;
   private lastPulseAt: Partial<Record<BeeId, number>> = {};
+  /** Jev's last hold/wait answer per bunny and what the choice looked like then (JEV_REASK_MIN). */
+  private lastHoldAsk: Partial<Record<BeeId, { fp: string; label: string; at: number }>> = {};
   private lastChipUsd: Partial<Record<BeeId, number>> = {};
   startedAt: number;
   private experimentStartedAt = 0;
@@ -582,6 +584,16 @@ export class Engine {
     }
   }
 
+  /**
+   * What a decision hinges on, coarsely: the options on the menu, what is held, and the open P&L in whole R. While it
+   * stays the same, Jev's last hold/wait still stands; a new option, a fill or a 1R move asks again.
+   */
+  private choiceFingerprint(id: BeeId, labels: string[], uplR: number | null): string {
+    const b = this.bees[id];
+    const held = allPositions(b).map((p) => `${p.side}:${p.instId}`);
+    return JSON.stringify([[...labels].sort(), held, uplR === null ? null : Math.floor(uplR)]);
+  }
+
   /** Track the peak and tighten the stop to the ratchet's candidate, if any. */
   private applyRatchet(p: Position, mid: number): void {
     const rc = this.d.cfg.ratchet;
@@ -597,7 +609,8 @@ export class Engine {
     const bee = this.bees[id];
     // Benched (trade cap or fee budget): the bee rides whatever it holds. Jev is not asked, because nothing it
     // chose could be acted on; only code can close the position (stop, time stop, loss stop) until 00:00 UTC.
-    if (bee.cap === "trade_cap" || bee.cap === "fee_budget") return this.decideBenched(id, now);
+    // Sent home (daily loss stop) or retired: the risk layer forces flat whatever Jev says, so it is not asked either.
+    if (bee.cap === "trade_cap" || bee.cap === "fee_budget" || bee.cap === "loss_stop" || bee.cap === "retired") return this.decideBenched(id, now);
     if (this.d.paused?.()) return this.decideBenched(id, now, true);
     const ctx = this.ctx(id, now);
     const menu = brain.menu(ctx);
@@ -652,11 +665,18 @@ export class Engine {
     const required = labels.length === 1 && menu[labels[0]!]!.intent.kind === "hold";
     const instructionSuffix = [lab && this.d.labNote ? this.d.labNote : null, survival ? SURVIVAL_NOTE : null, session ? SESSION_NOTE : null, mkt ? CMC_NOTE : null, Object.keys(legOptions).length ? MULTI_ORDER_NOTE : null].filter(Boolean).join(" ");
     const strategy = [brain.strategy, instructionSuffix].filter(Boolean).join(" ");
+    // Nothing Jev could choose has changed since it last said hold/wait, a short while ago: keep that answer.
+    const fp = this.choiceFingerprint(id, labels, ctx.uplR);
+    const asked = this.lastHoldAsk[id];
+    const reuse = cfg.jev.reaskMin > 0 && asked?.fp === fp && now - asked.at < cfg.jev.reaskMin * 60_000 && menu[asked.label]?.intent.kind === "hold";
     if (jev.capTripped) jevStatus = "daily_cap";
     else if (labels.length === 0) jevStatus = "no_options";
     else if (required) r = requiredAnswer(labels[0]!, cfg.jev.model);
+    else if (reuse) r = requiredAnswer(asked.label, cfg.jev.model);
     else {
       r = await jev.decide({ strategy, state: snap.state, menu, convictionLabels: brain.convictionLabels });
+      if (r.ok && menu[r.choice]?.intent.kind === "hold") this.lastHoldAsk[id] = { fp, label: r.choice, at: now };
+      else delete this.lastHoldAsk[id];
       if (!r.ok) jevStatus = r.reason === "daily_cap" ? "daily_cap" : "unreachable";
       // Only a real Jev answer: the scalper turns SCALP_ON_* into a mandate, and any answer restarts its ask timer.
       else brain.onChoice?.(r.choice, ctx);
