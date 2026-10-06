@@ -147,6 +147,8 @@ export interface BeeBrain {
   rebalance?: (ctx: BeeContext) => Extract<Intent, { kind: "add" }> | null;
   /** This bee waits for its setup instead of being forced in when flat (drama rule 2 does not apply). */
   neverForce?: boolean;
+  /** Its sizeFrac is the whole sizing rule (volatility-sized): RISK_PER_TRADE_PCT does not resize its opens. */
+  ownSizing?: boolean;
   /** Status line while flat with nothing on the menu (e.g. "waiting for a breakout"). */
   idleStatus?: (ctx: BeeContext) => string;
   /** Called with the label Jev chose (before the risk layer acts): the scalper turns a SCALP_ON_* label into a mandate. */

@@ -4,7 +4,7 @@ import { brainInfo } from "./brains/llm.js";
 import { macro } from "./bees/macro.js";
 import { skillBrain } from "./bees/skill.js";
 import type { Skill } from "./lab/skills/types.js";
-import { STYLES } from "./settings.js";
+import { FIXED_METHOD_STYLES, STYLES } from "./settings.js";
 import { dynamicRatchetStop } from "./bees/ratchet.js";
 import { allPositions, maxNotionalUsd, minutesSince, positionNotional, profitLockStop, uplUsd } from "./bees/common.js";
 import { coinOf, type Action, type BeeBrain, type BeeContext, type BeeState, type Menu, type Position, type Side } from "./bees/types.js";
@@ -226,7 +226,7 @@ export class Engine {
         const saved = JSON.parse(db.getMeta(`spec_${id}`) ?? "null") as ActiveSpec | null;
         // Degen's learning happens inside the native 1-minute coin book. A generic hourly specialisation changes its
         // identity and can leave it waiting on one slow signal forever, so discard legacy choices for this slot.
-        if (saved && cfg.slots[id].style !== "degen") this.spec[id] = saved;
+        if (saved && !FIXED_METHOD_STYLES.includes(cfg.slots[id].style)) this.spec[id] = saved;
         else if (saved) db.setMeta(`spec_${id}`, "null");
       } catch {
         /* no specialisation remembered */
@@ -1419,7 +1419,7 @@ export class Engine {
    */
   private adoptSpecialization(id: BeeId, now: number): void {
     if (!this.d.specialization || !this.d.cfg.lab.specialization) return;
-    if (this.d.cfg.slots[id].style === "degen") {
+    if (FIXED_METHOD_STYLES.includes(this.d.cfg.slots[id].style)) {
       if (this.spec[id]) {
         delete this.spec[id];
         delete this.brains[id];

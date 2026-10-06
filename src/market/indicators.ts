@@ -1,7 +1,7 @@
 // Hand-rolled indicators on X-Perp candles (the kit's indicator tools are only documented for SWAP/SPOT ids).
 // All inputs are oldest-first. Each function returns null when there is not enough data.
 
-import type { Candle, TrendStats } from "./types.js";
+import type { Candle, DailyStats, TrendStats } from "./types.js";
 
 export function ema(values: number[], period: number): number[] {
   if (values.length === 0) return [];
@@ -167,4 +167,29 @@ export function trendStats(c4h: Candle[]): TrendStats {
     rv90Pct: realisedVolPct(closes, 90, 6 * 365),
     tenDayExtreme,
   };
+}
+
+/**
+ * Daily trend numbers from UTC daily candles (oldest first). Only confirmed bars count, so today's open candle never
+ * moves the signal. 90-day momentum is the rule the research kept (docs/RESEARCH-2026-10.md).
+ */
+export function dailyStats(daily: Candle[], now: number): DailyStats | null {
+  const d = daily.filter((x) => x.confirmed);
+  if (!d.length) return null;
+  const n = d.length;
+  const close = d[n - 1]!.c;
+  const mom90Pct = n >= 91 ? (close / d[n - 91]!.c - 1) * 100 : null;
+  let atrPct: number | null = null;
+  if (n >= 15) {
+    let tr = 0;
+    for (let i = n - 14; i < n; i++) tr += Math.max(d[i]!.h - d[i]!.l, Math.abs(d[i]!.h - d[i - 1]!.c), Math.abs(d[i]!.l - d[i - 1]!.c));
+    atrPct = (tr / 14 / close) * 100;
+  }
+  let volPct: number | null = null;
+  if (n >= 31) {
+    const r = d.slice(n - 31).map((x, i, a) => (i ? x.c / a[i - 1]!.c - 1 : 0)).slice(1);
+    const m = r.reduce((a, b) => a + b, 0) / r.length;
+    volPct = Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1)) * 100;
+  }
+  return { bars: n, close, mom90Pct, atrPct, volPct, at: now };
 }

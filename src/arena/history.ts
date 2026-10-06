@@ -187,8 +187,8 @@ export class HistoricalApi implements PublicApi {
     return out;
   }
 
-  async candles(instId: string, bar: "1m" | "15m" | "1H" | "4H", limit: number): Promise<Candle[]> {
-    if (bar === "1m") return []; // not stored: the scalper does not train
+  async candles(instId: string, bar: "1m" | "15m" | "1H" | "4H" | "1Dutc", limit: number): Promise<Candle[]> {
+    if (bar === "1m" || bar === "1Dutc") return []; // not stored: the scalper and the daily trend do not train
     return this.store.closedBy(instId, bar, this.clock(), limit);
   }
 

@@ -144,7 +144,7 @@ const MIN_STOP_DIST = 0.0025;
 function riskSized(intent: Extract<Intent, { instId: string; side: Side }>, input: RiskInput, frac: number): number | null {
   const { ctx, brain, sizeMult } = input;
   const pct = ctx.cfg.risk.riskPerTradePct;
-  if (!(pct > 0)) return null;
+  if (!(pct > 0) || brain.ownSizing) return null;
   const px = ctx.view.stats.get(intent.instId)?.mid;
   if (!px || !(px > 0)) return null;
   const stop = brain.stopFor(intent.instId, intent.side, px, ctx);

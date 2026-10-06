@@ -175,6 +175,7 @@ async function main() {
       min24hVolUsd: cfg.universe.min24hVolUsd,
       spreadGateBps: Math.max(...STYLES.map((s) => cfg.bees[s].spreadGateBps)),
       trendCoins: [...BREEZY_COINS],
+      dailyCoins: cfg.dozy.coins,
       // Stocks and commodities get gated (and their stats kept) only when a macro bunny runs.
       macro: cfg.beeIds.some((id) => cfg.slots[id].squad === "macro") ? { min24hVolUsd: cfg.macro.min24hVolUsd, spreadGateBps: cfg.macro.spreadGateBps } : null,
     },

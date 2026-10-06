@@ -8,7 +8,9 @@ import { BRAIN_ID_RE, checkBaseUrl, RESERVED_BRAIN_IDS } from "./brains/llm.js";
 
 /** The three styles an owner-designed Setup bunny may start with. Degen is the fixed fourth main agent. */
 export const DESIGN_STYLES = ["bizzy", "breezy", "boozy"] as const;
-export const STYLES = [...DESIGN_STYLES, "degen"] as const;
+export const STYLES = [...DESIGN_STYLES, "degen", "dozy"] as const;
+/** Systematic styles keep their own method: the research council never swaps it for another style or a lab skill. */
+export const FIXED_METHOD_STYLES: readonly string[] = ["degen", "dozy"];
 /** A trading style is one of the built-in strategies, named after the bunny that first traded it. */
 export type StyleId = (typeof STYLES)[number];
 
@@ -52,6 +54,12 @@ export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: s
     blurb: "Fast long and short trades across the liquid crypto universe. Trades only evidence-backed one-minute setups after costs.",
     name: "Degen",
     tagline: "the autonomous scalper",
+  },
+  dozy: {
+    label: "Daily trend",
+    blurb: "Owns large coins only while they are above their price of 90 days ago, sized by volatility. Decides on daily bars; stays out of bear markets.",
+    name: "Dozy",
+    tagline: "the patient one",
   },
 };
 

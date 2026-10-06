@@ -1,8 +1,8 @@
 import { log } from "../log.js";
 import type { PublicApi } from "../okx/public.js";
 import { safeError } from "../redact.js";
-import { atr, bollinger, macd, pctChange, rsi, trendStats, zScore } from "./indicators.js";
-import type { Candle, CoinStats, Instrument, MarketView, Ticker } from "./types.js";
+import { atr, bollinger, dailyStats, macd, pctChange, rsi, trendStats, zScore } from "./indicators.js";
+import type { Candle, CoinStats, DailyStats, Instrument, MarketView, Ticker } from "./types.js";
 import { gateUniverse } from "./universe.js";
 
 export interface NewsReading {
@@ -23,7 +23,12 @@ export interface FeedOpts {
   trendCoins: string[];
   /** Macro bees exist: gate stocks and commodities too (their own volume and spread gates) and keep their stats. */
   macro?: { min24hVolUsd: number; spreadGateBps: number } | null;
+  /** Coins that also get daily trend numbers (dozy's), refreshed every DAILY_REFRESH_MS. */
+  dailyCoins?: string[];
 }
+
+/** Daily candles change once a day; a few refreshes a day catch the new close without spending requests. */
+const DAILY_REFRESH_MS = 3 * 3_600_000;
 
 const HOUR = 3_600_000;
 
@@ -76,6 +81,7 @@ export class MarketFeed {
   private macro: string[] = [];
   private oiHistory = new Map<string, Array<[number, number]>>();
   private fundingHist = new Map<string, { at: number; rates: number[] }>();
+  private daily = new Map<string, DailyStats>();
   private instrumentsAt = 0;
   private newsAvailable = false;
   lastRefreshAt = 0;
@@ -180,7 +186,8 @@ export class MarketFeed {
     }
 
     const trendIds = this.opts.trendCoins.map((c) => this.instIdForCoin(c)).filter((x): x is string => !!x);
-    const want = [...new Set([...this.gated, ...this.macro, ...trendIds, ...this.heldInstIds()])].filter((id) => this.instruments.has(id) && tickers.has(id));
+    const dailyIds = (this.opts.dailyCoins ?? []).map((c) => this.instIdForCoin(c)).filter((x): x is string => !!x);
+    const want = [...new Set([...this.gated, ...this.macro, ...trendIds, ...dailyIds, ...this.heldInstIds()])].filter((id) => this.instruments.has(id) && tickers.has(id));
 
     const next = new Map<string, CoinStats>();
     const nextC1h = new Map<string, Candle[]>();
@@ -189,12 +196,13 @@ export class MarketFeed {
         const inst = this.instruments.get(id)!;
         try {
           const isTrend = trendIds.includes(id);
-          const [c15, c1h, c4h, funding, fHist] = await Promise.all([
+          const [c15, c1h, c4h, funding, fHist, daily] = await Promise.all([
             this.api.candles(id, "15m", 100),
             this.api.candles(id, "1H", 200),
             isTrend ? this.api.candles(id, "4H", 300) : Promise.resolve(null),
             this.api.funding(id).catch(() => null),
             this.fundingHistory(id, now),
+            dailyIds.includes(id) ? this.dailyOf(id, now) : Promise.resolve(null),
           ]);
           const s = computeStats(inst, tickers.get(id)!, c15, c1h);
           if (funding && Number.isFinite(funding.rate)) {
@@ -204,6 +212,7 @@ export class MarketFeed {
           s.oiUsd = oi.get(id) ?? null;
           s.oiChg1hPct = this.oiChange1h(id, now);
           if (c4h) s.trend = trendStats(c4h);
+          if (daily) s.daily = daily;
           s.breakout = breakoutLevels(c1h, now, BREAKOUT_K);
           next.set(id, s);
           nextC1h.set(id, c1h);
@@ -234,6 +243,20 @@ export class MarketFeed {
     this.stats = next;
     this.c1h = nextC1h;
     this.lastRefreshAt = now;
+  }
+
+  /** Daily trend numbers of a coin, cached for DAILY_REFRESH_MS; the last good value survives a failed fetch. */
+  private async dailyOf(id: string, now: number): Promise<DailyStats | null> {
+    const c = this.daily.get(id);
+    if (c && now - c.at < DAILY_REFRESH_MS) return c;
+    try {
+      const d = dailyStats(await this.api.candles(id, "1Dutc", 120), now);
+      if (d) this.daily.set(id, d);
+      return d ?? c ?? null;
+    } catch (err) {
+      log.warn("daily candles failed", { instId: id, err: safeError(err) });
+      return c ?? null;
+    }
   }
 
   private oiChange1h(id: string, now: number): number | null {

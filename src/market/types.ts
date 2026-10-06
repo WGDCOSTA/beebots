@@ -73,6 +73,23 @@ export interface CoinStats {
   trend?: TrendStats;
   /** Larry Williams volatility breakout (bizzy): today's UTC open + k x yesterday's range, from 1h bars. */
   breakout?: { dayOpen: number; prevRange: number; trigger: number } | null;
+  /** Daily trend numbers (dozy's coins only), from confirmed UTC daily candles refreshed a few times a day. */
+  daily?: DailyStats;
+}
+
+export interface DailyStats {
+  /** Confirmed daily candles behind these numbers. */
+  bars: number;
+  /** Last daily close. */
+  close: number;
+  /** % change of the last daily close over 90 days; null with fewer than 91 daily bars. */
+  mom90Pct: number | null;
+  /** ATR(14) of the daily bars, % of the close. */
+  atrPct: number | null;
+  /** Standard deviation of the last 30 daily returns, %. */
+  volPct: number | null;
+  /** When it was computed (ms). */
+  at: number;
 }
 
 export interface TrendStats {

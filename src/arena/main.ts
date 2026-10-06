@@ -71,7 +71,7 @@ if (env.ARENA_RUN === "1") {
   if (!env.ARENA_OPENAI_KEY) log.warn("arena: ARENA_RUN=1 needs ARENA_OPENAI_KEY (the platform's decision model). Bots are only stored.");
   else {
     const cfg = loadConfig({ TYPESAFE_API_KEY: "arena-platform", DRY_RUN: "true" });
-    const real = new MarketFeed(createPublicApi(cfg.okx.apiBase), { min24hVolUsd: cfg.universe.min24hVolUsd, spreadGateBps: Math.max(...STYLES.map((s) => cfg.bees[s].spreadGateBps)), trendCoins: [...BREEZY_COINS], macro: null }, null, () => runner?.held() ?? []);
+    const real = new MarketFeed(createPublicApi(cfg.okx.apiBase), { min24hVolUsd: cfg.universe.min24hVolUsd, spreadGateBps: Math.max(...STYLES.map((s) => cfg.bees[s].spreadGateBps)), trendCoins: [...BREEZY_COINS], dailyCoins: cfg.dozy.coins, macro: null }, null, () => runner?.held() ?? []);
     const llm = new OpenAiBrain(env.ARENA_OPENAI_KEY, env.ARENA_LLM_MODEL ?? env.ARENA_TEXT_MODEL ?? "gpt-5.4-nano", 30_000);
     runner = new ArenaRunner({
       store,

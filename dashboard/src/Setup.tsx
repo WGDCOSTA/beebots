@@ -59,7 +59,7 @@ const squash = (s: string) =>
     .replace(/bee$/, "")
     .replace(/(.)\1+/g, "$1")
     .replace(/(ie|ey|i)$/, "y");
-const RESERVED = new Set(["bizzy", "breezy", "boozy", "degen"].map(squash));
+const RESERVED = new Set(["bizzy", "breezy", "boozy", "degen", "dozy"].map(squash));
 const nameProblem = (name: string): string | null =>
   !/^[\p{L}\p{N} .'_-]{1,24}$/u.test(name.trim())
     ? "Names are 1-24 letters, numbers, spaces and . ' _ -"

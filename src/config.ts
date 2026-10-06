@@ -149,6 +149,10 @@ const EnvSchema = z.object({
   ...perStyle("BIZZY", { trades: 1, fee: 1.0, spread: 5, cooldown: 5, stopAtr: 1.5, maxFlat: 20 }),
   ...perStyle("BOOZY", { trades: 3, fee: 3.0, spread: 15, cooldown: 2, stopAtr: 2, maxFlat: 0 }),
   ...perStyle("DEGEN", { trades: 60, fee: 3.0, spread: 1.5, cooldown: 0, stopAtr: 1.5, maxFlat: 1440 }),
+  ...perStyle("DOZY", { trades: 6, fee: 2.0, spread: 10, cooldown: 60, stopAtr: 3, maxFlat: 60 }),
+  // Dozy (daily trend): the large coins it may own, and the daily volatility its whole book aims at (%).
+  DOZY_COINS: str("BTC,ETH,SOL,XRP,DOGE,ADA,AVAX,LINK,DOT,LTC,BCH,BNB,TRX,UNI,NEAR,ALGO,XLM,FIL,ATOM,ETC,AAVE,HBAR"),
+  DOZY_VOL_TARGET_PCT: num(2),
   // The macro squad's style (bees/macro.ts): few trades, wider stops, a spread gate that suits stocks and gold.
   ...perStyle("MACRO", { trades: 4, fee: 2.0, spread: 15, cooldown: 30, stopAtr: 2.5, maxFlat: 0 }),
   ...perSlot("BEE1"),
@@ -409,6 +413,8 @@ export interface Config {
   };
   /** Knobs per trading style. */
   bees: Record<StyleId, BeeKnobs>;
+  /** Dozy (daily trend): its coins and its book's daily volatility target (%). */
+  dozy: { coins: string[]; volTargetPct: number };
   breezy: { minOpenProb: number; minSizeUsd: number };
   bizzy: { sizeFraction: number; universeSize: number; timeStopMinutes: number };
   boozy: { candidates: number };
@@ -615,7 +621,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       flattenMin: Math.max(0, e.SESSION_FLATTEN_MIN),
       lateSessionSize: Math.max(0, Math.min(1, e.MACRO_LATE_SESSION_SIZE)),
     },
-    bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy"), degen: knobs("degen") },
+    bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy"), degen: knobs("degen"), dozy: knobs("dozy") },
+    dozy: {
+      coins: e.DOZY_COINS.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean),
+      volTargetPct: Math.max(0.1, Math.min(10, e.DOZY_VOL_TARGET_PCT)),
+    },
     breezy: { minOpenProb: e.BREEZY_MIN_OPEN_PROB, minSizeUsd: e.BREEZY_MIN_SIZE_USD },
     bizzy: { sizeFraction: e.BIZZY_SIZE_FRACTION, universeSize: e.BIZZY_UNIVERSE_SIZE, timeStopMinutes: e.BIZZY_TIME_STOP_MINUTES },
     boozy: { candidates: e.BOOZY_CANDIDATES },
