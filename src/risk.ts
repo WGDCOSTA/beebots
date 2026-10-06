@@ -3,7 +3,7 @@
 
 import { exposureUsd, maxNotionalUsd, minutesSince, positionNotional } from "./bees/common.js";
 import { startEquityOf } from "./config.js";
-import type { Action, BeeBrain, BeeContext, CapReason, Intent } from "./bees/types.js";
+import type { Action, BeeBrain, BeeContext, CapReason, Intent, Side } from "./bees/types.js";
 
 export type { Action } from "./bees/types.js";
 
@@ -126,11 +126,32 @@ function checkOpen(intent: Intent, input: RiskInput, conviction: number): OpenCh
   const frac = Math.max(0, Math.min(1, brain.sizeFrac(asOpen, conviction, ctx)));
   // A switch replaces the main position, so its notional frees up; an open or a leg adds to what is held.
   const others = intent.kind === "switch" ? exposureUsd(ctx, bee.position?.instId) : exposureUsd(ctx);
-  const n = Math.min(frac * perSlot, max - others);
+  const n = Math.min(riskSized(intent, input, frac) ?? frac * perSlot, max - others);
   if (n <= 0) return { ok: false, why: "exposure_cap" };
   const minUsd = inst.minSz * inst.ctVal * s.mid;
   if (n < minUsd) return { ok: false, why: `below_min_size ${s.coin} $${n.toFixed(2)} < $${minUsd.toFixed(2)}` };
   return { ok: true, notionalUsd: n };
+}
+
+/** A stop closer than this (share of price) does not size the position: noise would stop it out at once. */
+const MIN_STOP_DIST = 0.0025;
+
+/**
+ * Risk-based size: the notional whose loss at the brain's stop is RISK_PER_TRADE_PCT of equity, scaled by the brain's
+ * size choice (conviction) and the survival/ramp multiplier. Null when the setting is off or the stop is unknown or too
+ * close; the caller then falls back to a share of the cap. The leverage cap still bounds the result.
+ */
+function riskSized(intent: Extract<Intent, { instId: string; side: Side }>, input: RiskInput, frac: number): number | null {
+  const { ctx, brain, sizeMult } = input;
+  const pct = ctx.cfg.risk.riskPerTradePct;
+  if (!(pct > 0)) return null;
+  const px = ctx.view.stats.get(intent.instId)?.mid;
+  if (!px || !(px > 0)) return null;
+  const stop = brain.stopFor(intent.instId, intent.side, px, ctx);
+  if (stop === null || !Number.isFinite(stop)) return null;
+  const dist = intent.side === "long" ? (px - stop) / px : (stop - px) / px;
+  if (!(dist >= MIN_STOP_DIST)) return null;
+  return (ctx.bee.equityUsd * (pct / 100) * frac * sizeMult) / dist;
 }
 
 function toAction(intent: Intent, notionalUsd?: number): Action {

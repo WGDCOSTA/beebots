@@ -108,6 +108,11 @@ const EnvSchema = z.object({
   MAX_LEVERAGE: num(2),
   MARGIN_MODE: z.literal("isolated").optional().default("isolated"),
   MAX_NOTIONAL_USD_PER_BEE: num(700),
+  // Paper only (MODE=dry): a leverage cap above MAX_LEVERAGE, up to 5x. 0 = off. Ignored in demo and live.
+  PAPER_MAX_LEVERAGE: num(0),
+  // Risk-based sizing: each open risks this % of the bunny's equity if its stop is hit (the stop distance sets the
+  // size), scaled by the brain's own size choice and capped by the leverage cap. 0 = the older share-of-the-cap sizing.
+  RISK_PER_TRADE_PCT: num(0),
   DAILY_LOSS_STOP_PCT: num(8),
   BEE_RETIRE_AT_PCT: num(40),
   MAX_FLAT_MINUTES: num(30),
@@ -354,6 +359,8 @@ export interface Config {
     startEquityUsd: number;
     maxLeverage: number;
     maxNotionalUsdPerBee: number;
+    /** % of equity one open risks to its stop; 0 = share-of-the-cap sizing. */
+    riskPerTradePct: number;
     dailyLossStopPct: number;
     retireAtPct: number;
     maxFlatMinutes: number;
@@ -452,6 +459,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     if (!knownBrains.has(e[k])) throw new ConfigError(`${k}: not a known brain (${[...knownBrains].join(", ")}). Add a custom brain in the admin panel first.`);
   }
   if (e.MAX_LEVERAGE > 2 || e.MAX_LEVERAGE <= 0) throw new ConfigError("MAX_LEVERAGE must be in (0, 2]. Hard rule 3.");
+  if (e.PAPER_MAX_LEVERAGE < 0 || e.PAPER_MAX_LEVERAGE > 5) throw new ConfigError("PAPER_MAX_LEVERAGE must be between 0 (off) and 5.");
+  if (e.RISK_PER_TRADE_PCT < 0 || e.RISK_PER_TRADE_PCT > 5) throw new ConfigError("RISK_PER_TRADE_PCT must be between 0 (off) and 5.");
+  // Hard rule 3 holds for real money: the paper cap applies only to simulated fills.
+  const maxLeverage = mode === "dry" && e.PAPER_MAX_LEVERAGE > 0 ? e.PAPER_MAX_LEVERAGE : e.MAX_LEVERAGE;
   if (e.MAX_FLAT_MINUTES < 0) throw new ConfigError("MAX_FLAT_MINUTES must be >= 0");
   // Survival lines must sit above the death line, in order. An install with a high BEE_RETIRE_AT_PCT keeps running:
   // the lines move up just above it rather than refusing to start.
@@ -553,8 +564,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
     okx: { site: e.OKX_SITE, apiBase: e.OKX_API_BASE.replace(/\/+$/, ""), cliTimeoutMs: e.OKX_CLI_TIMEOUT_MS },
     risk: {
       startEquityUsd: e.BEE_START_EQUITY_USD,
-      maxLeverage: e.MAX_LEVERAGE,
+      maxLeverage,
       maxNotionalUsdPerBee: e.MAX_NOTIONAL_USD_PER_BEE,
+      riskPerTradePct: e.RISK_PER_TRADE_PCT,
       dailyLossStopPct: e.DAILY_LOSS_STOP_PCT,
       retireAtPct: e.BEE_RETIRE_AT_PCT,
       maxFlatMinutes: e.MAX_FLAT_MINUTES,
