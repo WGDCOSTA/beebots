@@ -18,7 +18,7 @@ while true; do
     if sqlite3 "$db" ".backup '$out.part'" && mv -f "$out.part" "$out"; then
       ls -1t "$DIR/$n"-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].sqlite 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do rm -f "$old"; done
     else
-      rm -f "$out.part"
+      rm -f "$out.part" "$out.part-journal"
       echo "backup of $db failed; keeping the older copies" >&2
     fi
   done

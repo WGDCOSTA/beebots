@@ -55,10 +55,15 @@ export function switchTarget(ctx: BeeContext, top: Candidate[]): Candidate | nul
   return coin === leader.s.coin && streak >= 2 ? leader : null;
 }
 
-/** Profit lock rungs: +2.5% keeps half the best move, +5% keeps 65% (26 Sep: ENA ran +5.6% and round-tripped to a loss). */
+/**
+ * Profit lock rungs: +1% keeps 30% of the best move, +2% half, +4% 70%. Was +2.5%/+5% (26 Sep); on 12 Oct the 32 real
+ * trades of the three momentum bunnies had peaked at +1.55% on average and exited at -0.56%, and 7 of the 19 that had
+ * been up 1% closed at a loss. Replayed on their 1-minute paths, these rungs halved the loss (-22% to -10%).
+ */
 export const BOOZY_PROFIT_LOCK = [
-  { atPct: 2.5, keep: 0.5 },
-  { atPct: 5, keep: 0.65 },
+  { atPct: 1, keep: 0.3 },
+  { atPct: 2, keep: 0.5 },
+  { atPct: 4, keep: 0.7 },
 ] as const;
 
 export const boozy: BeeBrain = {

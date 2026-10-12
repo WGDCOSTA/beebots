@@ -94,13 +94,13 @@ describe("engine: the ratchet on a live position", () => {
     const h = await harness(106, { RATCHET: "false" });
     h.open();
     await h.engine.tick();
-    expect(h.engine.bees.bee3.position!.stopPx!).toBeCloseTo(103.9, 6);
+    expect(h.engine.bees.bee3.position!.stopPx!).toBeCloseTo(104.2, 6);
   });
 
   it("a style left out of RATCHET_STYLES is untouched", async () => {
     const h = await harness(106, { RATCHET_STYLES: "bizzy" });
     h.open();
     await h.engine.tick();
-    expect(h.engine.bees.bee3.position!.stopPx!).toBeCloseTo(103.9, 6);
+    expect(h.engine.bees.bee3.position!.stopPx!).toBeCloseTo(104.2, 6);
   });
 });

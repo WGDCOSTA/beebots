@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { deriveStyle } from "../src/bees/custom.js";
 import { dozy, dozyCandidates, dozySizeFrac } from "../src/bees/dozy.js";
 import type { BeeContext } from "../src/bees/types.js";
 import { freshBee } from "../src/ledger.js";
@@ -77,5 +78,12 @@ describe("dozy brain", () => {
     expect(dozy.stopFor("BTC-USD_UM_XPERP-310404", "long", 100, c)).toBeCloseTo(88, 6);
     expect(dozy.stopFor("SOL-USD_UM_XPERP-310404", "long", 100, c)).toBeCloseTo(92, 6);
     expect(dozy.stopFor("XRP-USD_UM_XPERP-310404", "long", 100, c)).toBeCloseTo(70, 6);
+  });
+});
+
+describe("dozy as a bunny's style", () => {
+  it("is kept when an owner picks it, whatever the coins", () => {
+    expect(deriveStyle("dozy", ["BTC", "ETH", "SOL"])).toBe("dozy");
+    expect(deriveStyle("dozy", [])).toBe("dozy");
   });
 });

@@ -24,6 +24,7 @@ export interface CustomRules {
 export function deriveStyle(wanted: StyleId, coins: string[]): StyleId {
   const within = (list: readonly string[]) => coins.length > 0 && coins.every((c) => list.includes(c));
   if (wanted === "degen") return "degen";
+  if (wanted === "dozy") return "dozy"; // its own coin list (DOZY_COINS), narrowed to the bunny's coins
   if (wanted === "breezy" && within(BREEZY_COINS)) return "breezy";
   if (wanted === "bizzy" && within(BIZZY_BREAKOUT_COINS)) return "bizzy";
   return "boozy";

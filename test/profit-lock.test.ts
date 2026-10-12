@@ -1,4 +1,4 @@
-// 26 Sep 2026: boozy's profit lock (+2.5% keeps half the best move, +5% keeps 65%) and "an add can't make a loser".
+// boozy's profit lock (12 Oct 2026: +1% keeps 30% of the best move, +2% half, +4% 70%) and "an add can't make a loser".
 import { describe, expect, it } from "vitest";
 import { Alerts } from "../src/alerts.js";
 import { BOOZY_PROFIT_LOCK } from "../src/bees/boozy.js";
@@ -12,20 +12,21 @@ import type { MarketFeed } from "../src/market/data.js";
 import { coin, NOW, testConfig, view } from "./fixtures.js";
 
 describe("profitLockStop", () => {
-  it("nothing below +2.5%", () => {
-    expect(profitLockStop("long", 100, 102.4, BOOZY_PROFIT_LOCK)).toBeNull();
+  it("nothing below +1%", () => {
+    expect(profitLockStop("long", 100, 100.9, BOOZY_PROFIT_LOCK)).toBeNull();
     expect(profitLockStop("long", 100, 99, BOOZY_PROFIT_LOCK)).toBeNull();
   });
-  it("+2.5% keeps half the best move, +5% keeps 65%", () => {
+  it("+1% keeps 30% of the best move, +2% half, +4% 70%", () => {
+    expect(profitLockStop("long", 100, 101.5, BOOZY_PROFIT_LOCK)).toBeCloseTo(100.45, 10);
     expect(profitLockStop("long", 100, 103, BOOZY_PROFIT_LOCK)).toBeCloseTo(101.5, 10);
-    expect(profitLockStop("long", 100, 105, BOOZY_PROFIT_LOCK)).toBeCloseTo(103.25, 10);
-    expect(profitLockStop("long", 100, 110, BOOZY_PROFIT_LOCK)).toBeCloseTo(106.5, 10);
+    expect(profitLockStop("long", 100, 105, BOOZY_PROFIT_LOCK)).toBeCloseTo(103.5, 10);
+    expect(profitLockStop("long", 100, 110, BOOZY_PROFIT_LOCK)).toBeCloseTo(107, 10);
   });
   it("mirrors for a short", () => {
-    expect(profitLockStop("short", 100, 94, BOOZY_PROFIT_LOCK)).toBeCloseTo(96.1, 10);
+    expect(profitLockStop("short", 100, 94, BOOZY_PROFIT_LOCK)).toBeCloseTo(95.8, 10);
   });
-  it("26 Sep ENA: best 0.2853 on an average entry of 0.27018 locks about 0.2800", () => {
-    expect(profitLockStop("long", 0.27018, 0.2853, BOOZY_PROFIT_LOCK)).toBeCloseTo(0.2800, 4);
+  it("26 Sep ENA: best 0.2853 on an average entry of 0.27018 now locks about 0.2808", () => {
+    expect(profitLockStop("long", 0.27018, 0.2853, BOOZY_PROFIT_LOCK)).toBeCloseTo(0.2808, 4);
   });
 });
 
@@ -49,24 +50,24 @@ async function harness(px: number, answer = "NOT_ON_MENU", env: Record<string, s
 }
 
 describe("engine: boozy's profit lock", () => {
-  it("a +6% run locks 65% of it; the lock holds as the price fades, then the stop sells", async () => {
+  it("a +6% run locks 70% of it; the lock holds as the price fades, then the stop sells", async () => {
     const h = await harness(106);
     h.engine.bees.bee3.position = { instId: h.instId, coin: "ENA", side: "long", contracts: 21, entryPx: 100, openedAt: NOW - 60 * 60_000, stopPx: 90, riskUsd: 10, initialStopPx: 90 };
     h.engine.bees.bee3.flatSince = null;
     await h.engine.tick();
     const p = h.engine.bees.bee3.position!;
     expect(p.peakPx).toBe(106);
-    expect(p.stopPx!).toBeCloseTo(103.9, 6);
+    expect(p.stopPx!).toBeCloseTo(104.2, 6);
     h.setPx(104.5); // fades, still above the lock
     await h.engine.tick();
-    expect(h.engine.bees.bee3.position?.stopPx).toBeCloseTo(103.9, 6);
+    expect(h.engine.bees.bee3.position?.stopPx).toBeCloseTo(104.2, 6);
     h.setPx(103.5); // through the lock: code sells, still in profit
     await h.engine.tick();
     expect(h.engine.bees.bee3.position).toBeNull();
   });
 
-  it("does nothing below +2.5%", async () => {
-    const h = await harness(102);
+  it("does nothing below +1%", async () => {
+    const h = await harness(100.9);
     h.engine.bees.bee3.position = { instId: h.instId, coin: "ENA", side: "long", contracts: 21, entryPx: 100, openedAt: NOW - 60 * 60_000, stopPx: 90, riskUsd: 10, initialStopPx: 90 };
     h.engine.bees.bee3.flatSince = null;
     await h.engine.tick();

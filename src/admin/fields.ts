@@ -127,7 +127,7 @@ export const ADMIN_FIELDS: AdminField[] = [
   num("SCALP_MAX_LOSS_STREAK", "learning", "Circuit breaker: losses in a row", "This many losing scalps in a row pause the bunny.", 1, 50),
   num("SCALP_PAUSE_MIN", "learning", "Circuit breaker pause (min)", "How long the pause lasts.", 1, 1440),
   { key: "RATCHET", group: "risk", label: "Profit-lock ratchet", help: "Hard profit floor plus an ATR runner hug on top of each style's stops. Stops only tighten.", type: "bool" },
-  { key: "RATCHET_LOCK", group: "risk", label: "Ratchet floor rungs", help: "gain%:keep pairs, e.g. 2.5:0.5,5:0.65 (at +2.5% lock half the best move, at +5% lock 65%).", type: "text", maxLen: 80, pattern: /^\d+(\.\d+)?:0?\.\d+(,\s*\d+(\.\d+)?:0?\.\d+)*$/ },
+  { key: "RATCHET_LOCK", group: "risk", label: "Ratchet floor rungs", help: "gain%:keep pairs, e.g. 1:0.3,2:0.5,4:0.7 (at +1% lock 30% of the best move, at +2% half, at +4% 70%).", type: "text", maxLen: 80, pattern: /^\d+(\.\d+)?:0?\.\d+(,\s*\d+(\.\d+)?:0?\.\d+)*$/ },
   { key: "RATCHET_HUG", group: "risk", label: "Ratchet runner hug", help: "gain%:ATR pairs, e.g. 2.5:1.2,5:0.8,8:0.6 (the trail tightens behind the peak as the trade runs).", type: "text", maxLen: 80, pattern: /^\d+(\.\d+)?:\d+(\.\d+)?(,\s*\d+(\.\d+)?:\d+(\.\d+)?)*$/ },
   { key: "RATCHET_STYLES", group: "risk", label: "Ratchet styles", help: "Comma-separated methods it applies to: bizzy, breezy, boozy, macro, skill.", type: "text", maxLen: 60, pattern: /^[a-z]+(,\s*[a-z]+)*$/ },
   num("MIN_24H_VOL_USD", "risk", "Min 24h volume (USD)", "Coins trading less are left out of the universe.", 0, 1e12),

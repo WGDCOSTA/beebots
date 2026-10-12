@@ -235,7 +235,7 @@ const EnvSchema = z.object({
   // Hard profit floor ("gain%:keep" rungs) and runner hug ("gain%:ATR multiple" rungs) on top of each style's stops,
   // for the styles listed in RATCHET_STYLES. Stops only ever tighten.
   RATCHET: bool(true),
-  RATCHET_LOCK: str("2.5:0.5,5:0.65"),
+  RATCHET_LOCK: str("1:0.3,2:0.5,4:0.7"),
   RATCHET_HUG: str("2.5:1.2,5:0.8,8:0.6"),
   RATCHET_STYLES: str("bizzy,boozy,macro,skill"),
   // ---- The scalper (bees/scalp.ts; phases 2 and 3) ----
