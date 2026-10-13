@@ -100,6 +100,9 @@ const EnvSchema = z.object({
   // Minutes a bunny keeps Jev's last "hold/wait" while nothing it could choose has changed (same options, same
   // position, same 1R bucket). Stops, trails and caps run in code every tick regardless. 0 = ask Jev every tick.
   JEV_REASK_MIN: num(0),
+  // Days of the experiment ledger kept (evaluations, outcomes, settled targets). Rows of unfinished experiments and
+  // anything still to settle are kept whatever their age. 0 = keep everything.
+  LEDGER_KEEP_DAYS: num(7),
   TICK_MS: num(10_000),
   DATA_REFRESH_MS: num(60_000),
 
@@ -358,7 +361,7 @@ export interface Config {
   hive: { url: string };
   update: { enabled: boolean; repo: string; version: string };
   settingsPath: string;
-  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number; tech: boolean; reaskMin: number };
+  jev: { apiKey: string; model: string; timeoutMs: number; dailyUsdCap: number; shadowEnabled: boolean; shadowDailyUsdCap: number; usdPerMTok: number; tech: boolean; reaskMin: number; ledgerKeepDays: number };
   tickMs: number;
   dataRefreshMs: number;
   okx: { site: "eea"; apiBase: string; cliTimeoutMs: number };
@@ -568,6 +571,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       usdPerMTok: e.JEV_USD_PER_MTOK,
       tech: e.JEV_TECH,
       reaskMin: Math.max(0, e.JEV_REASK_MIN),
+      ledgerKeepDays: Math.max(0, e.LEDGER_KEEP_DAYS),
     },
     tickMs: Math.max(1000, e.TICK_MS),
     dataRefreshMs: Math.max(15_000, e.DATA_REFRESH_MS),

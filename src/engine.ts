@@ -250,6 +250,11 @@ export class Engine {
     const compact = () => {
       const n = this.d.db.compactDecisions(this.now() - 30 * 86_400_000);
       if (n) log.info("old decision inputs dropped", { compacted: n });
+      const keep = this.d.cfg.jev.ledgerKeepDays;
+      if (keep > 0) {
+        const p = this.d.db.experiments.prune(this.now() - keep * 86_400_000);
+        if (p.evaluations + p.outcomes + p.targets) log.info("old ledger rows pruned", p);
+      }
     };
     compact();
     this.timers.push(setInterval(compact, 86_400_000));

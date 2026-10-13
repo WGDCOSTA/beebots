@@ -343,6 +343,32 @@ export class ExperimentLedger {
     return row ? fromRow(row) : null;
   }
 
+  /**
+   * Retention: deletes ledger rows older than `olderThanTs`, in small batches. Kept whatever their age: every row of an
+   * experiment that has not finished (draft, shadow, canary: its verdict reads its whole history), unsettled outcome
+   * targets, and the evaluations those targets still need to settle. A finished experiment keeps its result_json.
+   */
+  prune(olderThanTs: number, batch = 5000): { evaluations: number; outcomes: number; targets: number } {
+    const open = "SELECT id FROM experiments WHERE status IN ('draft','shadow','canary')";
+    const loop = (sql: string) => {
+      const st = this.db.prepare(sql);
+      let total = 0;
+      for (;;) {
+        const n = Number(st.run(olderThanTs, batch).changes);
+        total += n;
+        if (n < batch) return total;
+      }
+    };
+    const targets = loop(`DELETE FROM decision_outcome_targets WHERE id IN
+      (SELECT id FROM decision_outcome_targets WHERE created_ts < ? AND settled_ts IS NOT NULL LIMIT ?)`);
+    const evaluations = loop(`DELETE FROM decision_evaluations WHERE id IN
+      (SELECT e.id FROM decision_evaluations e WHERE e.ts < ? AND (e.experiment_id IS NULL OR e.experiment_id NOT IN (${open}))
+        AND NOT EXISTS (SELECT 1 FROM decision_outcome_targets t WHERE t.decision_id = e.decision_id AND t.settled_ts IS NULL) LIMIT ?)`);
+    const outcomes = loop(`DELETE FROM experiment_outcomes WHERE id IN
+      (SELECT id FROM experiment_outcomes WHERE ts < ? AND (experiment_id IS NULL OR experiment_id NOT IN (${open})) LIMIT ?)`);
+    return { evaluations, outcomes, targets };
+  }
+
   shadowSpendSince(ts: number): number {
     const row = this.db
       .prepare("SELECT COALESCE(SUM(CAST(json_extract(metrics_json, '$.costUsd') AS REAL)), 0) AS spent FROM decision_evaluations WHERE arm = 'challenger' AND ts >= ?")
