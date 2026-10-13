@@ -309,13 +309,23 @@ export class Engine {
   async refreshMarket(): Promise<void> {
     if (this.refreshing) return;
     this.refreshing = true;
+    // A refresh that never settles (a request that hangs) must not freeze the feed: on 12-13 Oct one did, `refreshing`
+    // stayed true, and every decision for 21 hours was vetoed as stale_market_data. Past the limit it is abandoned.
+    const limitMs = Math.max(60_000, 3 * this.d.cfg.dataRefreshMs);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await this.d.feed.refresh(this.now());
+      await Promise.race([
+        this.d.feed.refresh(this.now()),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`market refresh took over ${Math.round(limitMs / 1000)} s; abandoned`)), limitMs);
+        }),
+      ]);
       this.rankBoozyHourly();
       if (this.d.exec.kind === "okx") await this.pollFunding();
     } catch (err) {
       log.warn("market refresh failed", { err: safeError(err) });
     } finally {
+      clearTimeout(timer);
       this.refreshing = false;
     }
   }
